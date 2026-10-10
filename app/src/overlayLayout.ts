@@ -61,11 +61,29 @@ export const ANCHOR_BOX: Record<Anchor, Box> = {
 };
 
 /** CSS to pin a section's content to its anchor on the real overlay. */
-export function anchorStyle(a: Anchor): CSSProperties {
+const DEFAULT_TOP = 2.5;
+const DEFAULT_BOTTOM = 3;
+
+/** Distance (% of screen height) from the top/bottom edge for a section in this game. */
+function edgeOffset(a: Anchor, profile?: GameProfile): number {
+  const v = a.split("-")[0];
+  return profile?.edges?.[a] ?? (v === "bottom" ? DEFAULT_BOTTOM : DEFAULT_TOP);
+}
+
+/** The section's approximate area for this game, with its edge offset applied. */
+export function anchorBox(a: Anchor, profile?: GameProfile): Box {
+  const b = ANCHOR_BOX[a];
+  const v = a.split("-")[0];
+  if (v === "top") return { ...b, y: edgeOffset(a, profile) };
+  if (v === "bottom") return { ...b, y: 100 - edgeOffset(a, profile) - b.h };
+  return b;
+}
+
+export function anchorStyle(a: Anchor, profile?: GameProfile): CSSProperties {
   const [v, h] = a.split("-") as ["top" | "middle" | "bottom", "left" | "center" | "right"];
   const style: CSSProperties = { position: "absolute", display: "flex", flexDirection: "column", gap: 10 };
-  if (v === "top") style.top = "2.5%";
-  if (v === "bottom") style.bottom = "3%";
+  if (v === "top") style.top = `${edgeOffset(a, profile)}%`;
+  if (v === "bottom") style.bottom = `${edgeOffset(a, profile)}%`;
   if (v === "middle") style.top = "50%";
   if (h === "left") {
     style.left = "2%";
@@ -91,6 +109,8 @@ export interface GameProfile {
   name: string;
   /** Where the game draws its own HUD (approximate, default HUD). Empty = not mapped yet. */
   hud: { label: string; box: Box }[];
+  /** Per-section distance from the top/bottom edge (%), to clear fixed game UI. */
+  edges?: Partial<Record<Anchor, number>>;
   defaults: OverlayLayout;
 }
 
@@ -105,12 +125,18 @@ export const GAME_PROFILES: GameProfile[] = [
   {
     key: "acevo",
     name: "AC EVO",
+    // Default HUD, measured from an in-game screenshot (AC EVO 0.9). Players can move
+    // AC EVO's HUD elements, so treat these as the defaults, not guarantees.
     hud: [
-      { label: "Position / lap", box: { x: 2, y: 3, w: 19, h: 13 } },
-      { label: "Session timer", box: { x: 82, y: 3, w: 16, h: 10 } },
-      { label: "Track map", box: { x: 2, y: 33, w: 12, h: 24 } },
-      { label: "Dash / tacho / delta", box: { x: 74, y: 75, w: 24, h: 22 } },
+      { label: "Lap timing", box: { x: 0.5, y: 1.5, w: 8.5, h: 23.5 } },
+      { label: "Session bar", box: { x: 40, y: 0, w: 21.5, h: 4.5 } },
+      { label: "Delta bar", box: { x: 39, y: 18.5, w: 13, h: 4 } },
+      { label: "Track map", box: { x: 1.5, y: 38, w: 10.5, h: 18.5 } },
+      { label: "Function bar", box: { x: 0.5, y: 93.5, w: 16, h: 4 } },
+      { label: "Dash, tyres & tacho", box: { x: 72, y: 72.5, w: 28, h: 27.5 } },
     ],
+    // Start the top-centre section below the session bar (time / session / weather).
+    edges: { "top-center": 6, "bottom-left": 8 },
     defaults: standard,
   },
   { key: "ac", name: "Assetto Corsa", hud: [], defaults: standard },
@@ -127,8 +153,30 @@ export function overlaps(a: Box, b: Box): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
-export function hudConflict(profile: GameProfile, anchor: Anchor): string | null {
-  const zone = profile.hud.find((z) => overlaps(z.box, ANCHOR_BOX[anchor]));
+/** Rough height (% of screen) of a section's content, for HUD-overlap warnings. */
+function contentHeight(items: WidgetId[]): number {
+  let h = 0;
+  let inStrip = false;
+  for (const w of items) {
+    if (WIDGETS[w].compact) {
+      if (!inStrip) h += 6.5;
+      inStrip = true;
+    } else {
+      h += w === "standings" ? 13 : 7.5;
+      inStrip = false;
+    }
+  }
+  return h + Math.max(0, items.length - 1) * 0.5;
+}
+
+/** The game HUD element a section's content would cover, if any. */
+export function hudConflict(profile: GameProfile, anchor: Anchor, items: WidgetId[] = []): string | null {
+  const box = anchorBox(anchor, profile);
+  const v = anchor.split("-")[0];
+  const h = items.length ? contentHeight(items) : box.h;
+  const content: Box =
+    v === "bottom" ? { ...box, y: box.y + box.h - h, h } : v === "middle" ? { ...box, y: 50 - h / 2, h } : { ...box, h };
+  const zone = profile.hud.find((z) => overlaps(z.box, content));
   return zone?.label ?? null;
 }
 

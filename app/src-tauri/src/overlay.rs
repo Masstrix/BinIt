@@ -183,9 +183,50 @@ fn wanted() -> bool {
     is_enabled() && (!FOCUS_ONLY.load(Ordering::SeqCst) || GAME_FOCUSED.load(Ordering::SeqCst))
 }
 
+/// Screen rectangle (physical px) of the monitor the focused game is on.
+static GAME_MONITOR: Mutex<Option<(i32, i32, u32, u32)>> = Mutex::new(None);
+
 /// Shows or hides the window to match the settings and focus. Call on the main thread.
 pub fn refresh(app: &AppHandle) {
-    set_visible(app, wanted());
+    let wanted = wanted();
+    if wanted {
+        cover_game_monitor(app);
+    }
+    set_visible(app, wanted);
+}
+
+/// Keeps the overlay exactly over the monitor the game is on (handles multiple monitors,
+/// ultrawides and resolution changes when a game goes fullscreen).
+fn cover_game_monitor(app: &AppHandle) {
+    let Some(w) = window(app) else { return };
+    let target = *GAME_MONITOR.lock().unwrap_or_else(|e| e.into_inner());
+    let target = target.or_else(|| {
+        let m = w.primary_monitor().ok().flatten()?;
+        Some((m.position().x, m.position().y, m.size().width, m.size().height))
+    });
+    let Some((x, y, width, height)) = target else { return };
+    let current = (w.outer_position().ok(), w.outer_size().ok());
+    if current.0.map(|p| (p.x, p.y)) != Some((x, y)) {
+        let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+    }
+    if current.1.map(|s| (s.width, s.height)) != Some((width, height)) {
+        let _ = w.set_size(tauri::PhysicalSize::new(width, height));
+    }
+}
+
+#[cfg(windows)]
+fn monitor_rect(hwnd: windows_sys::Win32::Foundation::HWND) -> Option<(i32, i32, u32, u32)> {
+    use windows_sys::Win32::Graphics::Gdi::{GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow};
+    unsafe {
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut info: MONITORINFO = std::mem::zeroed();
+        info.cbSize = size_of::<MONITORINFO>() as u32;
+        if monitor.is_null() || GetMonitorInfoW(monitor, &mut info) == 0 {
+            return None;
+        }
+        let r = info.rcMonitor;
+        Some((r.left, r.top, (r.right - r.left) as u32, (r.bottom - r.top) as u32))
+    }
 }
 
 /// Applies the saved settings. Call on the main thread.
@@ -220,7 +261,13 @@ pub fn spawn_focus_watcher(app: AppHandle) {
 
     fn on_foreground(hwnd: HWND) {
         let focused = foreground_game(hwnd).is_some();
-        if GAME_FOCUSED.swap(focused, Ordering::SeqCst) != focused
+        let mut moved = false;
+        if focused && let Some(rect) = monitor_rect(hwnd) {
+            let mut current = GAME_MONITOR.lock().unwrap_or_else(|e| e.into_inner());
+            moved = *current != Some(rect);
+            *current = Some(rect);
+        }
+        if (GAME_FOCUSED.swap(focused, Ordering::SeqCst) != focused || moved)
             && let Some(app) = APP.get()
         {
             let handle = app.clone();

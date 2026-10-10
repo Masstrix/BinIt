@@ -7,7 +7,7 @@ import { ANCHORS, anchorStyle, useOverlayLayout } from "../overlayLayout";
 export function Overlay() {
   const { status, drivers } = useAppState();
   const game = status?.game ?? "acevo";
-  const { layout } = useOverlayLayout(game);
+  const { layout, profile } = useOverlayLayout(game);
   const data = useOverlayData();
   const toast = useLapToasts(data.pbMs);
   const [switcherOpen, setSwitcherOpen] = useState(false);
@@ -70,7 +70,7 @@ export function Overlay() {
           const items = layout.sections[a];
           if (!items?.length) return null;
           return (
-            <div key={a} style={anchorStyle(a)}>
+            <div key={a} style={anchorStyle(a, profile)}>
               <SectionWidgets items={items} data={data} toast={toast} />
             </div>
           );

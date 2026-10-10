@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import { useAppState } from "../api";
+import { isTauri, useAppState } from "../api";
 import {
   ANCHORS,
-  ANCHOR_BOX,
   GAME_PROFILES,
   WIDGETS,
+  anchorBox,
   anchorStyle,
   hudConflict,
   moveWidget,
@@ -15,8 +15,11 @@ import {
 import { OverlayFocusToggle, OverlayToggle } from "./OverlayToggle";
 import { SectionWidgets, useOverlayData } from "./OverlayWidgets";
 
-const VIRTUAL_W = 1920;
+// Preview at the shape of this PC's screen (e.g. 21:9 ultrawide), since overlay positions
+// are % of the screen. Browsers on other devices fall back to 16:9.
+const ASPECT = isTauri ? Math.min(32 / 9, Math.max(4 / 3, screen.width / screen.height)) : 16 / 9;
 const VIRTUAL_H = 1080;
+const VIRTUAL_W = Math.round(VIRTUAL_H * ASPECT);
 
 const ANCHOR_NAMES: Record<Anchor, string> = {
   "top-left": "Top left",
@@ -61,7 +64,7 @@ export function OverlayEditor() {
 
   const where = (w: WidgetId): Anchor | null => ANCHORS.find((a) => layout.sections[a]?.includes(w)) ?? null;
   const usedSections = ANCHORS.filter((a) => layout.sections[a]?.length);
-  const conflicts = usedSections.map((a) => ({ a, hud: hudConflict(profile, a) })).filter((c) => c.hud);
+  const conflicts = usedSections.map((a) => ({ a, hud: hudConflict(profile, a, layout.sections[a]) })).filter((c) => c.hud);
 
   const apply = (payload: DragPayload, to: Anchor | null) => {
     if (payload.kind === "widget") return save(moveWidget(layout, payload.widget, to));
@@ -124,7 +127,7 @@ export function OverlayEditor() {
 
       <div
         ref={frame}
-        style={{ position: "relative", width: "100%", aspectRatio: "16 / 9", borderRadius: 18, overflow: "hidden", background: "#2B3138" }}
+        style={{ position: "relative", width: "100%", aspectRatio: `${VIRTUAL_W} / ${VIRTUAL_H}`, borderRadius: 18, overflow: "hidden", background: "#2B3138" }}
       >
         {/* Scaled render of the real overlay at 1920x1080. */}
         <div style={{ position: "absolute", left: 0, top: 0, width: VIRTUAL_W, height: VIRTUAL_H, transform: `scale(${scale})`, transformOrigin: "0 0", pointerEvents: "none" }}>
@@ -155,7 +158,7 @@ export function OverlayEditor() {
             const items = layout.sections[a];
             if (!items?.length) return null;
             return (
-              <div key={a} style={anchorStyle(a)}>
+              <div key={a} style={anchorStyle(a, profile)}>
                 <SectionWidgets items={items} data={data} toast={null} preview />
               </div>
             );
@@ -164,7 +167,7 @@ export function OverlayEditor() {
 
         {/* Interactive drop zones, in screen %. */}
         {ANCHORS.map((a) => {
-          const b = ANCHOR_BOX[a];
+          const b = anchorBox(a, profile);
           const items = layout.sections[a] ?? [];
           const hud = hudConflict(profile, a);
           const isOver = over === a;
