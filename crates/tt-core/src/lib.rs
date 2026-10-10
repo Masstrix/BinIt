@@ -134,6 +134,14 @@ impl TimeTrial {
         })
     }
 
+    pub fn setting(&self, key: &str) -> Result<Option<String>> {
+        self.store().setting(key)
+    }
+
+    pub fn set_setting(&self, key: &str, value: Option<&str>) -> Result<()> {
+        self.store().set_setting(key, value)
+    }
+
     // ---- drivers & the seat ------------------------------------------------
 
     pub fn drivers(&self) -> Result<Vec<Driver>> {
