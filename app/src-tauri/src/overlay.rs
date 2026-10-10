@@ -32,6 +32,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .resizable(false)
         .focused(false)
         .visible(false)
+        // Tauri's file-drop handler would swallow the page's own drag events.
+        .disable_drag_drop_handler()
         .build()?;
 
     if let Some(monitor) = window.primary_monitor()? {
