@@ -1,0 +1,149 @@
+//! Types shared with the UI. Serialized as camelCase JSON.
+
+use serde::{Deserialize, Serialize};
+
+pub type DriverId = i64;
+pub type LapId = i64;
+pub type ChallengeId = i64;
+/// Milliseconds since the Unix epoch.
+pub type Timestamp = i64;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Driver {
+    pub id: DriverId,
+    pub name: String,
+    /// Helmet colour, `#RRGGBB`.
+    pub color: String,
+    pub created_at: Timestamp,
+}
+
+/// Game, track, layout and car: what a lap time is comparable against.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Combo {
+    pub game: String,
+    pub track: String,
+    /// Empty string for the default layout.
+    pub layout: String,
+    pub car: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Lap {
+    pub id: LapId,
+    /// `None` when nobody was in the seat. Such laps can be claimed later.
+    pub driver_id: Option<DriverId>,
+    #[serde(flatten)]
+    pub combo: Combo,
+    pub session_kind: String,
+    pub lap_number: u32,
+    pub time_ms: u32,
+    pub valid: bool,
+    pub sectors_ms: Vec<u32>,
+    pub recorded_at: Timestamp,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Prize {
+    /// "1st", "2nd", "Last", ...
+    pub place: String,
+    pub prize: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Challenge {
+    pub id: ChallengeId,
+    pub name: String,
+    pub game: String,
+    pub track: String,
+    pub layout: String,
+    /// `None` means any car.
+    pub car: Option<String>,
+    pub starts_at: Timestamp,
+    pub ends_at: Option<Timestamp>,
+    pub valid_only: bool,
+    /// Only a driver's first N laps count.
+    pub max_laps: Option<u32>,
+    pub prizes: Vec<Prize>,
+    pub created_at: Timestamp,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewChallenge {
+    pub name: String,
+    pub game: String,
+    pub track: String,
+    #[serde(default)]
+    pub layout: String,
+    pub car: Option<String>,
+    pub starts_at: Option<Timestamp>,
+    pub ends_at: Option<Timestamp>,
+    #[serde(default = "default_true")]
+    pub valid_only: bool,
+    pub max_laps: Option<u32>,
+    #[serde(default)]
+    pub prizes: Vec<Prize>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Which laps a leaderboard ranks.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaderboardQuery {
+    pub game: String,
+    pub track: String,
+    #[serde(default)]
+    pub layout: String,
+    /// `None` = any car.
+    pub car: Option<String>,
+    pub from: Option<Timestamp>,
+    pub to: Option<Timestamp>,
+    #[serde(default)]
+    pub include_invalid: bool,
+    /// Only each driver's first N laps in the window count.
+    pub max_laps: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaderboardEntry {
+    pub position: u32,
+    /// `None` for unclaimed guest laps (each guest lap is its own entry).
+    pub driver_id: Option<DriverId>,
+    pub lap_id: LapId,
+    pub time_ms: u32,
+    pub gap_ms: u32,
+    pub car: String,
+    pub lap_count: u32,
+    pub set_at: Timestamp,
+}
+
+/// Everything the overlay and home screen need about the person driving.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LapResult {
+    pub lap: Lap,
+    pub personal_best: bool,
+    /// Fastest valid lap anyone has set on this combo.
+    pub combo_record: bool,
+    pub challenges: Vec<ChallengeStanding>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChallengeStanding {
+    pub challenge_id: ChallengeId,
+    pub challenge_name: String,
+    pub position: Option<u32>,
+    pub previous_position: Option<u32>,
+    /// Gap to P1 in ms (0 when leading).
+    pub gap_to_leader_ms: Option<u32>,
+}
