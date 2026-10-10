@@ -280,3 +280,10 @@ h2 { font-size: 22px; }
   .content { overflow: visible; padding: 16px; gap: 16px; }
   .card, .hero { padding: 18px; border-radius: 22px; }
 }
+
+/* Leaderboard sector splits */
+.sectors { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.sector { display: inline-flex; align-items: baseline; gap: 4px; padding: 1px 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); font-size: 12px; }
+.sector .sector-label { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.5px; }
+.sector.purple { background: rgba(195, 139, 255, 0.16); color: #C38BFF; }
+.sector.purple .sector-label { color: #C38BFF; }

@@ -74,6 +74,8 @@ export interface LeaderboardEntry {
   car: string;
   lapCount: number;
   setAt: number;
+  /** Sector times of the ranked lap (empty for laps recorded before sector timing). */
+  sectorsMs: number[];
 }
 
 export interface SessionView extends Combo {

@@ -77,6 +77,14 @@ export function LeaderboardPage() {
 
   const seat = status?.seat ?? null;
 
+  // Fastest time for each sector on this board: purple, like a timing screen.
+  const sectorCount = Math.max(0, ...board.map((e) => e.sectorsMs.length));
+  const bestSectors = Array.from({ length: sectorCount }, (_, i) => {
+    const times = board.map((e) => e.sectorsMs[i]).filter((t): t is number => t > 0);
+    return times.length ? Math.min(...times) : null;
+  });
+  const idealMs = sectorCount > 0 && bestSectors.every((t) => t !== null) ? bestSectors.reduce((a, t) => a! + t!, 0)! : null;
+
   return (
     <>
       <div className="head" style={{ alignItems: "center" }}>
@@ -138,6 +146,20 @@ export function LeaderboardPage() {
                           <span className="muted" style={{ fontSize: 13 }}>
                             {e.lapCount} lap{e.lapCount === 1 ? "" : "s"} · {car ? ago(e.setAt) : `${e.car} · ${ago(e.setAt)}`}
                           </span>
+                          {sectorCount > 0 && (
+                            <span className="sectors" aria-label="Sector times">
+                              {bestSectors.map((best, i) => {
+                                const t = e.sectorsMs[i];
+                                const purple = t > 0 && t === best;
+                                return (
+                                  <span key={i} className={`sector${purple ? " purple" : ""}`} title={`Sector ${i + 1}`}>
+                                    <span className="sector-label">S{i + 1}</span>
+                                    <span className="mono">{t > 0 ? (t / 1000).toFixed(3) : "--"}</span>
+                                  </span>
+                                );
+                              })}
+                            </span>
+                          )}
                         </span>
                         <span className="mono muted" style={{ fontSize: 13, fontWeight: 600, width: 70, textAlign: "right" }}>{gap(e.gapMs)}</span>
                         <span className="mono" style={{ fontSize: 17, width: 96, textAlign: "right", color: e.position === 1 ? "var(--gold)" : undefined }}>
@@ -152,6 +174,12 @@ export function LeaderboardPage() {
 
             <aside className="card" style={{ flex: "1 1 260px" }}>
               <h2 style={{ fontSize: 18 }}>{selected ? trackName(selected.track, selected.layout) : ""} records</h2>
+              {idealMs !== null && (
+                <div className="list-row" style={{ justifyContent: "space-between" }} title="Best sectors on this board added together">
+                  <span style={{ fontSize: 14 }}>Ideal lap (best sectors)</span>
+                  <span className="mono" style={{ fontSize: 14, color: "#C38BFF" }}>{lapTime(idealMs)}</span>
+                </div>
+              )}
               {records.filter((r) => r.top).map((r) => (
                 <div key={r.car} className="list-row" style={{ justifyContent: "space-between" }}>
                   <span style={{ fontSize: 14 }}>{r.car}</span>
