@@ -42,7 +42,6 @@ pub fn create(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     }
     window.set_ignore_cursor_events(true)?;
     make_non_activating(&window);
-    window.show()?;
     Ok(window)
 }
 
@@ -160,27 +159,48 @@ pub fn set_switcher(app: &AppHandle, open: bool) {
     capture_keys(app, open);
     if let Some(w) = window(app) {
         // Mouse clicks work while open; the window is no-activate so focus stays in the game.
-        let _ = w.set_ignore_cursor_events(!open);
-        if open {
-            let _ = w.show();
-        }
+        // With the overlay switched off the switcher runs hidden: keys + voice only.
+        let drawn = is_enabled() && w.is_visible().unwrap_or(false);
+        let _ = w.set_ignore_cursor_events(!(open && drawn));
         let _ = w.emit_to(LABEL, "switcher", open);
     }
 }
 
-/// Ctrl+Shift+H: hide or show the whole overlay.
-pub fn toggle_visible(app: &AppHandle) {
-    let Some(w) = window(app) else { return };
-    set_visible(app, !w.is_visible().unwrap_or(false));
+/// The user's on/off setting. Off = nothing is ever drawn over the game; F8 still works
+/// (blind, with the spoken confirmation).
+static ENABLED: AtomicBool = AtomicBool::new(true);
+
+pub fn is_enabled() -> bool {
+    ENABLED.load(Ordering::SeqCst)
 }
 
+/// Applies the saved on/off setting to the window. Call on the main thread.
+pub fn apply_enabled(app: &AppHandle, enabled: bool) {
+    ENABLED.store(enabled, Ordering::SeqCst);
+    set_visible(app, enabled);
+}
+
+/// Ctrl+Shift+H: flip the saved setting, so the app's toggle stays in sync.
+pub fn toggle_enabled(app: &AppHandle) {
+    let enabled = !is_enabled();
+    if let Some(tt) = app.try_state::<std::sync::Arc<tt_core::TimeTrial>>() {
+        let _ = tt.set_overlay_enabled(enabled);
+    }
+    apply_enabled(app, enabled);
+}
+
+/// Shows or hides the window without changing the saved setting (benchmarks).
 pub fn set_visible(app: &AppHandle, visible: bool) {
     let Some(w) = window(app) else { return };
-    if visible {
-        let _ = w.show();
+    let result = if visible {
+        w.show()
     } else {
-        set_switcher(app, false);
-        let _ = w.hide();
+        // Keep the switcher's keys working while hidden; just stop drawing.
+        let _ = w.set_ignore_cursor_events(true);
+        w.hide()
+    };
+    if let Err(e) = result {
+        eprintln!("[overlay] could not {} the overlay: {e}", if visible { "show" } else { "hide" });
     }
 }
 

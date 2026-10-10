@@ -12,6 +12,7 @@ import {
   type Anchor,
   type WidgetId,
 } from "../overlayLayout";
+import { OverlayToggle } from "./OverlayToggle";
 import { SectionWidgets, useOverlayData } from "./OverlayWidgets";
 
 const VIRTUAL_W = 1920;
@@ -33,6 +34,7 @@ type DragPayload = { kind: "widget"; widget: WidgetId } | { kind: "section"; anc
 /** Drag widgets into screen sections, per game. Saves instantly; the overlay updates live. */
 export function OverlayEditor() {
   const { status } = useAppState();
+  const overlayOn = status?.overlayEnabled ?? true;
   const [game, setGame] = useState(status?.game ?? "acevo");
   const { layout, save, reset, custom, profile } = useOverlayLayout(game);
   const data = useOverlayData();
@@ -106,7 +108,10 @@ export function OverlayEditor() {
   return (
     <section className="card" aria-label="Overlay layout">
       <div className="head" style={{ alignItems: "center" }}>
-        <h2 style={{ fontSize: 20 }}>Overlay layout</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+          <h2 style={{ fontSize: 20 }}>Overlay layout</h2>
+          <OverlayToggle />
+        </div>
         <div className="segmented" role="group" aria-label="Game" style={{ flexWrap: "wrap" }}>
           {GAME_PROFILES.map((p) => (
             <button key={p.key} aria-pressed={game === p.key} onClick={() => setGame(p.key)}>
@@ -254,6 +259,11 @@ export function OverlayEditor() {
           : "Drag widgets into a section of the screen (or click one, then click a section). Drag a section to move everything in it. Drop on this list to hide."}
       </span>
 
+      {!overlayOn && (
+        <span style={{ fontSize: 13, color: "var(--peach)" }}>
+          The overlay is off, so nothing is drawn over the game. F8 still switches drivers (with the spoken name).
+        </span>
+      )}
       {profile.hud.length === 0 && (
         <span style={{ fontSize: 13, color: "var(--peach)" }}>The HUD for {profile.name} isn't mapped yet, so there's no overlap warning for this game.</span>
       )}

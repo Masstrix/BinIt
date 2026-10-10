@@ -34,7 +34,7 @@ fn main() {
                     if *shortcut == switch_driver {
                         overlay::toggle_switcher(app);
                     } else if *shortcut == hide_overlay {
-                        overlay::toggle_visible(app);
+                        overlay::toggle_enabled(app);
                     }
                 })
                 .build(),
@@ -48,6 +48,7 @@ fn main() {
 
             spawn_game_watcher(tt.clone());
 
+            let overlay_on = tt.overlay_enabled()?;
             let lan = tt.setting(server::LAN_SETTING)?.is_none_or(|v| v == "1");
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -57,6 +58,7 @@ fn main() {
             });
 
             overlay::create(app.handle())?;
+            overlay::apply_enabled(app.handle(), overlay_on);
             Ok(())
         })
         .on_window_event(|window, event| {

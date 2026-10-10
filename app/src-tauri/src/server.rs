@@ -62,6 +62,7 @@ pub async fn serve(tt: Arc<TimeTrial>, app: AppHandle, lan: bool) -> anyhow::Res
         .route("/challenges/{id}/end", post(end_challenge))
         .route("/settings/lan", put(set_lan))
         .route("/overlay/visible", put(set_overlay_visible))
+        .route("/overlay/enabled", put(set_overlay_enabled))
         .route("/overlay/layout/{game}", get(overlay_layout).put(set_overlay_layout).delete(reset_overlay_layout))
         .route("/events", get(events));
 
@@ -121,6 +122,14 @@ async fn set_lan(State(c): State<Ctx>, Json(body): Json<SetLan>) -> ApiResult<bo
 async fn set_overlay_visible(State(c): State<Ctx>, Json(body): Json<SetLan>) -> ApiResult<bool> {
     let app = c.app.clone();
     let _ = c.app.run_on_main_thread(move || crate::overlay::set_visible(&app, body.enabled));
+    Ok(Json(body.enabled))
+}
+
+/// The saved on/off setting for the in-game overlay.
+async fn set_overlay_enabled(State(c): State<Ctx>, Json(body): Json<SetLan>) -> ApiResult<bool> {
+    c.tt.set_overlay_enabled(body.enabled)?;
+    let app = c.app.clone();
+    let _ = c.app.run_on_main_thread(move || crate::overlay::apply_enabled(&app, body.enabled));
     Ok(Json(body.enabled))
 }
 

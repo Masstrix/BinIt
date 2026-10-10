@@ -107,6 +107,9 @@ h2 { font-size: 22px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: #5b6488; flex: none; }
 .dot.on { background: var(--mint); box-shadow: 0 0 0 4px rgba(75, 227, 166, 0.18); }
 
+.overlay-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600; font-size: 14px; color: var(--text-2); }
+.overlay-toggle.compact { min-height: 46px; padding: 0 14px; border-radius: 14px; background: var(--panel-2); border: 1px solid var(--line); }
+
 .lan-box { margin-top: auto; padding: 14px; border-radius: 16px; background: var(--panel-2); display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
 .lan-box .mono { font-size: 13px; font-weight: 600; color: var(--peri-1); word-break: break-all; }
 
@@ -254,6 +257,8 @@ h2 { font-size: 22px; }
   .brand span, .nav-label, .game-pill .game-name, .game-pill .live, .lan-box { display: none; }
   .nav a { justify-content: center; padding: 0; width: 48px; }
   .game-pill { width: 48px; padding: 0; justify-content: center; }
+  .overlay-toggle.compact { width: 48px; padding: 0; justify-content: center; background: none; border: none; }
+  .overlay-toggle.compact .overlay-toggle-label { display: none; }
 }
 
 /* Phones (office network page): top bar + normal page scrolling. */
@@ -263,7 +268,7 @@ h2 { font-size: 22px; }
     position: sticky; top: 0; z-index: 10; margin: 0; border-radius: 0; border-width: 0 0 1px;
     flex-direction: row; align-items: center; padding: 10px 12px; gap: 10px; overflow-x: auto; overflow-y: hidden;
   }
-  .sidebar .game-pill { display: none; }
+  .sidebar .game-pill, .sidebar .overlay-toggle { display: none; }
   .nav { flex-direction: row; gap: 2px; }
   .nav a { width: 44px; min-height: 44px; }
   .content { overflow: visible; padding: 16px; gap: 16px; }

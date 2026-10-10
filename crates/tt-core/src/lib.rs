@@ -22,6 +22,7 @@ pub const HELMET_COLORS: [&str; 10] = [
 ];
 
 const SEAT_KEY: &str = "seat_driver_id";
+const OVERLAY_KEY: &str = "overlay_enabled";
 
 /// Pushed to every connected UI (desktop window, overlay, office browsers).
 #[derive(Debug, Clone, Serialize)]
@@ -38,6 +39,7 @@ pub enum AppEvent {
     ChallengesChanged,
     Live { live: LiveView },
     OverlayLayoutChanged { game: String },
+    OverlayEnabled { enabled: bool },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -68,6 +70,7 @@ pub struct Status {
     pub session: Option<SessionView>,
     pub seat: Option<DriverId>,
     pub live: Option<LiveView>,
+    pub overlay_enabled: bool,
 }
 
 #[derive(Default)]
@@ -132,7 +135,19 @@ impl TimeTrial {
             session: rt.session.clone(),
             seat: self.seat()?,
             live: rt.live.clone(),
+            overlay_enabled: self.overlay_enabled()?,
         })
+    }
+
+    /// Whether the in-game overlay is drawn at all. On by default.
+    pub fn overlay_enabled(&self) -> Result<bool> {
+        Ok(self.store().setting(OVERLAY_KEY)?.is_none_or(|v| v == "1"))
+    }
+
+    pub fn set_overlay_enabled(&self, enabled: bool) -> Result<()> {
+        self.store().set_setting(OVERLAY_KEY, Some(if enabled { "1" } else { "0" }))?;
+        self.emit(AppEvent::OverlayEnabled { enabled });
+        Ok(())
     }
 
     pub fn setting(&self, key: &str) -> Result<Option<String>> {

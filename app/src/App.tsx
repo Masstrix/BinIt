@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, useAppState, useFetch } from "./api";
 import { Logo } from "./components/Helmet";
+import { OverlayToggle } from "./components/OverlayToggle";
 import { Home } from "./pages/Home";
 import { LeaderboardPage } from "./pages/Leaderboard";
 import { ChallengesPage } from "./pages/Challenges";
@@ -66,6 +67,7 @@ function Sidebar({ path }: { path: string }) {
         <span className="game-name" style={{ flex: 1 }}>{!online ? "Offline" : status?.connected ? status.gameName : "No game running"}</span>
         {status?.connected && <span className="live" style={{ fontSize: 12, color: "var(--mint)" }}>live</span>}
       </div>
+      <OverlayToggle compact />
       <nav className="nav" aria-label="Main">
         {ROUTES.map((r) => {
           const current = r.path === "/" ? path === "/" : path.startsWith(r.path);

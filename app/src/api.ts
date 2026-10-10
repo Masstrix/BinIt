@@ -93,6 +93,7 @@ export interface Status {
   session: SessionView | null;
   seat: DriverId | null;
   live: LiveView | null;
+  overlayEnabled: boolean;
 }
 
 export interface ChallengeStanding {
@@ -126,6 +127,7 @@ export type AppEvent =
   | { type: "challengesChanged" }
   | { type: "live"; live: LiveView }
   | { type: "overlayLayoutChanged"; game: string }
+  | { type: "overlayEnabled"; enabled: boolean }
   | { type: "resync" };
 
 // ---- transport ----------------------------------------------------------------
@@ -165,6 +167,7 @@ export const api = {
   challengeLeaderboard: (id: number) => request<LeaderboardEntry[]>("GET", `/challenges/${id}/leaderboard`),
   overlayLayout: (game: string) => request<unknown | null>("GET", `/overlay/layout/${game}`),
   setOverlayLayout: (game: string, layout: unknown) => request<null>("PUT", `/overlay/layout/${game}`, layout),
+  setOverlayEnabled: (enabled: boolean) => request<boolean>("PUT", "/overlay/enabled", { enabled }),
   resetOverlayLayout: (game: string) => request<null>("DELETE", `/overlay/layout/${game}`),
 };
 
@@ -260,6 +263,9 @@ class Store {
         break;
       case "live":
         if (status) this.set({ status: { ...status, live: e.live } });
+        break;
+      case "overlayEnabled":
+        if (status) this.set({ status: { ...status, overlayEnabled: e.enabled } });
         break;
       case "driversChanged":
         api.drivers().then((drivers) => this.set({ drivers }));
