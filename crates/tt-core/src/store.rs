@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::model::*;
 
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 2;
 
 pub struct Store {
     conn: Connection,
@@ -72,6 +72,10 @@ impl Store {
                 );
                 ",
             )?;
+        }
+        if version < 2 {
+            // Why a lap wasn't timed: cut / outLap / inLap / partial. Older invalid laps stay NULL.
+            conn.execute_batch("ALTER TABLE laps ADD COLUMN untimed_reason TEXT;")?;
         }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         Ok(Self { conn })
@@ -141,8 +145,8 @@ impl Store {
 
     pub fn insert_lap(&self, lap: &Lap) -> Result<LapId> {
         self.conn.execute(
-            "INSERT INTO laps (driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid, sectors_ms, recorded_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT INTO laps (driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid, sectors_ms, recorded_at, untimed_reason)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 lap.driver_id,
                 lap.combo.game,
@@ -155,6 +159,7 @@ impl Store {
                 lap.valid,
                 serde_json::to_string(&lap.sectors_ms)?,
                 lap.recorded_at,
+                lap.untimed_reason,
             ],
         )?;
         Ok(self.conn.last_insert_rowid())
@@ -199,11 +204,13 @@ impl Store {
 
     pub fn leaderboard(&self, q: &LeaderboardQuery) -> Result<Vec<LeaderboardEntry>> {
         // Guests (NULL driver) are ranked per lap, so key them by negative lap id.
+        // Out, in and partial laps aren't attempts: never ranked, never use up a lap limit.
         let mut stmt = self.conn.prepare(
             "WITH window_laps AS (
                 SELECT *, ROW_NUMBER() OVER (PARTITION BY COALESCE(driver_id, -id) ORDER BY recorded_at, id) AS attempt
                 FROM laps
                 WHERE game = ?1 AND track = ?2 AND layout = ?3
+                  AND (untimed_reason IS NULL OR untimed_reason = 'cut')
                   AND (?4 IS NULL OR car = ?4)
                   AND (?5 IS NULL OR recorded_at >= ?5)
                   AND (?6 IS NULL OR recorded_at < ?6)
@@ -294,7 +301,7 @@ impl Store {
     }
 }
 
-const LAP_SELECT: &str = "SELECT id, driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid, sectors_ms, recorded_at FROM laps";
+const LAP_SELECT: &str = "SELECT id, driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid, sectors_ms, recorded_at, untimed_reason FROM laps";
 const CHALLENGE_SELECT: &str = "SELECT id, name, game, track, layout, car, starts_at, ends_at, valid_only, max_laps, prizes, created_at FROM challenges";
 
 fn driver_from_row(r: &Row) -> rusqlite::Result<Driver> {
@@ -311,6 +318,7 @@ fn lap_from_row(r: &Row) -> rusqlite::Result<Lap> {
         lap_number: r.get(7)?,
         time_ms: r.get(8)?,
         valid: r.get(9)?,
+        untimed_reason: r.get(12)?,
         sectors_ms: serde_json::from_str(&sectors).unwrap_or_default(),
         recorded_at: r.get(11)?,
     })

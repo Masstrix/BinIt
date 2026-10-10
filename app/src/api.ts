@@ -26,6 +26,8 @@ export interface Lap extends Combo {
   lapNumber: number;
   timeMs: number;
   valid: boolean;
+  /** Why it isn't timed: "cut" | "outLap" | "inLap" | "partial" (null when timed, or older cut laps). */
+  untimedReason: string | null;
   sectorsMs: number[];
   recordedAt: number;
 }

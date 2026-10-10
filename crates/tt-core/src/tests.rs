@@ -1,5 +1,5 @@
 use super::*;
-use tt_games::{CompletedLap, GameId, SessionInfo};
+use tt_games::{CompletedLap, GameId, SessionInfo, UntimedReason};
 
 fn session(car: &str) -> SessionInfo {
     SessionInfo {
@@ -12,7 +12,31 @@ fn session(car: &str) -> SessionInfo {
 }
 
 fn lap(time_ms: u32, valid: bool) -> CompletedLap {
-    CompletedLap { session: session("porsche_992_gt3_r"), lap_number: 1, time_ms, valid, sectors_ms: vec![] }
+    let untimed = (!valid).then_some(UntimedReason::Cut);
+    CompletedLap { session: session("porsche_992_gt3_r"), lap_number: 1, time_ms, valid, untimed, sectors_ms: vec![] }
+}
+
+fn untimed_lap(time_ms: u32, reason: UntimedReason) -> CompletedLap {
+    CompletedLap { untimed: Some(reason), ..lap(time_ms, false) }
+}
+
+#[test]
+fn out_and_in_laps_are_never_ranked_or_counted_as_attempts() {
+    let tt = TimeTrial::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    let out = tt.record_lap(&untimed_lap(95_000, UntimedReason::OutLap)).unwrap();
+    assert_eq!(out.lap.untimed_reason.as_deref(), Some("outLap"));
+    tt.record_lap(&lap(102_318, true)).unwrap();
+    tt.record_lap(&untimed_lap(96_000, UntimedReason::InLap)).unwrap();
+
+    // Even with cut laps included, out/in laps don't show up.
+    let board = tt.leaderboard(&LeaderboardQuery { include_invalid: true, ..imola_board() }).unwrap();
+    assert_eq!(board.len(), 1);
+    assert_eq!((board[0].time_ms, board[0].lap_count), (102_318, 1));
+
+    // And they don't use up a one-lap challenge allowance.
+    let one_lap = tt.leaderboard(&LeaderboardQuery { max_laps: Some(1), ..imola_board() }).unwrap();
+    assert_eq!(one_lap[0].time_ms, 102_318);
 }
 
 fn imola_board() -> LeaderboardQuery {

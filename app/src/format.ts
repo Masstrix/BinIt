@@ -47,6 +47,23 @@ export function prettify(id: string): string {
     .join(" ");
 }
 
+export type LapKind = "timed" | "cut" | "outLap" | "inLap" | "partial";
+
+/** What kind of lap this was. Older invalid laps (before reasons existed) count as cuts. */
+export function lapKind(lap: { valid: boolean; untimedReason: string | null }): LapKind {
+  if (lap.valid) return "timed";
+  const r = lap.untimedReason;
+  return r === "outLap" || r === "inLap" || r === "partial" ? r : "cut";
+}
+
+/** Short badge text for laps that aren't timed. Only "cut" is a failed attempt. */
+export const LAP_BADGE: Record<Exclude<LapKind, "timed">, { text: string; className: string; title: string }> = {
+  cut: { text: "CUT", className: "chip cut", title: "Flagged by the game (track limits)" },
+  outLap: { text: "OUT LAP", className: "chip plain", title: "Started from the pits, not timed" },
+  inLap: { text: "IN LAP", className: "chip plain", title: "Ended in the pit lane, not timed" },
+  partial: { text: "PARTIAL", className: "chip plain", title: "TimeTrial joined mid-lap, not timed" },
+};
+
 const GAME_NAMES: Record<string, string> = { acevo: "AC EVO", ac: "Assetto Corsa", acc: "ACC", dr2: "DiRT Rally 2.0", wrc: "EA WRC" };
 
 export function gameName(key: string): string {

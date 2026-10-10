@@ -76,10 +76,41 @@ pub struct CompletedLap {
     /// Lap number within the game session (1-based).
     pub lap_number: u32,
     pub time_ms: u32,
-    /// False if the game flagged the lap (track limits, cuts...) at any point.
+    /// True only for a proper timed lap (`untimed` is `None`).
     pub valid: bool,
+    /// Why the lap doesn't count, if it doesn't.
+    pub untimed: Option<UntimedReason>,
     /// Sector splits in ms, when the game exposes them. Empty otherwise.
     pub sectors_ms: Vec<u32>,
+}
+
+/// Why a completed lap isn't a timed lap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UntimedReason {
+    /// Started from the pits: not an attempt.
+    OutLap,
+    /// Ended in the pit lane: not an attempt.
+    InLap,
+    /// Only part of it was seen (TimeTrial started mid-lap): not an attempt.
+    Partial,
+    /// The game flagged it (track limits, cutting): a failed attempt.
+    Cut,
+}
+
+impl UntimedReason {
+    pub fn key(self) -> &'static str {
+        match self {
+            UntimedReason::OutLap => "outLap",
+            UntimedReason::InLap => "inLap",
+            UntimedReason::Partial => "partial",
+            UntimedReason::Cut => "cut",
+        }
+    }
+
+    /// Out, in and partial laps aren't attempts at all (never ranked, never counted).
+    pub fn is_attempt(self) -> bool {
+        self == UntimedReason::Cut
+    }
 }
 
 /// Live state used by the overlay. Cheap to produce; emitted at most a few times a second.

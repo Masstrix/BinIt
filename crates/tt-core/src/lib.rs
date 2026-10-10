@@ -313,6 +313,7 @@ impl TimeTrial {
             lap_number: completed.lap_number,
             time_ms: completed.time_ms,
             valid: completed.valid,
+            untimed_reason: completed.untimed.map(|r| r.key().to_string()),
             sectors_ms: completed.sectors_ms.clone(),
             recorded_at: now,
         };

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, useAppState, useCurrentChallenge, useDriverMap, useFetch, type Driver } from "../api";
 import { Helmet, Sparkle } from "../components/Helmet";
 import { Podium } from "../components/Podium";
-import { ago, countdown, gap, lapTime, trackName } from "../format";
+import { LAP_BADGE, ago, countdown, gap, lapKind, lapTime, trackName } from "../format";
 
 export function Home() {
   const { status, drivers, recentLaps } = useAppState();
@@ -16,7 +16,8 @@ export function Home() {
     [session?.game, session?.track, session?.layout, session?.car],
   );
   const seatPb = seat ? comboBoard?.find((e) => e.driverId === seat.id) : undefined;
-  const seatLast = seat ? recentLaps.find((l) => l.driverId === seat.id) : undefined;
+  // Last real attempt (timed or cut): out/in laps aren't interesting as a "last lap".
+  const seatLast = seat ? recentLaps.find((l) => l.driverId === seat.id && ["timed", "cut"].includes(lapKind(l))) : undefined;
   const standing = seat ? board.find((e) => e.driverId === seat.id) : undefined;
   const leader = board[0];
   const leaderName = leader?.driverId != null ? driverMap.get(leader.driverId)?.name : "A guest";
@@ -111,6 +112,8 @@ export function Home() {
           <div className="list">
             {recentLaps.slice(0, 6).map((l) => {
               const d = l.driverId != null ? driverMap.get(l.driverId) : undefined;
+              const kind = lapKind(l);
+              const badge = kind === "timed" ? null : LAP_BADGE[kind];
               return (
                 <div className="list-row" key={l.id}>
                   <span className="grow">
@@ -118,13 +121,19 @@ export function Home() {
                       {d?.name ?? "Guest"} <span className="muted" style={{ fontSize: 14 }}>· lap {l.lapNumber} · {ago(l.recordedAt)}</span>
                     </span>
                   </span>
-                  {!l.valid && <span className="chip cut">CUT</span>}
+                  {badge && <span className={badge.className} title={badge.title}>{badge.text}</span>}
                   {l.driverId == null && seat && (
                     <button className="chip plain" style={{ border: "none" }} onClick={() => api.claimLap(l.id, seat.id)}>
                       Claim for {seat.name}
                     </button>
                   )}
-                  <span className="mono" style={{ fontSize: 15, ...(l.valid ? {} : { color: "#7F88AE", textDecoration: "line-through" }) }}>
+                  <span
+                    className="mono"
+                    style={{
+                      fontSize: 15,
+                      ...(kind === "cut" ? { color: "#7F88AE", textDecoration: "line-through" } : kind !== "timed" ? { color: "#7F88AE" } : {}),
+                    }}
+                  >
                     {lapTime(l.timeMs)}
                   </span>
                 </div>

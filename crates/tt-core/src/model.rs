@@ -41,6 +41,9 @@ pub struct Lap {
     pub lap_number: u32,
     pub time_ms: u32,
     pub valid: bool,
+    /// Why it isn't a timed lap: "cut", "outLap", "inLap" or "partial". `None` for timed laps
+    /// (and for cut laps recorded before reasons existed).
+    pub untimed_reason: Option<String>,
     pub sectors_ms: Vec<u32>,
     pub recorded_at: Timestamp,
 }

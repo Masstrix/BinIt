@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState, type HTMLAttributes, type ReactNode } from "react";
 import { api, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
-import { lapTime, trackName } from "../format";
+import { lapKind, lapTime, trackName } from "../format";
 import { WIDGETS, type WidgetId } from "../overlayLayout";
 import { Crown, Helmet } from "./Helmet";
 
@@ -211,7 +211,7 @@ export function LeaderboardCard({ data }: { data: OverlayData }) {
 
 export interface Toast {
   id: number;
-  tone: "pb" | "record" | "lead" | "cut" | "lap";
+  tone: "pb" | "record" | "lead" | "cut" | "lap" | "out" | "in";
   title: string;
   detail: string;
 }
@@ -223,6 +223,8 @@ const TONES: Record<Toast["tone"], { bg: string; fg: string; badge: string }> = 
   lead: { bg: "#FF9F6B", fg: "#2A1406", badge: "P1" },
   cut: { bg: "#FF6B8A", fg: "#2A0610", badge: "CUT" },
   lap: { bg: "#151C33", fg: "#EEF0FF", badge: "LAP" },
+  out: { bg: "#232D52", fg: "#EEF0FF", badge: "OUT" },
+  in: { bg: "#232D52", fg: "#EEF0FF", badge: "IN" },
 };
 
 export function ToastCard({ toast, animate = true }: { toast: Toast; animate?: boolean }) {
@@ -242,7 +244,7 @@ export function ToastCard({ toast, animate = true }: { toast: Toast; animate?: b
         animation: animate ? `tt-toast ${TOAST_MS}ms ease forwards` : undefined,
       }}
     >
-      <span style={{ width: 46, height: 46, borderRadius: 14, background: "#0D1224", color: tone.bg === "#151C33" ? "#EEF0FF" : tone.bg, display: "grid", placeItems: "center", font: "800 13px var(--font-display)" }}>
+      <span style={{ width: 46, height: 46, borderRadius: 14, background: "#0D1224", color: tone.fg === "#EEF0FF" ? "#A9AEFF" : tone.bg, display: "grid", placeItems: "center", font: "800 13px var(--font-display)" }}>
         {tone.badge}
       </span>
       <span style={{ display: "flex", flexDirection: "column" }}>
@@ -268,7 +270,11 @@ export function useLapToasts(pbMs: number | null): Toast | null {
       const s = r.challenges[0];
       const moved = s?.position != null && s.position !== s.previousPosition ? ` · up to P${s.position}` : "";
       let t: Omit<Toast, "id">;
-      if (!r.lap.valid) t = { tone: "cut", title: `${lapTime(r.lap.timeMs)} not counted`, detail: "Lap was cut or started in the pits" };
+      const kind = lapKind(r.lap);
+      if (kind === "outLap") t = { tone: "out", title: `Out lap ${lapTime(r.lap.timeMs)}`, detail: "Timing starts now. Good luck!" };
+      else if (kind === "inLap") t = { tone: "in", title: `In lap ${lapTime(r.lap.timeMs)}`, detail: "Not timed" };
+      else if (kind === "partial") t = { tone: "lap", title: `${lapTime(r.lap.timeMs)} not timed`, detail: "TimeTrial joined part-way through the lap" };
+      else if (kind === "cut") t = { tone: "cut", title: `${lapTime(r.lap.timeMs)} not counted`, detail: "Lap was cut (track limits)" };
       else if (r.comboRecord) t = { tone: "record", title: `Track record ${lapTime(r.lap.timeMs)}`, detail: `${name} is the fastest ever here${moved}` };
       else if (s?.position === 1 && s.previousPosition !== 1) t = { tone: "lead", title: `${name} takes the crown`, detail: `${lapTime(r.lap.timeMs)} in ${s.challengeName}` };
       else if (r.personalBest) t = { tone: "pb", title: `New PB ${lapTime(r.lap.timeMs)}`, detail: s?.position ? `P${s.position} in ${s.challengeName}` : `Nice one, ${name}` };

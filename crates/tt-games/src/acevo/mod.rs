@@ -227,7 +227,8 @@ impl GameAdapter for AcEvoAdapter {
                 session,
                 lap_number: lap.lap_number,
                 time_ms: lap.time_ms,
-                valid: lap.valid,
+                valid: lap.untimed.is_none(),
+                untimed: lap.untimed,
                 sectors_ms: Vec::new(),
             }));
         }
