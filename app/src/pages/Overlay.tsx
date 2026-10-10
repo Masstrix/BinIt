@@ -1,272 +1,190 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { api, isTauri, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent } from "../api";
+import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { api, isTauri, useAppEvent, useAppState, type AppEvent, type Driver } from "../api";
 import { Helmet } from "../components/Helmet";
-import { lapTime } from "../format";
-
-type Box = Pick<CSSProperties, "left" | "right" | "top" | "bottom" | "width" | "height" | "transform">;
-
-export interface OverlayProfile {
-  name: string;
-  /** Where the game draws its own HUD (approximate), so our widgets stay clear. */
-  hud: { label: string; box: Box }[];
-  strip: Box;
-  toasts: Box;
-}
-
-// Positions are % of the screen. Mapped from the game's default HUD layout.
-export const OVERLAY_PROFILES: Record<string, OverlayProfile> = {
-  acevo: {
-    name: "AC EVO",
-    hud: [
-      { label: "Position / lap", box: { left: "2%", top: "3%", width: "19%", height: "13%" } },
-      { label: "Session timer", box: { right: "2%", top: "3%", width: "16%", height: "10%" } },
-      { label: "Track map", box: { left: "2%", top: "33%", width: "12%", height: "24%" } },
-      { label: "Dash / tacho / delta", box: { right: "2%", bottom: "3%", width: "24%", height: "22%" } },
-    ],
-    strip: { left: "50%", top: "2.5%", transform: "translateX(-50%)" },
-    toasts: { left: "2%", bottom: "3%" },
-  },
-};
-
-interface Toast {
-  id: number;
-  tone: "pb" | "record" | "lead" | "cut" | "lap";
-  title: string;
-  detail: string;
-}
-
-const TOAST_MS = 4000;
-const TONES: Record<Toast["tone"], { bg: string; fg: string; badge: string }> = {
-  pb: { bg: "#4BE3A6", fg: "#062A1C", badge: "PB" },
-  record: { bg: "#FFC93C", fg: "#2A1F00", badge: "REC" },
-  lead: { bg: "#FF9F6B", fg: "#2A1406", badge: "P1" },
-  cut: { bg: "#FF6B8A", fg: "#2A0610", badge: "CUT" },
-  lap: { bg: "#151C33", fg: "#EEF0FF", badge: "LAP" },
-};
+import { SectionWidgets, TOAST_KEYFRAMES, useLapToasts, useOverlayData } from "../components/OverlayWidgets";
+import { ANCHORS, anchorStyle, useOverlayLayout } from "../overlayLayout";
 
 export function Overlay() {
-  const { status } = useAppState();
-  const drivers = useDriverMap();
-  const seat = status?.seat != null ? drivers.get(status.seat) : undefined;
-  const session = status?.session ?? null;
-  const profile = OVERLAY_PROFILES[status?.game ?? "acevo"] ?? OVERLAY_PROFILES.acevo;
-  const { challenge, board } = useCurrentChallenge();
+  const { status, drivers } = useAppState();
+  const game = status?.game ?? "acevo";
+  const { layout } = useOverlayLayout(game);
+  const data = useOverlayData();
+  const toast = useLapToasts(data.pbMs);
   const [switcherOpen, setSwitcherOpen] = useState(false);
-  const [toast, setToast] = useState<Toast | null>(null);
+  const keyHandler = useRef<(key: string) => void>(() => {});
+  const switcherOpenRef = useRef(false);
+  switcherOpenRef.current = switcherOpen;
 
   useEffect(() => {
     document.documentElement.style.background = "transparent";
     document.body.style.background = "transparent";
   }, []);
 
-  const comboBoard = useFetch(
-    session ? () => api.leaderboard({ game: session.game, track: session.track, layout: session.layout, car: session.car }) : null,
-    [session?.game, session?.track, session?.layout, session?.car],
-  );
-  const pb = seat ? comboBoard?.find((e) => e.driverId === seat.id) : undefined;
-  const standing = seat ? board.find((e) => e.driverId === seat.id) : undefined;
-
-  // F8 arrives from the desktop app as a Tauri event. In a plain browser (preview), F8 works locally.
+  // F8 and the switcher's keys arrive from the desktop app as events, so the game keeps
+  // focus. In a plain browser (preview) the same keys come from the page itself.
   useEffect(() => {
     if (!isTauri) {
-      const onKey = (e: KeyboardEvent) => e.key === "F8" && setSwitcherOpen((o) => !o);
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === "F8") setSwitcherOpen((o) => !o);
+        else if (switcherOpenRef.current) {
+          e.preventDefault();
+          keyHandler.current(e.key.length === 1 ? e.key.toLowerCase() : e.key);
+        }
+      };
       window.addEventListener("keydown", onKey);
       return () => window.removeEventListener("keydown", onKey);
     }
-    let unlisten: (() => void) | undefined;
-    import("@tauri-apps/api/event").then(({ listen }) =>
-      listen<boolean>("switcher", (e) => setSwitcherOpen(e.payload)).then((u) => (unlisten = u)),
-    );
-    return () => unlisten?.();
+    const unlisten: (() => void)[] = [];
+    import("@tauri-apps/api/event").then(({ listen }) => {
+      listen<boolean>("switcher", (e) => setSwitcherOpen(e.payload)).then((u) => unlisten.push(u));
+      listen<string>("switcher-key", (e) => keyHandler.current(e.payload)).then((u) => unlisten.push(u));
+    });
+    return () => unlisten.forEach((u) => u());
   }, []);
-
   const closeSwitcher = useCallback(() => {
     setSwitcherOpen(false);
     if (isTauri) import("@tauri-apps/api/core").then(({ invoke }) => invoke("close_switcher"));
   }, []);
 
-  const onEvent = useCallback(
-    (e: AppEvent) => {
-      if (e.type !== "lapRecorded") return;
-      const r = e.result;
-      const name = r.lap.driverId != null ? drivers.get(r.lap.driverId)?.name ?? "Guest" : "Guest";
-      const s = r.challenges[0];
-      const moved = s?.position != null && s.position !== s.previousPosition ? ` · up to P${s.position}` : "";
-      let t: Omit<Toast, "id">;
-      if (!r.lap.valid) t = { tone: "cut", title: `${lapTime(r.lap.timeMs)} not counted`, detail: "Lap was cut or started in the pits" };
-      else if (r.comboRecord) t = { tone: "record", title: `Track record ${lapTime(r.lap.timeMs)}`, detail: `${name} is the fastest ever here${moved}` };
-      else if (s?.position === 1 && s.previousPosition !== 1) t = { tone: "lead", title: `${name} takes the crown`, detail: `${lapTime(r.lap.timeMs)} in ${s.challengeName}` };
-      else if (r.personalBest) t = { tone: "pb", title: `New PB ${lapTime(r.lap.timeMs)}`, detail: s?.position ? `P${s.position} in ${s.challengeName}` : `Nice one, ${name}` };
-      else t = { tone: "lap", title: lapTime(r.lap.timeMs), detail: pb ? `PB is ${lapTime(pb.timeMs)}` : name };
-      setToast({ ...t, id: Date.now() });
-    },
-    [drivers, pb],
+  // Spoken confirmation, so switching works even when the overlay can't be seen.
+  const driversRef = useRef(drivers);
+  driversRef.current = drivers;
+  useAppEvent(
+    useCallback(
+      (e: AppEvent) => {
+        if (e.type !== "seatChanged" || !layout.voice || !("speechSynthesis" in window)) return;
+        const d = driversRef.current.find((x) => x.id === e.driverId);
+        speechSynthesis.cancel();
+        speechSynthesis.speak(new SpeechSynthesisUtterance(d ? `${d.name} is driving` : "Guest is driving"));
+      },
+      [layout.voice],
+    ),
   );
-  useAppEvent(onEvent);
 
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), TOAST_MS);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  const showStrip = status?.connected || !isTauri;
+  const showWidgets = status?.connected || !isTauri;
 
   return (
     <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", fontFamily: "var(--font-body)" }}>
-      {showStrip && (
-        <div
-          style={{
-            position: "absolute",
-            ...profile.strip,
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            padding: "8px 16px 8px 8px",
-            borderRadius: 18,
-            background: "rgba(13,18,36,0.85)",
-            border: "1px solid rgba(169,174,255,0.25)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          <Helmet color={seat?.color ?? "#9AA3C7"} size={40} />
-          <span style={{ font: "800 18px var(--font-display)" }}>{seat?.name ?? "Guest"}</span>
-          <span style={{ width: 1, height: 28, background: "var(--line)" }} />
-          <StripStat label="PB" value={lapTime(pb?.timeMs)} color="var(--mint)" />
-          {challenge && (
-            <StripStat
-              label="CHALLENGE"
-              value={standing ? `P${standing.position}` : "—"}
-              extra={standing && standing.gapMs > 0 ? `+${(standing.gapMs / 1000).toFixed(3)}` : undefined}
-            />
-          )}
-          <span className="kbd" style={{ background: "var(--line)", color: "var(--text-2)" }}>F8</span>
-        </div>
-      )}
+      {showWidgets &&
+        ANCHORS.map((a) => {
+          const items = layout.sections[a];
+          if (!items?.length) return null;
+          return (
+            <div key={a} style={anchorStyle(a)}>
+              <SectionWidgets items={items} data={data} toast={toast} />
+            </div>
+          );
+        })}
 
-      {toast && (
-        <div
-          key={toast.id}
-          style={{
-            position: "absolute",
-            ...profile.toasts,
-            display: "flex",
-            alignItems: "center",
-            gap: 14,
-            padding: "12px 20px 12px 12px",
-            borderRadius: 20,
-            background: TONES[toast.tone].bg,
-            color: TONES[toast.tone].fg,
-            animation: `tt-toast ${TOAST_MS}ms ease forwards`,
-          }}
-        >
-          <span style={{ width: 46, height: 46, borderRadius: 14, background: "#0D1224", color: TONES[toast.tone].bg === "#151C33" ? "#EEF0FF" : TONES[toast.tone].bg, display: "grid", placeItems: "center", font: "800 13px var(--font-display)" }}>
-            {TONES[toast.tone].badge}
-          </span>
-          <span style={{ display: "flex", flexDirection: "column" }}>
-            <span style={{ font: "800 17px var(--font-display)" }}>{toast.title}</span>
-            <span style={{ fontWeight: 600, fontSize: 14 }}>{toast.detail}</span>
-          </span>
-        </div>
-      )}
-
-      {switcherOpen && <Switcher onClose={closeSwitcher} />}
-
-      <style>{`@keyframes tt-toast { 0% { opacity: 0; transform: translateY(12px); } 6% { opacity: 1; transform: none; } 88% { opacity: 1; } 100% { opacity: 0; } }`}</style>
+      {switcherOpen && <Switcher onClose={closeSwitcher} keyHandler={keyHandler} />}
+      <style>{TOAST_KEYFRAMES}</style>
     </div>
   );
 }
 
-function StripStat({ label, value, color, extra }: { label: string; value: string; color?: string; extra?: string }) {
-  return (
-    <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
-      <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>{label}</span>
-      <span className="mono" style={{ fontSize: 16, color }}>
-        {value} {extra && <span style={{ color: "var(--peach)" }}>{extra}</span>}
-      </span>
-    </span>
-  );
+/** "sam o'neil" -> "Sam O'neil": names typed in-game can't use Shift. */
+function titleCase(s: string) {
+  return s.replace(/(^|[\s-])([a-z])/g, (_, sep: string, c: string) => sep + c.toUpperCase());
 }
 
-function Switcher({ onClose }: { onClose: () => void }) {
+function Switcher({ onClose, keyHandler }: { onClose: () => void; keyHandler: RefObject<(key: string) => void> }) {
   const { drivers, status } = useAppState();
   const [name, setName] = useState("");
+  const [highlight, setHighlight] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const input = useRef<HTMLInputElement>(null);
   // Most recently added first, so regulars and newcomers are both near the top.
-  const list = [...drivers].sort((a, b) => b.createdAt - a.createdAt).slice(0, 9);
+  const list: Driver[] = [...drivers].sort((a, b) => b.createdAt - a.createdAt).slice(0, 9);
 
   const pick = useCallback(
-    async (id: number) => {
-      await api.setSeat(id);
+    async (d: Driver) => {
+      await api.setSeat(d.id);
       onClose();
     },
     [onClose],
   );
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (document.activeElement === input.current && name) return;
-      const n = Number(e.key);
-      if (n >= 1 && n <= list.length) {
-        e.preventDefault();
-        pick(list[n - 1].id);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [list, name, onClose, pick]);
-
-  const add = async () => {
+  const add = useCallback(async () => {
     try {
-      await api.addDriver(name, undefined, true);
+      await api.addDriver(titleCase(name.trim()), undefined, true);
       onClose();
     } catch (e) {
       setError((e as Error).message);
     }
+  }, [name, onClose]);
+
+  keyHandler.current = (key: string) => {
+    setError(null);
+    if (key === "Escape") return onClose();
+    if (key === "Enter") {
+      if (name.trim()) add();
+      else if (list[highlight]) pick(list[highlight]);
+      return;
+    }
+    if (key === "Backspace") return setName((n) => n.slice(0, -1));
+    // Number keys pick a driver, unless a name is being typed.
+    if (/^[1-9]$/.test(key) && !name) {
+      const d = list[Number(key) - 1];
+      if (d) pick(d);
+      return;
+    }
+    const cols = 5;
+    if (key === "ArrowRight") return setHighlight((h) => Math.min(list.length - 1, h + 1));
+    if (key === "ArrowLeft") return setHighlight((h) => Math.max(0, h - 1));
+    if (key === "ArrowDown") return setHighlight((h) => Math.min(list.length - 1, h + cols));
+    if (key === "ArrowUp") return setHighlight((h) => Math.max(0, h - cols));
+    if (/^[a-z0-9 \-]$/.test(key) && name.length < 32) setName((n) => n + key);
   };
+
+  const typed = titleCase(name);
 
   return (
     <div style={{ position: "absolute", inset: 0, background: "rgba(8,10,20,0.55)", display: "grid", placeItems: "center", pointerEvents: "auto" }} onClick={onClose}>
       <div role="dialog" aria-label="Who's driving" className="card" style={{ width: "min(760px, 92vw)", gap: 18 }} onClick={(e) => e.stopPropagation()}>
         <div className="head">
           <h2 style={{ fontSize: 26 }}>Who's driving?</h2>
-          <span className="muted" style={{ fontSize: 14 }}>Press a number · Esc to close</span>
+          <span className="muted" style={{ fontSize: 14 }}>Number to pick · type a new name · Esc to close</span>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 10 }}>
-          {list.map((d, i) => {
-            const active = d.id === status?.seat;
-            return (
-              <button key={d.id} className="driver-btn" aria-pressed={active} style={{ position: "relative", borderColor: active ? d.color : "transparent" }} onClick={() => pick(d.id)}>
-                <span className="mono" style={{ position: "absolute", left: 10, top: 8, fontSize: 12, color: "var(--muted)" }}>{i + 1}</span>
-                <Helmet color={d.color} size={52} />
-                <span className="name">{d.name}</span>
-              </button>
-            );
-          })}
+        {list.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 10 }}>
+            {list.map((d, i) => {
+              const active = d.id === status?.seat;
+              const lit = i === highlight && !name;
+              return (
+                <button
+                  key={d.id}
+                  className="driver-btn"
+                  aria-pressed={active}
+                  style={{ position: "relative", borderColor: lit ? "var(--peri-1)" : active ? d.color : "transparent", background: lit ? "var(--panel-3)" : undefined }}
+                  onClick={() => pick(d)}
+                >
+                  <span className="mono" style={{ position: "absolute", left: 10, top: 8, fontSize: 12, color: "var(--muted)" }}>{i + 1}</span>
+                  <Helmet color={d.color} size={52} />
+                  <span className="name">{d.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        <div className="add-bar" style={{ gap: 12 }}>
+          <span style={{ paddingLeft: 8, fontWeight: 600, whiteSpace: "nowrap" }}>New driver</span>
+          <div
+            aria-live="polite"
+            style={{ flex: 1, minHeight: 48, display: "flex", alignItems: "center", padding: "0 16px", borderRadius: 14, border: `2px solid ${name ? "var(--violet)" : "var(--line)"}`, background: "var(--bg)", fontSize: 18, fontWeight: 700 }}
+          >
+            {typed ? (
+              <>
+                {typed}
+                <span style={{ width: 2, height: 22, background: "var(--peri-1)", marginLeft: 2, animation: "tt-caret 1s steps(1) infinite" }} />
+              </>
+            ) : (
+              <span className="muted" style={{ fontWeight: 500, fontSize: 16 }}>Just start typing, then Enter</span>
+            )}
+          </div>
+          {name && <span className="kbd" style={{ background: "var(--violet)", color: "#fff" }}>Enter</span>}
         </div>
-        <form
-          className="add-bar"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (name.trim()) add();
-          }}
-        >
-          <input
-            ref={input}
-            className="input"
-            value={name}
-            maxLength={32}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="New driver? Type a name and hit Enter"
-            aria-label="New driver name"
-            autoFocus={list.length === 0}
-            style={{ borderColor: "var(--violet)" }}
-          />
-        </form>
         {error && <span className="error">{error}</span>}
       </div>
+      <style>{`@keyframes tt-caret { 50% { opacity: 0; } }`}</style>
     </div>
   );
 }

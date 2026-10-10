@@ -125,6 +125,7 @@ export type AppEvent =
   | { type: "lapsChanged" }
   | { type: "challengesChanged" }
   | { type: "live"; live: LiveView }
+  | { type: "overlayLayoutChanged"; game: string }
   | { type: "resync" };
 
 // ---- transport ----------------------------------------------------------------
@@ -162,6 +163,9 @@ export const api = {
   deleteChallenge: (id: number) => request<null>("DELETE", `/challenges/${id}`),
   endChallenge: (id: number) => request<null>("POST", `/challenges/${id}/end`),
   challengeLeaderboard: (id: number) => request<LeaderboardEntry[]>("GET", `/challenges/${id}/leaderboard`),
+  overlayLayout: (game: string) => request<unknown | null>("GET", `/overlay/layout/${game}`),
+  setOverlayLayout: (game: string, layout: unknown) => request<null>("PUT", `/overlay/layout/${game}`, layout),
+  resetOverlayLayout: (game: string) => request<null>("DELETE", `/overlay/layout/${game}`),
 };
 
 // ---- live store -------------------------------------------------------------------

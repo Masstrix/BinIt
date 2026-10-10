@@ -28,7 +28,7 @@ fn main() {
                 .with_shortcuts([switch_driver, hide_overlay])
                 .expect("valid shortcuts")
                 .with_handler(move |app, shortcut, event| {
-                    if event.state != ShortcutState::Pressed {
+                    if event.state != ShortcutState::Pressed || overlay::handle_switcher_key(app, shortcut) {
                         return;
                     }
                     if *shortcut == switch_driver {

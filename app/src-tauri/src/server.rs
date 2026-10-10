@@ -61,6 +61,8 @@ pub async fn serve(tt: Arc<TimeTrial>, app: AppHandle, lan: bool) -> anyhow::Res
         .route("/challenges/{id}/leaderboard", get(challenge_leaderboard))
         .route("/challenges/{id}/end", post(end_challenge))
         .route("/settings/lan", put(set_lan))
+        .route("/overlay/visible", put(set_overlay_visible))
+        .route("/overlay/layout/{game}", get(overlay_layout).put(set_overlay_layout).delete(reset_overlay_layout))
         .route("/events", get(events));
 
     let router = Router::new()
@@ -113,6 +115,31 @@ struct SetLan {
 async fn set_lan(State(c): State<Ctx>, Json(body): Json<SetLan>) -> ApiResult<bool> {
     c.tt.set_setting(LAN_SETTING, Some(if body.enabled { "1" } else { "0" }))?;
     Ok(Json(body.enabled))
+}
+
+/// Show/hide the in-game overlay (used by the FPS benchmark and the LAN page).
+async fn set_overlay_visible(State(c): State<Ctx>, Json(body): Json<SetLan>) -> ApiResult<bool> {
+    let app = c.app.clone();
+    let _ = c.app.run_on_main_thread(move || crate::overlay::set_visible(&app, body.enabled));
+    Ok(Json(body.enabled))
+}
+
+async fn overlay_layout(State(c): State<Ctx>, Path(game): Path<String>) -> ApiResult<Option<serde_json::Value>> {
+    Ok(Json(c.tt.overlay_layout(&game)?))
+}
+
+async fn set_overlay_layout(
+    State(c): State<Ctx>,
+    Path(game): Path<String>,
+    Json(layout): Json<serde_json::Value>,
+) -> ApiResult<()> {
+    c.tt.set_overlay_layout(&game, Some(&layout))?;
+    Ok(Json(()))
+}
+
+async fn reset_overlay_layout(State(c): State<Ctx>, Path(game): Path<String>) -> ApiResult<()> {
+    c.tt.set_overlay_layout(&game, None)?;
+    Ok(Json(()))
 }
 
 async fn drivers(State(c): State<Ctx>) -> ApiResult<Vec<tt_core::Driver>> {

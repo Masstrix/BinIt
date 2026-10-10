@@ -37,6 +37,7 @@ pub enum AppEvent {
     LapsChanged,
     ChallengesChanged,
     Live { live: LiveView },
+    OverlayLayoutChanged { game: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -140,6 +141,26 @@ impl TimeTrial {
 
     pub fn set_setting(&self, key: &str, value: Option<&str>) -> Result<()> {
         self.store().set_setting(key, value)
+    }
+
+    /// Per-game overlay layout, as JSON owned by the UI. `None` = use the game's default.
+    pub fn overlay_layout(&self, game: &str) -> Result<Option<serde_json::Value>> {
+        let raw = self.store().setting(&format!("overlay_layout:{game}"))?;
+        Ok(raw.and_then(|r| serde_json::from_str(&r).ok()))
+    }
+
+    /// Saves (or with `None`, resets) a game's overlay layout and tells every UI.
+    pub fn set_overlay_layout(&self, game: &str, layout: Option<&serde_json::Value>) -> Result<()> {
+        if game.is_empty() || !game.chars().all(|c| c.is_ascii_alphanumeric()) {
+            bail!("unknown game");
+        }
+        let raw = layout.map(serde_json::to_string).transpose()?;
+        if raw.as_ref().is_some_and(|r| r.len() > 16_000) {
+            bail!("layout is too large");
+        }
+        self.store().set_setting(&format!("overlay_layout:{game}"), raw.as_deref())?;
+        self.emit(AppEvent::OverlayLayoutChanged { game: game.to_string() });
+        Ok(())
     }
 
     // ---- drivers & the seat ------------------------------------------------
