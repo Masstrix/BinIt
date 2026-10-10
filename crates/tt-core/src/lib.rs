@@ -1,6 +1,7 @@
 //! TimeTrial core: who's in the seat, recording laps against them, challenges and
 //! leaderboards. UI-agnostic; the desktop app and the LAN web server both sit on top.
 
+pub mod live;
 pub mod model;
 mod store;
 
@@ -11,7 +12,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Result, bail};
 use serde::Serialize;
 use tokio::sync::broadcast;
-use tt_games::{CompletedLap, GameEvent, GameId, LiveState, SessionInfo};
+use tt_games::timing::even_boundaries;
+use tt_games::{CompletedLap, GameEvent, GameId, LiveState, SessionInfo, TimingKind, UntimedReason};
+
+use live::{LiveTiming, LiveTimingView, TimingContext, sector_status};
 
 pub use model::*;
 pub use store::Store;
@@ -51,6 +55,8 @@ pub struct SessionView {
     pub combo: Combo,
     pub game_name: String,
     pub session_kind: String,
+    /// How many sectors this track layout is split into.
+    pub sector_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -60,6 +66,8 @@ pub struct LiveView {
     pub current_lap_ms: u32,
     pub lap_valid: bool,
     pub lap_progress: f32,
+    /// Delta and sector bars for the lap in progress (when there's a session).
+    pub timing: Option<LiveTimingView>,
 }
 
 /// Snapshot for a UI that just connected.
@@ -80,7 +88,9 @@ pub struct Status {
 struct Runtime {
     game: Option<GameId>,
     session: Option<SessionView>,
+    session_info: Option<SessionInfo>,
     live: Option<LiveView>,
+    timing: LiveTiming,
 }
 
 pub struct TimeTrial {
@@ -259,6 +269,8 @@ impl TimeTrial {
         }
         store.set_setting(SEAT_KEY, driver_id.map(|id| id.to_string()).as_deref())?;
         drop(store);
+        // Live delta compares against the new driver's PB.
+        self.refresh_timing()?;
         self.emit(AppEvent::SeatChanged { driver_id });
         Ok(())
     }
@@ -279,6 +291,7 @@ impl TimeTrial {
     /// Assigns a guest lap (or a mis-attributed one) to a driver.
     pub fn claim_lap(&self, lap_id: LapId, driver_id: Option<DriverId>) -> Result<()> {
         self.store().set_lap_driver(lap_id, driver_id)?;
+        self.refresh_timing()?;
         self.emit(AppEvent::LapsChanged);
         Ok(())
     }
@@ -305,6 +318,14 @@ impl TimeTrial {
         let before: Vec<Option<u32>> =
             challenges.iter().map(|c| Ok(standing(&store, c, driver_id, now)?.map(|s| s.0))).collect::<Result<_>>()?;
 
+        // Sectors: the game's own when it reports them, else split from the lap's profile.
+        let boundaries = boundaries_for(&store, &completed.session)?;
+        let sectors_ms = if !completed.sectors_ms.is_empty() {
+            completed.sectors_ms.clone()
+        } else {
+            completed.profile.as_ref().map(|p| p.split(&boundaries)).unwrap_or_default()
+        };
+
         let mut lap = Lap {
             id: 0,
             driver_id,
@@ -314,10 +335,19 @@ impl TimeTrial {
             time_ms: completed.time_ms,
             valid: completed.valid,
             untimed_reason: completed.untimed.map(|r| r.key().to_string()),
-            sectors_ms: completed.sectors_ms.clone(),
+            sectors_ms,
             recorded_at: now,
         };
-        lap.id = store.insert_lap(&lap)?;
+        lap.id = store.insert_lap(&lap, completed.profile.as_ref())?;
+
+        // Purple / green / yellow per sector, against every other valid lap on this combo.
+        let sector_status = if lap.valid || completed.untimed == Some(UntimedReason::Cut) {
+            let others = store.valid_sectors(&combo, lap.id)?;
+            let (overall, driver) = sector_bests(&others, lap.sectors_ms.len(), driver_id);
+            lap.sectors_ms.iter().enumerate().map(|(i, &t)| sector_status(t, overall[i], driver[i])).collect()
+        } else {
+            Vec::new()
+        };
 
         let (personal_best, combo_record) = if lap.valid {
             let pb = match driver_id {
@@ -342,8 +372,10 @@ impl TimeTrial {
             });
         }
         drop(store);
+        // New bests / PB change what live timing compares against.
+        self.refresh_timing()?;
 
-        let result = LapResult { lap, personal_best, combo_record, challenges: standings };
+        let result = LapResult { lap, personal_best, combo_record, sector_status, challenges: standings };
         self.emit(AppEvent::LapRecorded { result: result.clone() });
         Ok(result)
     }
@@ -407,25 +439,101 @@ impl TimeTrial {
                 self.emit(AppEvent::Session { session: None });
             }
             GameEvent::SessionChanged(info) => {
+                let sector_count = boundaries_for(&self.store(), &info)?.len().saturating_sub(1);
                 let view = SessionView {
                     combo: combo_of(&info),
                     game_name: info.game.display_name().to_string(),
                     session_kind: info.session_kind.clone(),
+                    sector_count,
                 };
-                self.runtime.lock().expect("runtime mutex poisoned").session = Some(view.clone());
+                {
+                    let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
+                    rt.session = Some(view.clone());
+                    rt.session_info = Some(info);
+                }
+                self.refresh_timing()?;
                 self.emit(AppEvent::Session { session: Some(view) });
             }
             GameEvent::LapCompleted(lap) => {
                 self.record_lap(&lap)?;
             }
             GameEvent::Live(LiveState { driving, current_lap_ms, lap_valid, lap_progress }) => {
-                let live = LiveView { driving, current_lap_ms, lap_valid, lap_progress };
-                self.runtime.lock().expect("runtime mutex poisoned").live = Some(live.clone());
+                let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
+                let timing = if driving && rt.session_info.is_some() {
+                    rt.timing.update(lap_progress, current_lap_ms)
+                } else {
+                    None
+                };
+                let live = LiveView { driving, current_lap_ms, lap_valid, lap_progress, timing };
+                rt.live = Some(live.clone());
+                drop(rt);
                 self.emit(AppEvent::Live { live });
             }
         }
         Ok(())
     }
+}
+
+impl TimeTrial {
+    /// Reloads what live timing compares against: the track's sector boundaries, the
+    /// seated driver's PB profile (else the combo's best) and the best sector times.
+    fn refresh_timing(&self) -> Result<()> {
+        let Some(info) = self.runtime.lock().expect("runtime mutex poisoned").session_info.clone() else {
+            return Ok(());
+        };
+        let seat = self.seat()?;
+        let combo = combo_of(&info);
+        let ctx = {
+            let store = self.store();
+            let boundaries = boundaries_for(&store, &info)?;
+            let rows = store.valid_sectors(&combo, -1)?;
+            let (best_overall, best_driver) = sector_bests(&rows, boundaries.len().saturating_sub(1), seat);
+            let pb = match seat {
+                Some(id) => store.best_profile(&combo, Some(id))?.map(|p| (p, "PB")),
+                None => None,
+            };
+            let reference = match pb {
+                Some(r) => Some(r),
+                None => store.best_profile(&combo, None)?.map(|p| (p, "Best")),
+            };
+            TimingContext { boundaries, reference, best_overall, best_driver }
+        };
+        self.runtime.lock().expect("runtime mutex poisoned").timing.configure(ctx);
+        Ok(())
+    }
+
+    /// Sector boundaries for a track layout. Exposed for the UI and future learning.
+    pub fn sector_boundaries(&self, game: &str, track: &str, layout: &str) -> Result<Option<Vec<f32>>> {
+        Ok(self.store().sector_layout(game, track, layout)?.map(|(b, _)| b))
+    }
+}
+
+/// Sector boundaries for a session's track layout, creating even ones the first time.
+fn boundaries_for(store: &Store, info: &SessionInfo) -> Result<Vec<f32>> {
+    let c = combo_of(info);
+    if let Some((b, _)) = store.sector_layout(&c.game, &c.track, &c.layout)?
+        && b.len() >= 2
+    {
+        return Ok(b);
+    }
+    let b = even_boundaries(info.timing == TimingKind::RallyStage, info.length_m.map(|m| m as f32));
+    store.set_sector_layout(&c.game, &c.track, &c.layout, &b, "even")?;
+    Ok(b)
+}
+
+/// Best time per sector: (anyone's, this driver's). Only laps split into `n` sectors count.
+fn sector_bests(rows: &[(Option<DriverId>, Vec<u32>)], n: usize, driver: Option<DriverId>) -> (Vec<Option<u32>>, Vec<Option<u32>>) {
+    let mut overall = vec![None; n];
+    let mut mine = vec![None; n];
+    for (who, sectors) in rows.iter().filter(|(_, s)| s.len() == n) {
+        for (i, &t) in sectors.iter().enumerate() {
+            overall[i] = Some(overall[i].map_or(t, |b: u32| b.min(t)));
+            if driver.is_some() && *who == driver {
+                mine[i] = Some(mine[i].map_or(t, |b: u32| b.min(t)));
+            }
+        }
+    }
+    (overall, mine)
 }
 
 fn valid_color(c: &str) -> Result<String> {

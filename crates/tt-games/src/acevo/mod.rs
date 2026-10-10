@@ -19,7 +19,8 @@ pub const STATIC_PAGE: &str = "Local\\acevo_pmf_static";
 
 const CONNECTED_POLL: Duration = Duration::from_millis(50);
 const DISCONNECTED_POLL: Duration = Duration::from_secs(2);
-const LIVE_EVERY: Duration = Duration::from_millis(250);
+// Live timing (delta, sector bars) wants ~10 updates a second; still trivial to send.
+const LIVE_EVERY: Duration = Duration::from_millis(100);
 
 pub fn session_kind_name(session: i32) -> &'static str {
     match session {
@@ -40,6 +41,8 @@ pub fn session_info(g: &Graphics, s: &Static) -> SessionInfo {
         layout: (!layout.is_empty()).then_some(layout),
         car: c_str(&g.car_model),
         session_kind: session_kind_name(s.session).to_string(),
+        timing: TimingKind::CircuitLap,
+        length_m: (s.track_length_m > 0.0).then(|| s.track_length_m.round() as u32),
     }
 }
 
@@ -51,6 +54,7 @@ pub fn sample(g: &Graphics) -> Sample {
         current_lap_ms: g.current_lap_time_ms,
         lap_valid: g.is_valid_lap != 0 && g.timing_state.is_invalid == 0,
         in_pit_lane: g.is_in_pit_lane != 0 || g.is_in_pit_box != 0,
+        progress: g.npos,
     }
 }
 
@@ -230,6 +234,7 @@ impl GameAdapter for AcEvoAdapter {
                 valid: lap.untimed.is_none(),
                 untimed: lap.untimed,
                 sectors_ms: Vec::new(),
+                profile: lap.profile,
             }));
         }
 

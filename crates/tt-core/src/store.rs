@@ -6,8 +6,9 @@ use anyhow::{Context, Result};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::model::*;
+use tt_games::timing::TimingProfile;
 
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 
 pub struct Store {
     conn: Connection,
@@ -77,6 +78,22 @@ impl Store {
             // Why a lap wasn't timed: cut / outLap / inLap / partial. Older invalid laps stay NULL.
             conn.execute_batch("ALTER TABLE laps ADD COLUMN untimed_reason TEXT;")?;
         }
+        if version < 3 {
+            // Timing profile per lap (see docs/sectors.md) and sector boundaries per track layout.
+            conn.execute_batch(
+                "
+                ALTER TABLE laps ADD COLUMN profile BLOB;
+                CREATE TABLE sector_layouts (
+                    game        TEXT NOT NULL,
+                    track       TEXT NOT NULL,
+                    layout      TEXT NOT NULL,
+                    boundaries  TEXT NOT NULL,
+                    source      TEXT NOT NULL,
+                    PRIMARY KEY (game, track, layout)
+                );
+                ",
+            )?;
+        }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         Ok(Self { conn })
     }
@@ -143,10 +160,10 @@ impl Store {
 
     // ---- laps --------------------------------------------------------------
 
-    pub fn insert_lap(&self, lap: &Lap) -> Result<LapId> {
+    pub fn insert_lap(&self, lap: &Lap, profile: Option<&TimingProfile>) -> Result<LapId> {
         self.conn.execute(
-            "INSERT INTO laps (driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid, sectors_ms, recorded_at, untimed_reason)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT INTO laps (driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid, sectors_ms, recorded_at, untimed_reason, profile)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 lap.driver_id,
                 lap.combo.game,
@@ -160,6 +177,7 @@ impl Store {
                 serde_json::to_string(&lap.sectors_ms)?,
                 lap.recorded_at,
                 lap.untimed_reason,
+                profile.map(TimingProfile::to_bytes),
             ],
         )?;
         Ok(self.conn.last_insert_rowid())
@@ -219,7 +237,7 @@ impl Store {
                 SELECT * FROM window_laps
                 WHERE (?7 IS NULL OR attempt <= ?7) AND (?8 OR valid = 1)
              )
-             SELECT driver_id, id, MIN(time_ms) AS best, car, COUNT(*), recorded_at
+             SELECT driver_id, id, MIN(time_ms) AS best, car, COUNT(*), recorded_at, sectors_ms
              FROM counted
              GROUP BY COALESCE(driver_id, -id)
              ORDER BY best, recorded_at",
@@ -234,13 +252,14 @@ impl Store {
                     r.get::<_, String>(3)?,
                     r.get::<_, u32>(4)?,
                     r.get::<_, Timestamp>(5)?,
+                    r.get::<_, String>(6)?,
                 ))
             },
         )?;
 
         let mut out: Vec<LeaderboardEntry> = Vec::new();
         for row in rows {
-            let (driver_id, lap_id, time_ms, car, lap_count, set_at) = row?;
+            let (driver_id, lap_id, time_ms, car, lap_count, set_at, sectors) = row?;
             let leader = out.first().map_or(time_ms, |e| e.time_ms);
             out.push(LeaderboardEntry {
                 position: out.len() as u32 + 1,
@@ -251,9 +270,83 @@ impl Store {
                 car,
                 lap_count,
                 set_at,
+                sectors_ms: serde_json::from_str(&sectors).unwrap_or_default(),
             });
         }
         Ok(out)
+    }
+
+    // ---- sectors -------------------------------------------------------------
+
+    /// Sector boundaries for a track layout and where they came from ("even", "learned", "game").
+    pub fn sector_layout(&self, game: &str, track: &str, layout: &str) -> Result<Option<(Vec<f32>, String)>> {
+        let row: Option<(String, String)> = self
+            .conn
+            .query_row(
+                "SELECT boundaries, source FROM sector_layouts WHERE game = ?1 AND track = ?2 AND layout = ?3",
+                params![game, track, layout],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        Ok(row.and_then(|(b, src)| serde_json::from_str(&b).ok().map(|b| (b, src))))
+    }
+
+    pub fn set_sector_layout(&self, game: &str, track: &str, layout: &str, boundaries: &[f32], source: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO sector_layouts (game, track, layout, boundaries, source) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(game, track, layout) DO UPDATE SET boundaries = excluded.boundaries, source = excluded.source",
+            params![game, track, layout, serde_json::to_string(boundaries)?, source],
+        )?;
+        Ok(())
+    }
+
+    /// Re-splits every lap on a track layout that has a profile, e.g. after better
+    /// boundaries were learned.
+    pub fn resplit(&self, game: &str, track: &str, layout: &str, boundaries: &[f32]) -> Result<usize> {
+        let laps: Vec<(LapId, Vec<u8>)> = {
+            let mut stmt = self.conn.prepare(
+                "SELECT id, profile FROM laps WHERE game = ?1 AND track = ?2 AND layout = ?3 AND profile IS NOT NULL",
+            )?;
+            let rows = stmt.query_map(params![game, track, layout], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            rows.collect::<Result<_, _>>()?
+        };
+        let mut n = 0;
+        for (id, bytes) in laps {
+            if let Some(profile) = TimingProfile::from_bytes(&bytes) {
+                let sectors = serde_json::to_string(&profile.split(boundaries))?;
+                n += self.conn.execute("UPDATE laps SET sectors_ms = ?2 WHERE id = ?1", params![id, sectors])?;
+            }
+        }
+        Ok(n)
+    }
+
+    /// Profile of the fastest valid lap on a combo (one driver's, or anyone's).
+    pub fn best_profile(&self, combo: &Combo, driver_id: Option<DriverId>) -> Result<Option<TimingProfile>> {
+        let bytes: Option<Vec<u8>> = self
+            .conn
+            .query_row(
+                "SELECT profile FROM laps
+                 WHERE game = ?1 AND track = ?2 AND layout = ?3 AND car = ?4 AND valid = 1 AND profile IS NOT NULL
+                   AND (?5 IS NULL OR driver_id = ?5)
+                 ORDER BY time_ms LIMIT 1",
+                params![combo.game, combo.track, combo.layout, combo.car, driver_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(bytes.and_then(|b| TimingProfile::from_bytes(&b)))
+    }
+
+    /// Sector times of every valid lap on a combo, excluding one lap.
+    pub fn valid_sectors(&self, combo: &Combo, exclude: LapId) -> Result<Vec<(Option<DriverId>, Vec<u32>)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT driver_id, sectors_ms FROM laps
+             WHERE game = ?1 AND track = ?2 AND layout = ?3 AND car = ?4 AND valid = 1 AND id != ?5",
+        )?;
+        let rows = stmt.query_map(params![combo.game, combo.track, combo.layout, combo.car, exclude], |r| {
+            let raw: String = r.get(1)?;
+            Ok((r.get::<_, Option<DriverId>>(0)?, serde_json::from_str::<Vec<u32>>(&raw).unwrap_or_default()))
+        })?;
+        Ok(rows.collect::<Result<Vec<_>, _>>()?.into_iter().filter(|(_, s)| !s.is_empty()).collect())
     }
 
     // ---- challenges --------------------------------------------------------

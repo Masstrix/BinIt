@@ -8,12 +8,14 @@ fn session(car: &str) -> SessionInfo {
         layout: None,
         car: car.into(),
         session_kind: "Hot Stint".into(),
+        timing: tt_games::TimingKind::CircuitLap,
+        length_m: Some(4909),
     }
 }
 
 fn lap(time_ms: u32, valid: bool) -> CompletedLap {
     let untimed = (!valid).then_some(UntimedReason::Cut);
-    CompletedLap { session: session("porsche_992_gt3_r"), lap_number: 1, time_ms, valid, untimed, sectors_ms: vec![] }
+    CompletedLap { session: session("porsche_992_gt3_r"), lap_number: 1, time_ms, valid, untimed, sectors_ms: vec![], profile: None }
 }
 
 fn untimed_lap(time_ms: u32, reason: UntimedReason) -> CompletedLap {
@@ -166,4 +168,63 @@ fn database_survives_reopen() {
     assert_eq!(tt.drivers().unwrap()[0].color, "#FF9F6B");
     assert!(tt.seat().unwrap().is_some());
     assert_eq!(tt.recent_laps(10).unwrap().len(), 1);
+}
+
+/// A lap driven at constant speed, sampled every 0.5%.
+fn profiled_lap(time_ms: u32) -> CompletedLap {
+    use tt_games::timing::ProfileRecorder;
+    let mut r = ProfileRecorder::default();
+    for i in 0..200 {
+        r.push(i as f32 / 200.0, time_ms * i / 200);
+    }
+    CompletedLap { profile: r.finish(time_ms), ..lap(time_ms, true) }
+}
+
+#[test]
+fn laps_are_split_into_sectors_with_timing_colours() {
+    let tt = TimeTrial::in_memory().unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(session("porsche_992_gt3_r"))).unwrap();
+    assert_eq!(tt.status().unwrap().session.unwrap().sector_count, 3);
+
+    tt.add_and_seat("Jess", None).unwrap();
+    let first = tt.record_lap(&profiled_lap(99_000)).unwrap();
+    assert_eq!(first.lap.sectors_ms, vec![33_000, 33_000, 33_000]);
+    assert!(first.sector_status.iter().all(|s| *s == live::SectorStatus::Purple));
+
+    tt.add_and_seat("Sam", None).unwrap();
+    let slower = tt.record_lap(&profiled_lap(102_000)).unwrap();
+    // Slower than Jess everywhere, but Sam's first lap: personal bests, so green.
+    assert!(slower.sector_status.iter().all(|s| *s == live::SectorStatus::Green));
+    let again = tt.record_lap(&profiled_lap(103_500)).unwrap();
+    assert!(again.sector_status.iter().all(|s| *s == live::SectorStatus::Yellow));
+
+    let board = tt.leaderboard(&imola_board()).unwrap();
+    assert_eq!(board[0].sectors_ms, vec![33_000, 33_000, 33_000]);
+}
+
+#[test]
+fn live_timing_compares_against_the_seated_drivers_pb() {
+    let tt = TimeTrial::in_memory().unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(session("porsche_992_gt3_r"))).unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    tt.record_lap(&profiled_lap(100_000)).unwrap();
+
+    let mut rx = tt.subscribe();
+    let live = |p: f32, t: u32| GameEvent::Live(tt_games::LiveState { driving: true, current_lap_ms: t, lap_valid: true, lap_progress: p });
+    tt.handle_game_event(live(0.0, 0)).unwrap();
+    tt.handle_game_event(live(0.25, 24_000)).unwrap();
+    tt.handle_game_event(live(0.40, 38_500)).unwrap();
+
+    let mut last = None;
+    while let Ok(ev) = rx.try_recv() {
+        if let AppEvent::Live { live } = ev {
+            last = live.timing;
+        }
+    }
+    let t = last.expect("timing");
+    assert_eq!(t.reference.as_deref(), Some("PB"));
+    assert_eq!(t.delta_ms, Some(-1_500)); // 38.5 s vs 40 s at 40%
+    assert_eq!(t.current_sector, 1);
+    // S1 (1/3) crossed at ~32.0 s vs PB 33.3 s.
+    assert_eq!(t.sectors[0].status, live::SectorStatus::Purple);
 }

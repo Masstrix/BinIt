@@ -127,6 +127,8 @@ pub struct LeaderboardEntry {
     pub car: String,
     pub lap_count: u32,
     pub set_at: Timestamp,
+    /// Sector times of that best lap (empty if unknown).
+    pub sectors_ms: Vec<u32>,
 }
 
 /// Everything the overlay and home screen need about the person driving.
@@ -137,6 +139,8 @@ pub struct LapResult {
     pub personal_best: bool,
     /// Fastest valid lap anyone has set on this combo.
     pub combo_record: bool,
+    /// Purple / green / yellow for each of the lap's sectors (empty when untimed).
+    pub sector_status: Vec<crate::live::SectorStatus>,
     pub challenges: Vec<ChallengeStanding>,
 }
 

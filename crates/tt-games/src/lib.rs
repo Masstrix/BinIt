@@ -6,6 +6,7 @@
 //! (see [`GameAdapter::poll_interval`]) so the impact on frame rate is negligible.
 
 pub mod acevo;
+pub mod timing;
 mod process;
 #[cfg(windows)]
 mod shm;
@@ -67,6 +68,10 @@ pub struct SessionInfo {
     pub car: String,
     /// The game's own name for the session type (e.g. "Hot Stint", "Race").
     pub session_kind: String,
+    /// Circuit laps or a rally stage: decides default sector counts.
+    pub timing: TimingKind,
+    /// Lap / stage length in metres, when the game reports it.
+    pub length_m: Option<u32>,
 }
 
 /// One finished lap (or stage run).
@@ -80,8 +85,11 @@ pub struct CompletedLap {
     pub valid: bool,
     /// Why the lap doesn't count, if it doesn't.
     pub untimed: Option<UntimedReason>,
-    /// Sector splits in ms, when the game exposes them. Empty otherwise.
+    /// Sector splits in ms as reported by the game itself. Empty when it doesn't
+    /// (TimeTrial then derives sectors from `profile`).
     pub sectors_ms: Vec<u32>,
+    /// Elapsed time at each 0.5% of the lap, when the lap was fully sampled.
+    pub profile: Option<timing::TimingProfile>,
 }
 
 /// Why a completed lap isn't a timed lap.

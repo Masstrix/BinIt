@@ -4,6 +4,7 @@
 
 use super::layout::{STATUS_LIVE, STATUS_PAUSE};
 use crate::UntimedReason;
+use crate::timing::{ProfileRecorder, TimingProfile};
 
 /// The handful of values lap detection needs, copied out of the graphics page.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -15,14 +16,18 @@ pub struct Sample {
     /// The game's "this lap still counts" flags, already combined.
     pub lap_valid: bool,
     pub in_pit_lane: bool,
+    /// 0..1 around the lap (`npos`).
+    pub progress: f32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DetectedLap {
     pub lap_number: u32,
     pub time_ms: u32,
     /// `None` = a proper timed lap.
     pub untimed: Option<UntimedReason>,
+    /// Elapsed time at each 0.5% of the lap, if it was fully sampled.
+    pub profile: Option<TimingProfile>,
 }
 
 /// How many samples to wait for `last_lap_ms` to update after the lap counter ticks.
@@ -81,13 +86,15 @@ pub struct LapTracker {
     lap_count: Option<i32>,
     last_lap_ms_before: i32,
     lap: LapState,
+    profile: ProfileRecorder,
     pending: Option<Pending>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct Pending {
     lap_number: u32,
     untimed: Option<UntimedReason>,
+    profile: ProfileRecorder,
     waited: u32,
 }
 
@@ -116,9 +123,15 @@ impl LapTracker {
                 // This frame still belongs to the lap that just ended (e.g. crossing the
                 // line in the pit lane makes it an in lap).
                 self.lap.observe(&s);
-                self.pending = Some(Pending { lap_number: s.lap_count as u32, untimed: self.lap.untimed(), waited: 0 });
+                self.pending = Some(Pending {
+                    lap_number: s.lap_count as u32,
+                    untimed: self.lap.untimed(),
+                    profile: std::mem::take(&mut self.profile),
+                    waited: 0,
+                });
                 self.lap_count = Some(s.lap_count);
                 self.lap = LapState::starting(&s, false);
+                self.record_progress(&s);
                 // Usually the lap time is already published on the same frame.
                 if detected.is_none() {
                     detected = self.resolve_pending(s);
@@ -133,7 +146,14 @@ impl LapTracker {
         }
 
         self.lap.observe(&s);
+        self.record_progress(&s);
         detected
+    }
+
+    fn record_progress(&mut self, s: &Sample) {
+        if s.current_lap_ms >= 0 {
+            self.profile.push(s.progress, s.current_lap_ms as u32);
+        }
     }
 
     fn start_tracking(&mut self, s: Sample) {
@@ -141,11 +161,12 @@ impl LapTracker {
         self.last_lap_ms_before = s.last_lap_ms;
         // We didn't see this lap from its start, so we can't vouch for it.
         self.lap = LapState::starting(&s, s.current_lap_ms > 0);
+        self.profile.reset();
         self.pending = None;
     }
 
     fn resolve_pending(&mut self, s: Sample) -> Option<DetectedLap> {
-        let mut pending = self.pending?;
+        let mut pending = self.pending.take()?;
         let updated = s.last_lap_ms > 0 && s.last_lap_ms != self.last_lap_ms_before;
         if !updated && pending.waited < MAX_PENDING_SAMPLES {
             pending.waited += 1;
@@ -153,12 +174,13 @@ impl LapTracker {
             return None;
         }
 
-        self.pending = None;
         self.last_lap_ms_before = s.last_lap_ms;
         if s.last_lap_ms <= 0 {
             return None;
         }
-        Some(DetectedLap { lap_number: pending.lap_number, time_ms: s.last_lap_ms as u32, untimed: pending.untimed })
+        let time_ms = s.last_lap_ms as u32;
+        let profile = pending.profile.finish(time_ms);
+        Some(DetectedLap { lap_number: pending.lap_number, time_ms, untimed: pending.untimed, profile })
     }
 }
 
@@ -168,7 +190,7 @@ mod tests {
     use crate::acevo::layout::STATUS_REPLAY;
 
     fn live(lap_count: i32, last: i32, current: i32, valid: bool) -> Sample {
-        Sample { status: STATUS_LIVE, lap_count, last_lap_ms: last, current_lap_ms: current, lap_valid: valid, in_pit_lane: false }
+        Sample { status: STATUS_LIVE, lap_count, last_lap_ms: last, current_lap_ms: current, lap_valid: valid, in_pit_lane: false, progress: 0.0 }
     }
 
     fn in_pits(mut s: Sample) -> Sample {
@@ -181,7 +203,7 @@ mod tests {
         let mut t = LapTracker::default();
         assert_eq!(t.update(live(0, 0, 30_000, true)), None);
         let lap = t.update(live(1, 102_318, 50, true)).unwrap();
-        assert_eq!(lap, DetectedLap { lap_number: 1, time_ms: 102_318, untimed: Some(UntimedReason::Partial) });
+        assert_eq!(lap, DetectedLap { lap_number: 1, time_ms: 102_318, untimed: Some(UntimedReason::Partial), profile: None });
     }
 
     #[test]
@@ -228,6 +250,23 @@ mod tests {
         t.update(in_pits(live(3, 100_000, 110_000, true)));
         let lap = t.update(in_pits(live(4, 125_000, 20, true))).unwrap();
         assert_eq!(lap.untimed, Some(UntimedReason::InLap));
+    }
+
+    #[test]
+    fn fully_sampled_lap_has_a_profile() {
+        let mut t = LapTracker::default();
+        t.update(live(1, 0, 0, true));
+        for i in 1..100 {
+            let mut s = live(1, 0, i * 1_000, true);
+            s.progress = i as f32 / 100.0;
+            t.update(s);
+        }
+        let mut done = live(2, 100_500, 20, true);
+        done.progress = 0.002;
+        let lap = t.update(done).unwrap();
+        let prof = lap.profile.expect("profile");
+        assert_eq!(prof.total_ms(), 100_500);
+        assert!((prof.at(0.5) - 50_000.0).abs() < 1_500.0);
     }
 
     #[test]
