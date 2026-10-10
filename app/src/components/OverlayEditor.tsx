@@ -261,7 +261,7 @@ export function OverlayEditor() {
 
       {!overlayOn && (
         <span style={{ fontSize: 13, color: "var(--peach)" }}>
-          The overlay is off, so nothing is drawn over the game. F8 still switches drivers (with the spoken name).
+          The overlay is off, so nothing is drawn over the game. F8 still switches drivers. Turn on the spoken name below to hear who was picked.
         </span>
       )}
       {profile.hud.length === 0 && (
@@ -281,7 +281,7 @@ export function OverlayEditor() {
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, justifyContent: "space-between" }}>
         <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 600 }}>
           <button className="toggle" role="switch" aria-checked={layout.voice} onClick={() => save({ ...layout, voice: !layout.voice })} />
-          Say the driver's name when it changes
+          Speak the driver's name out loud when it changes (Windows voice)
         </label>
         <button className="btn ghost" disabled={!custom} onClick={reset}>Reset {profile.name} to default</button>
       </div>

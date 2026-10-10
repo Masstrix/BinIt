@@ -97,7 +97,8 @@ export interface GameProfile {
 const standard: OverlayLayout = {
   version: 1,
   sections: { "top-center": ["driver", "pb", "challenge"], "bottom-left": ["toasts"] },
-  voice: true,
+  // Off by default: handy when the overlay can't be seen (exclusive fullscreen), noisy otherwise.
+  voice: false,
 };
 
 export const GAME_PROFILES: GameProfile[] = [
