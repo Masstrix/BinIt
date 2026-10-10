@@ -14,6 +14,7 @@ function periodStart(p: Period): number | null {
   return d.getTime();
 }
 
+const CAR_KEY = "tt.leaderboard.car";
 const PURPLE = "#C38BFF";
 const MINT = "#4BE3A6";
 
@@ -31,7 +32,24 @@ export function LeaderboardPage() {
   }, [combos]);
 
   const [track, setTrack] = useState<string | null>(null);
-  const [car, setCar] = useState<string | null>(null);
+  // The car you picked sticks across track changes (and restarts); tracks where nobody
+  // has driven it fall back to "Any car" without forgetting the pick.
+  const [pickedCar, setPickedCarState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(CAR_KEY);
+    } catch {
+      return null;
+    }
+  });
+  const setPickedCar = (c: string | null) => {
+    setPickedCarState(c);
+    try {
+      if (c) localStorage.setItem(CAR_KEY, c);
+      else localStorage.removeItem(CAR_KEY);
+    } catch {
+      // Storage unavailable: the pick just isn't remembered.
+    }
+  };
   const [period, setPeriod] = useState<Period>("all");
   const [includeInvalid, setIncludeInvalid] = useState(false);
 
@@ -41,11 +59,12 @@ export function LeaderboardPage() {
     const s = status?.session;
     const pick = (s && tracks.find((t) => trackKey(t) === trackKey(s))) || tracks[0];
     setTrack(trackKey(pick));
-    setCar(s && trackKey(s) === trackKey(pick) ? s.car : null);
+    if (s && trackKey(s) === trackKey(pick)) setPickedCar(s.car);
   }, [tracks, status?.session, track]);
 
   const selected = tracks.find((t) => trackKey(t) === track);
   const carsHere = combos.filter((c) => selected && trackKey(c) === trackKey(selected)).map((c) => c.car);
+  const car = pickedCar && carsHere.includes(pickedCar) ? pickedCar : null;
 
   const board =
     useFetch(
@@ -114,7 +133,6 @@ export function LeaderboardPage() {
               options={tracks.map((t) => ({ value: trackKey(t), label: trackName(t.track, t.layout) }))}
               onChange={(v) => {
                 setTrack(v);
-                setCar(null);
               }}
             />
             <Dropdown
@@ -122,7 +140,7 @@ export function LeaderboardPage() {
               label="Car"
               value={car ?? ""}
               options={[{ value: "", label: "Any car" }, ...carsHere.map((c) => ({ value: c, label: c }))]}
-              onChange={(v) => setCar(v || null)}
+              onChange={(v) => setPickedCar(v || null)}
             />
             <button className="filter-pill" aria-pressed={!includeInvalid} onClick={() => setIncludeInvalid(!includeInvalid)}>
               {!includeInvalid && (
