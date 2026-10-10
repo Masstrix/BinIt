@@ -4,9 +4,11 @@ import type { CSSProperties } from "react";
 export function Helmet({ color, size = 48, tile = true }: { color: string; size?: number; tile?: boolean }) {
   const svg = (
     <svg width={tile ? size * 0.76 : size} height={tile ? size * 0.76 : size} viewBox="0 0 48 48" aria-hidden="true">
-      <path d="M7 31C7 16 17 7 29 7c10 0 16 7 17 17l1 8c.3 3-1.5 5-4.5 5.5L35 38.5c-1 2.5-3 3.5-6 3.5H12c-3 0-5-2-5-5z" fill={color} />
-      <path d="M24 15.5c6-2.5 14-2 20 2.5l1 8.5c-7 1.5-14 1.5-20-.5-2-3-2.3-7.3-1-10.5z" fill="#0D1224" />
-      <path d="M8.5 29.5c5-1.2 10-1.8 15-2.2" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" opacity="0.6" />
+      <path d="M10 38C4 30 6 13 22 8.5c12-3.4 22.5 2.5 24 12.5.6 3.6.3 6.6-1 9l1.5 4c.9 2.8-.9 5-3.8 5.2L29 38c-3.2-.4-6.4.6-10 1.4-3.6.7-7 .4-9-1.4z" fill={color} />
+      <path d="M27 15l18 1.5c1.1 3 1.4 6.6 1 10.5l-18-.8c-3-.2-4.8-2.6-4.7-5.4.1-3.1 1.6-5.6 3.7-5.8z" fill="#0D1224" />
+      <circle cx="20.4" cy="20.6" r="1.6" fill="#0D1224" opacity="0.5" />
+      <path d="M12.5 34C10.5 22 16 12.5 27 10.7" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" opacity="0.55" />
+      <path d="M39.5 31.8l1.2 3.6M42.3 31.4l1.2 3.6" fill="none" stroke="#0D1224" strokeWidth="1.3" strokeLinecap="round" opacity="0.45" />
     </svg>
   );
   if (!tile) return svg;
