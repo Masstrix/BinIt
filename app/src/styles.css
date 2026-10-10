@@ -159,6 +159,12 @@ h2 { font-size: 22px; }
 .input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
 .field { display: flex; flex-direction: column; gap: 8px; font-weight: 600; }
 
+/* ---- overlay layout editor ------------------------------------------------------------ */
+
+.ed-item { cursor: grab; border-radius: 14px; }
+.ed-item:hover { outline: 4px solid var(--peri-1); outline-offset: 6px; }
+.ed-item.is-dragging { opacity: 0.35; }
+
 /* ---- dropdown --------------------------------------------------------------------- */
 
 .dropdown { position: relative; display: flex; flex-direction: column; gap: 8px; min-width: 0; }

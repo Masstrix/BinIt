@@ -101,7 +101,6 @@ export function anchorStyle(a: Anchor, profile?: GameProfile): CSSProperties {
   const tx = h === "center" ? "-50%" : "0";
   const ty = v === "middle" ? "-50%" : "0";
   if (tx !== "0" || ty !== "0") style.transform = `translate(${tx}, ${ty})`;
-  if (v === "bottom") style.flexDirection = "column-reverse";
   return style;
 }
 
@@ -235,13 +234,20 @@ export function useOverlayLayout(game: string) {
   return { layout, save, reset, custom, profile };
 }
 
-/** Removes a widget from wherever it is, then (optionally) adds it to a section. */
-export function moveWidget(layout: OverlayLayout, widget: WidgetId, to: Anchor | null): OverlayLayout {
+/**
+ * Removes a widget from wherever it is, then (optionally) inserts it into a section at
+ * `index` (counted without the widget itself; omitted = at the end).
+ */
+export function moveWidget(layout: OverlayLayout, widget: WidgetId, to: Anchor | null, index?: number): OverlayLayout {
   const sections: OverlayLayout["sections"] = {};
   for (const a of ANCHORS) {
     const items = (layout.sections[a] ?? []).filter((w) => w !== widget);
     if (items.length) sections[a] = items;
   }
-  if (to) sections[to] = [...(sections[to] ?? []), widget];
+  if (to) {
+    const items = [...(sections[to] ?? [])];
+    items.splice(index ?? items.length, 0, widget);
+    sections[to] = items;
+  }
   return { ...layout, sections };
 }

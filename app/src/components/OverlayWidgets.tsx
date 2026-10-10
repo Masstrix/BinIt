@@ -1,10 +1,10 @@
 // Presentational overlay widgets. The real overlay feeds them live data; the layout
 // editor renders the same components, scaled down, as its preview.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type HTMLAttributes, type ReactNode } from "react";
 import { api, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
 import { lapTime, trackName } from "../format";
-import type { WidgetId } from "../overlayLayout";
+import { WIDGETS, type WidgetId } from "../overlayLayout";
 import { Crown, Helmet } from "./Helmet";
 
 const card = {
@@ -33,7 +33,8 @@ export function useOverlayData(): OverlayData {
   const drivers = useDriverMap();
   const seat = status?.seat != null ? drivers.get(status.seat) : undefined;
   const session = status?.session ?? null;
-  const { challenge, board } = useCurrentChallenge();
+  // Only a challenge for exactly this track + car; otherwise challenge widgets hide.
+  const { challenge, board } = useCurrentChallenge(true);
   const comboBoard = useFetch(
     session ? () => api.leaderboard({ game: session.game, track: session.track, layout: session.layout, car: session.car }) : null,
     [session?.game, session?.track, session?.layout, session?.car],
@@ -65,6 +66,49 @@ export function useOverlayData(): OverlayData {
   };
 }
 
+/** Example data so the layout editor always shows what every widget looks like. */
+export const MOCK_DATA: OverlayData = {
+  driverName: "Sam",
+  driverColor: "#FF9F6B",
+  pbMs: 102318,
+  challengeName: "Imola Hot Lap Week",
+  position: 2,
+  gapMs: 204,
+  top3: [
+    { name: "Jess", color: "#4FC3FF", timeMs: 102114 },
+    { name: "Sam", color: "#FF9F6B", timeMs: 102318 },
+    { name: "Priya", color: "#FF7AC6", timeMs: 102870 },
+  ],
+  comboLabel: "Imola · GP",
+  comboTop: [
+    { position: 1, name: "Jess", color: "#4FC3FF", timeMs: 102114, gapMs: 0, isSeat: false },
+    { position: 2, name: "Sam", color: "#FF9F6B", timeMs: 102318, gapMs: 204, isSeat: true },
+    { position: 3, name: "Priya", color: "#FF7AC6", timeMs: 102870, gapMs: 756, isSeat: false },
+    { position: 4, name: "Tom", color: "#4BE3A6", timeMs: 103555, gapMs: 1441, isSeat: false },
+    { position: 5, name: "Alex", color: "#FFC93C", timeMs: 104020, gapMs: 1906, isSeat: false },
+  ],
+};
+
+export const MOCK_TOAST: Toast = { id: 0, tone: "pb", title: "New PB 1:42.318", detail: "Up to P2 in Imola Hot Lap Week" };
+
+/** Whether a widget has anything to show right now (the live overlay hides empty ones). */
+export function hasContent(w: WidgetId, data: OverlayData): boolean {
+  switch (w) {
+    case "pb":
+      return data.pbMs !== null;
+    case "challenge":
+    case "standings":
+      return data.challengeName !== null;
+    case "leaderboard":
+      return data.comboTop.length > 0;
+    default:
+      return true;
+  }
+}
+
+/** Extra props per widget element: the layout editor uses this to make each one draggable. */
+export type ItemProps = (w: WidgetId) => HTMLAttributes<HTMLElement>;
+
 function StripStat({ label, value, color, extra }: { label: string; value: string; color?: string; extra?: string }) {
   return (
     <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
@@ -77,29 +121,31 @@ function StripStat({ label, value, color, extra }: { label: string; value: strin
 }
 
 /** Driver / PB / challenge position, merged into one slim strip when they share a section. */
-export function StripCard({ items, data }: { items: WidgetId[]; data: OverlayData }) {
+export function StripCard({ items, data, itemProps }: { items: WidgetId[]; data: OverlayData; itemProps?: ItemProps }) {
   return (
-    <div style={{ ...card, display: "flex", alignItems: "center", gap: 14, padding: items.includes("driver") ? "8px 16px 8px 8px" : "8px 16px", whiteSpace: "nowrap" }}>
+    <div style={{ ...card, display: "flex", alignItems: "center", gap: 14, padding: items[0] === "driver" ? "8px 16px 8px 8px" : "8px 16px", whiteSpace: "nowrap" }}>
       {items.map((w, i) => (
-        <span key={w} style={{ display: "contents" }}>
-          {i > 0 && w !== "challenge" && <span style={{ width: 1, height: 28, background: "var(--line)" }} />}
-          {w === "driver" && (
-            <>
-              <Helmet color={data.driverColor} size={40} />
-              <span style={{ font: "800 18px var(--font-display)" }}>{data.driverName}</span>
-            </>
-          )}
-          {w === "pb" && <StripStat label="PB" value={lapTime(data.pbMs)} color="var(--mint)" />}
-          {w === "challenge" && (
-            <StripStat
-              label="CHALLENGE"
-              value={data.challengeName ? (data.position ? `P${data.position}` : "—") : "none"}
-              extra={data.gapMs ? `+${(data.gapMs / 1000).toFixed(3)}` : undefined}
-            />
-          )}
+        <span key={w} style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          {i > 0 && <span style={{ width: 1, height: 28, background: "var(--line)" }} />}
+          <span data-widget={w} {...itemProps?.(w)} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {w === "driver" && (
+              <>
+                <Helmet color={data.driverColor} size={40} />
+                <span style={{ font: "800 18px var(--font-display)" }}>{data.driverName}</span>
+                <span className="kbd" style={{ background: "var(--line)", color: "var(--text-2)" }}>F8</span>
+              </>
+            )}
+            {w === "pb" && <StripStat label="PB" value={lapTime(data.pbMs)} color="var(--mint)" />}
+            {w === "challenge" && (
+              <StripStat
+                label="CHALLENGE"
+                value={data.position ? `P${data.position}` : "—"}
+                extra={data.gapMs ? `+${(data.gapMs / 1000).toFixed(3)}` : undefined}
+              />
+            )}
+          </span>
         </span>
       ))}
-      {items.includes("driver") && <span className="kbd" style={{ background: "var(--line)", color: "var(--text-2)" }}>F8</span>}
     </div>
   );
 }
@@ -242,30 +288,44 @@ export function useLapToasts(pbMs: number | null): Toast | null {
   return toast;
 }
 
-/** Renders one section's widgets: compact ones merge into a strip, others stack. */
-export function SectionWidgets({ items, data, toast, preview = false }: { items: WidgetId[]; data: OverlayData; toast: Toast | null; preview?: boolean }) {
+/**
+ * Renders one section's widgets: compact ones merge into a strip, others stack.
+ * Live (not preview), widgets with nothing to show are left out entirely.
+ */
+export function SectionWidgets({
+  items,
+  data,
+  toast,
+  preview = false,
+  itemProps,
+}: {
+  items: WidgetId[];
+  data: OverlayData;
+  toast: Toast | null;
+  preview?: boolean;
+  itemProps?: ItemProps;
+}) {
+  const visible = preview ? items : items.filter((w) => hasContent(w, data));
   const groups: (WidgetId[] | WidgetId)[] = [];
-  for (const w of items) {
-    const compact = w === "driver" || w === "pb" || w === "challenge";
+  for (const w of visible) {
     const last = groups[groups.length - 1];
-    if (compact && Array.isArray(last)) last.push(w);
-    else groups.push(compact ? [w] : w);
+    if (WIDGETS[w].compact && Array.isArray(last)) last.push(w);
+    else groups.push(WIDGETS[w].compact ? [w] : w);
   }
+  const wrap = (w: WidgetId, node: ReactNode) => (
+    <div key={w} data-widget={w} {...itemProps?.(w)}>
+      {node}
+    </div>
+  );
   return (
     <>
-      {groups.map((g) =>
-        Array.isArray(g) ? (
-          <StripCard key={g.join()} items={g} data={data} />
-        ) : g === "standings" ? (
-          <StandingsCard key={g} data={data} />
-        ) : g === "leaderboard" ? (
-          <LeaderboardCard key={g} data={data} />
-        ) : toast ? (
-          <ToastCard key={g} toast={toast} animate={!preview} />
-        ) : preview ? (
-          <ToastCard key={g} toast={{ id: 0, tone: "pb", title: `New PB ${lapTime(data.pbMs ?? 102318)}`, detail: "Example pop-up" }} animate={false} />
-        ) : null,
-      )}
+      {groups.map((g) => {
+        if (Array.isArray(g)) return <StripCard key={g.join()} items={g} data={data} itemProps={itemProps} />;
+        if (g === "standings") return wrap(g, <StandingsCard data={data} />);
+        if (g === "leaderboard") return wrap(g, <LeaderboardCard data={data} />);
+        const shown = toast ?? (preview ? MOCK_TOAST : null);
+        return shown ? wrap(g, <ToastCard toast={shown} animate={!preview} />) : null;
+      })}
     </>
   );
 }

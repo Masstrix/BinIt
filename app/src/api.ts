@@ -336,11 +336,13 @@ export function challengeMatches(c: Challenge, combo: Combo) {
 }
 
 /** The active challenge for what's being driven right now (or any active one). */
-export function useCurrentChallenge() {
+/** `strict`: only a challenge for exactly what's being driven (used by the overlay). */
+export function useCurrentChallenge(strict = false) {
   const { challenges, status } = useAppState();
   const session = status?.session ?? null;
   const active = challenges.filter((c) => isActive(c));
-  const challenge = (session && active.find((c) => challengeMatches(c, session))) || active[0] || null;
+  const matching = (session && active.find((c) => challengeMatches(c, session))) || null;
+  const challenge = strict ? matching : matching || active[0] || null;
   const board = useFetch(challenge ? () => api.challengeLeaderboard(challenge.id) : null, [challenge?.id]);
   return { challenge, board: board ?? [] };
 }
