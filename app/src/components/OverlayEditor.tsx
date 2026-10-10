@@ -20,6 +20,7 @@ import {
   SectionWidgets,
   StandingsCard,
   StripCard,
+  TimingCard,
   ToastCard,
   type ItemProps,
 } from "./OverlayWidgets";
@@ -419,6 +420,7 @@ export function OverlayEditor() {
 function WidgetPreview({ w }: { w: WidgetId }) {
   if (WIDGETS[w].compact) return <StripCard items={[w]} data={MOCK_DATA} />;
   if (w === "standings") return <StandingsCard data={MOCK_DATA} />;
+  if (w === "timing") return <TimingCard data={MOCK_DATA} />;
   if (w === "leaderboard") return <LeaderboardCard data={MOCK_DATA} />;
   return <ToastCard toast={MOCK_TOAST} animate={false} />;
 }

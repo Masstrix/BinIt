@@ -86,6 +86,16 @@ export interface LiveView {
   currentLapMs: number;
   lapValid: boolean;
   lapProgress: number;
+  timing: LiveTiming | null;
+}
+
+export type SectorStatus = "purple" | "green" | "yellow" | "current" | "pending";
+
+export interface LiveTiming {
+  deltaMs: number | null;
+  reference: string | null;
+  currentSector: number;
+  sectors: { timeMs: number | null; status: SectorStatus }[];
 }
 
 export interface Status {

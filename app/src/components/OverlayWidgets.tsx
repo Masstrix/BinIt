@@ -2,7 +2,7 @@
 // editor renders the same components, scaled down, as its preview.
 
 import { useCallback, useEffect, useState, type HTMLAttributes, type ReactNode } from "react";
-import { api, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
+import { api, type LiveTiming, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
 import { lapKind, lapTime, trackName } from "../format";
 import { WIDGETS, type WidgetId } from "../overlayLayout";
 import { Crown, Helmet } from "./Helmet";
@@ -25,6 +25,7 @@ export interface OverlayData {
   comboLabel: string | null;
   /** Top 5 on the current track + car, plus the seated driver's row if outside it. */
   comboTop: { position: number; name: string; color: string; timeMs: number; gapMs: number; isSeat: boolean }[];
+  timing: LiveTiming | null;
 }
 
 /** Everything the widgets show, from live app state. */
@@ -63,6 +64,7 @@ export function useOverlayData(): OverlayData {
     top3: board.slice(0, 3).map(named),
     comboLabel: session ? `${trackName(session.track, session.layout)}` : null,
     comboTop,
+    timing: status?.live?.driving ? status.live.timing : null,
   };
 }
 
@@ -87,6 +89,16 @@ export const MOCK_DATA: OverlayData = {
     { position: 4, name: "Tom", color: "#4BE3A6", timeMs: 103555, gapMs: 1441, isSeat: false },
     { position: 5, name: "Alex", color: "#FFC93C", timeMs: 104020, gapMs: 1906, isSeat: false },
   ],
+  timing: {
+    deltaMs: -142,
+    reference: "PB",
+    currentSector: 2,
+    sectors: [
+      { timeMs: 33902, status: "purple" },
+      { timeMs: 38546, status: "green" },
+      { timeMs: null, status: "current" },
+    ],
+  },
 };
 
 export const MOCK_TOAST: Toast = { id: 0, tone: "pb", title: "New PB 1:42.318", detail: "Up to P2 in Imola Hot Lap Week" };
@@ -101,6 +113,8 @@ export function hasContent(w: WidgetId, data: OverlayData): boolean {
       return data.challengeName !== null;
     case "leaderboard":
       return data.comboTop.length > 0;
+    case "timing":
+      return data.timing !== null;
     default:
       return true;
   }
@@ -165,6 +179,30 @@ export function StandingsCard({ data }: { data: OverlayData }) {
           <span className="mono" style={{ fontSize: 14, color: i === 0 ? "var(--gold)" : undefined }}>{lapTime(r.timeMs)}</span>
         </span>
       ))}
+    </div>
+  );
+}
+
+const SECTOR_COLOURS = { purple: "#C38BFF", green: "#4BE3A6", yellow: "#FFC93C", current: "#EEF0FF", pending: "#2A3456" };
+
+/** Delta to the reference lap plus one bar per sector (purple / green / yellow). */
+export function TimingCard({ data }: { data: OverlayData }) {
+  const t = data.timing;
+  if (!t) return null;
+  const d = t.deltaMs;
+  return (
+    <div style={{ ...card, padding: "10px 14px", minWidth: 240, display: "flex", flexDirection: "column", gap: 8 }}>
+      <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+        <span className="mono" style={{ fontSize: 24, color: d === null ? "var(--muted)" : d <= 0 ? "#4BE3A6" : "#FF6B8A" }}>
+          {d === null ? "--.---" : `${d <= 0 ? "-" : "+"}${(Math.abs(d) / 1000).toFixed(3)}`}
+        </span>
+        <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>{t.reference ? `VS ${t.reference.toUpperCase()}` : "NO REFERENCE"}</span>
+      </span>
+      <span style={{ display: "flex", gap: 4 }}>
+        {t.sectors.map((s, i) => (
+          <span key={i} title={s.timeMs ? lapTime(s.timeMs) : undefined} style={{ flex: 1, height: 8, borderRadius: 4, background: SECTOR_COLOURS[s.status], opacity: s.status === "current" ? 0.5 : 1 }} />
+        ))}
+      </span>
     </div>
   );
 }
@@ -328,6 +366,7 @@ export function SectionWidgets({
       {groups.map((g) => {
         if (Array.isArray(g)) return <StripCard key={g.join()} items={g} data={data} itemProps={itemProps} />;
         if (g === "standings") return wrap(g, <StandingsCard data={data} />);
+        if (g === "timing") return wrap(g, <TimingCard data={data} />);
         if (g === "leaderboard") return wrap(g, <LeaderboardCard data={data} />);
         const shown = toast ?? (preview ? MOCK_TOAST : null);
         return shown ? wrap(g, <ToastCard toast={shown} animate={!preview} />) : null;
