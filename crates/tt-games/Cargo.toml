@@ -1,0 +1,12 @@
+[package]
+name = "tt-games"
+description = "Game adapters: read lap timing from racing games without touching the game process"
+edition.workspace = true
+version.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys.workspace = true

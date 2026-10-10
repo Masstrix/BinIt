@@ -1,0 +1,248 @@
+//! Assetto Corsa EVO adapter.
+//!
+//! Reads the game's official shared memory (`Local\acevo_pmf_*`). Only the `graphics`
+//! (per-frame HUD data) and `static` (per-session) pages are used; the 333 Hz physics
+//! page is never opened. Polling at 20 Hz copies ~8 KB per tick: microseconds of work.
+
+pub mod layout;
+mod tracker;
+
+use std::time::{Duration, Instant};
+
+use crate::{CompletedLap, GameAdapter, GameEvent, GameId, LiveState, SessionInfo, TimingKind};
+use layout::{Graphics, Static, c_str};
+pub use tracker::{DetectedLap, LapTracker, Sample};
+
+pub const PROCESS_NAME: &str = "AssettoCorsaEVO.exe";
+pub const GRAPHICS_PAGE: &str = "Local\\acevo_pmf_graphics";
+pub const STATIC_PAGE: &str = "Local\\acevo_pmf_static";
+
+const CONNECTED_POLL: Duration = Duration::from_millis(50);
+const DISCONNECTED_POLL: Duration = Duration::from_secs(2);
+const LIVE_EVERY: Duration = Duration::from_millis(250);
+
+pub fn session_kind_name(session: i32) -> &'static str {
+    match session {
+        layout::SESSION_TIME_ATTACK => "Time Attack",
+        layout::SESSION_RACE => "Race",
+        layout::SESSION_HOT_STINT => "Hot Stint",
+        layout::SESSION_CRUISE => "Cruise",
+        _ => "Unknown",
+    }
+}
+
+/// Builds the game-agnostic session description from the two pages.
+pub fn session_info(g: &Graphics, s: &Static) -> SessionInfo {
+    let layout = c_str(&s.track_configuration);
+    SessionInfo {
+        game: GameId::AssettoCorsaEvo,
+        track: c_str(&s.track),
+        layout: (!layout.is_empty()).then_some(layout),
+        car: c_str(&g.car_model),
+        session_kind: session_kind_name(s.session).to_string(),
+    }
+}
+
+pub fn sample(g: &Graphics) -> Sample {
+    Sample {
+        status: g.status,
+        lap_count: g.total_lap_count,
+        last_lap_ms: g.last_laptime_ms,
+        current_lap_ms: g.current_lap_time_ms,
+        lap_valid: g.is_valid_lap != 0 && g.timing_state.is_invalid == 0,
+        in_pit_lane: g.is_in_pit_lane != 0 || g.is_in_pit_box != 0,
+    }
+}
+
+#[cfg(windows)]
+pub use connection::Connection;
+
+#[cfg(windows)]
+mod connection {
+    use anyhow::{Result, bail};
+
+    use super::layout::{Graphics, Static, c_str};
+    use super::{GRAPHICS_PAGE, STATIC_PAGE};
+    use crate::shm::SharedMemory;
+
+    /// Open handles to the two pages we read.
+    pub struct Connection {
+        graphics: SharedMemory,
+        statics: SharedMemory,
+    }
+
+    impl Connection {
+        pub fn open() -> Result<Self> {
+            let conn = Self::open_unchecked()?;
+            let version = c_str(&conn.read_static().sm_version);
+            if version.is_empty() || !version.chars().all(|c| c.is_ascii_graphic()) {
+                bail!("static page has no readable version yet");
+            }
+            Ok(conn)
+        }
+
+        /// Opens the pages without checking that the game has filled them in (diagnostics).
+        pub fn open_unchecked() -> Result<Self> {
+            let graphics = SharedMemory::open(GRAPHICS_PAGE)?;
+            let statics = SharedMemory::open(STATIC_PAGE)?;
+            if graphics.region_size() < size_of::<Graphics>() {
+                bail!(
+                    "graphics page is {} bytes, expected at least {} (another app may have created it first, or the game's layout changed)",
+                    graphics.region_size(),
+                    size_of::<Graphics>()
+                );
+            }
+            Ok(Self { graphics, statics })
+        }
+
+        /// Reads the graphics page, retrying if the game was mid-write.
+        pub fn read_graphics(&self) -> Graphics {
+            let mut g: Graphics = self.graphics.read().expect("size checked on open");
+            for _ in 0..3 {
+                let packet_after: i32 = self.graphics.read().expect("size checked on open");
+                if packet_after == g.packet_id {
+                    break;
+                }
+                g = self.graphics.read().expect("size checked on open");
+            }
+            g
+        }
+
+        pub fn read_static(&self) -> Static {
+            self.statics.read().expect("static page smaller than 208 bytes")
+        }
+
+        pub fn graphics_bytes(&self) -> Vec<u8> {
+            self.graphics.bytes(self.graphics.region_size())
+        }
+
+        pub fn static_bytes(&self) -> Vec<u8> {
+            self.statics.bytes(self.statics.region_size())
+        }
+
+        pub fn graphics_region_size(&self) -> usize {
+            self.graphics.region_size()
+        }
+    }
+}
+
+/// The AC EVO [`GameAdapter`].
+pub struct AcEvoAdapter {
+    #[cfg(windows)]
+    conn: Option<Connection>,
+    tracker: LapTracker,
+    session: Option<SessionInfo>,
+    last_live: Option<Instant>,
+}
+
+impl Default for AcEvoAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AcEvoAdapter {
+    pub fn new() -> Self {
+        Self {
+            #[cfg(windows)]
+            conn: None,
+            tracker: LapTracker::default(),
+            session: None,
+            last_live: None,
+        }
+    }
+
+    fn disconnect(&mut self, events: &mut Vec<GameEvent>) {
+        #[cfg(windows)]
+        if self.conn.take().is_some() {
+            events.push(GameEvent::Disconnected { game: GameId::AssettoCorsaEvo });
+        }
+        self.tracker.reset();
+        self.session = None;
+    }
+}
+
+impl GameAdapter for AcEvoAdapter {
+    fn game(&self) -> GameId {
+        GameId::AssettoCorsaEvo
+    }
+
+    fn timing_kind(&self) -> TimingKind {
+        TimingKind::CircuitLap
+    }
+
+    fn poll_interval(&self) -> Duration {
+        #[cfg(windows)]
+        if self.conn.is_some() {
+            return CONNECTED_POLL;
+        }
+        DISCONNECTED_POLL
+    }
+
+    #[cfg(not(windows))]
+    fn poll(&mut self) -> Vec<GameEvent> {
+        Vec::new()
+    }
+
+    #[cfg(windows)]
+    fn poll(&mut self) -> Vec<GameEvent> {
+        let mut events = Vec::new();
+
+        if self.conn.is_none() {
+            if !crate::is_process_running(PROCESS_NAME) {
+                return events;
+            }
+            match Connection::open() {
+                Ok(conn) => {
+                    let game_version = c_str(&conn.read_static().ac_evo_version);
+                    events.push(GameEvent::Connected { game: GameId::AssettoCorsaEvo, game_version });
+                    self.conn = Some(conn);
+                }
+                Err(_) => return events,
+            }
+        }
+
+        let conn = self.conn.as_ref().expect("connected above");
+        let g = conn.read_graphics();
+
+        if g.status == layout::STATUS_OFF && !crate::is_process_running(PROCESS_NAME) {
+            self.disconnect(&mut events);
+            return events;
+        }
+
+        if g.status == layout::STATUS_LIVE {
+            let info = session_info(&g, &conn.read_static());
+            if self.session.as_ref() != Some(&info) && !info.track.is_empty() {
+                // New car/track: laps in progress belong to the old combo.
+                self.tracker.reset();
+                self.session = Some(info.clone());
+                events.push(GameEvent::SessionChanged(info));
+            }
+        }
+
+        if let Some(lap) = self.tracker.update(sample(&g))
+            && let Some(session) = self.session.clone()
+        {
+            events.push(GameEvent::LapCompleted(CompletedLap {
+                session,
+                lap_number: lap.lap_number,
+                time_ms: lap.time_ms,
+                valid: lap.valid,
+                sectors_ms: Vec::new(),
+            }));
+        }
+
+        let now = Instant::now();
+        if self.last_live.is_none_or(|t| now.duration_since(t) >= LIVE_EVERY) {
+            self.last_live = Some(now);
+            events.push(GameEvent::Live(LiveState {
+                driving: g.status == layout::STATUS_LIVE,
+                current_lap_ms: g.current_lap_time_ms.max(0) as u32,
+                lap_valid: sample(&g).lap_valid,
+                lap_progress: g.npos.clamp(0.0, 1.0),
+            }));
+        }
+
+        events
+    }
+}
