@@ -237,7 +237,8 @@ impl Store {
                 SELECT * FROM window_laps
                 WHERE (?7 IS NULL OR attempt <= ?7) AND (?8 OR valid = 1)
              )
-             SELECT driver_id, id, MIN(time_ms) AS best, car, COUNT(*), recorded_at, sectors_ms
+             SELECT driver_id, id, MIN(time_ms) AS best, car, COUNT(*), recorded_at, sectors_ms,
+                    GROUP_CONCAT(CASE WHEN valid = 1 THEN sectors_ms END, '|')
              FROM counted
              GROUP BY COALESCE(driver_id, -id)
              ORDER BY best, recorded_at",
@@ -253,13 +254,27 @@ impl Store {
                     r.get::<_, u32>(4)?,
                     r.get::<_, Timestamp>(5)?,
                     r.get::<_, String>(6)?,
+                    r.get::<_, Option<String>>(7)?,
                 ))
             },
         )?;
 
         let mut out: Vec<LeaderboardEntry> = Vec::new();
         for row in rows {
-            let (driver_id, lap_id, time_ms, car, lap_count, set_at, sectors) = row?;
+            let (driver_id, lap_id, time_ms, car, lap_count, set_at, sectors, all_sectors) = row?;
+            let sectors_ms: Vec<u32> = serde_json::from_str(&sectors).unwrap_or_default();
+            // The driver's best time in each sector, over all their valid laps here.
+            let mut best_sectors_ms: Vec<Option<u32>> = Vec::new();
+            for lap in all_sectors.as_deref().unwrap_or("").split('|') {
+                let Ok(s) = serde_json::from_str::<Vec<u32>>(lap) else { continue };
+                if s.is_empty() || (!best_sectors_ms.is_empty() && s.len() != best_sectors_ms.len()) {
+                    continue;
+                }
+                best_sectors_ms.resize(s.len(), None);
+                for (b, t) in best_sectors_ms.iter_mut().zip(s) {
+                    *b = Some(b.map_or(t, |b| b.min(t)));
+                }
+            }
             let leader = out.first().map_or(time_ms, |e| e.time_ms);
             out.push(LeaderboardEntry {
                 position: out.len() as u32 + 1,
@@ -270,7 +285,8 @@ impl Store {
                 car,
                 lap_count,
                 set_at,
-                sectors_ms: serde_json::from_str(&sectors).unwrap_or_default(),
+                sectors_ms,
+                best_sectors_ms,
             });
         }
         Ok(out)

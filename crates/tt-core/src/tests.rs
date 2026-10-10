@@ -200,6 +200,7 @@ fn laps_are_split_into_sectors_with_timing_colours() {
 
     let board = tt.leaderboard(&imola_board()).unwrap();
     assert_eq!(board[0].sectors_ms, vec![33_000, 33_000, 33_000]);
+    assert_eq!(board[1].best_sectors_ms, vec![Some(34_000); 3]);
 }
 
 #[test]

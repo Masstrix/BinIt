@@ -281,9 +281,26 @@ h2 { font-size: 22px; }
   .card, .hero { padding: 18px; border-radius: 22px; }
 }
 
-/* Leaderboard sector splits */
-.sectors { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-.sector { display: inline-flex; align-items: baseline; gap: 4px; padding: 1px 6px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); font-size: 12px; }
-.sector .sector-label { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.5px; }
-.sector.purple { background: rgba(195, 139, 255, 0.16); color: #C38BFF; }
-.sector.purple .sector-label { color: #C38BFF; }
+/* Leaderboard table (design: LeaderboardV2) */
+.lb { padding: 8px 8px 14px; gap: 0; }
+.lb-scroll { overflow-x: auto; }
+.lb-grid { display: grid; gap: 12px; align-items: center; min-width: 760px; }
+.lb-grid .r { text-align: right; }
+.lb-head { padding: 14px 20px 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); }
+.lb-row { margin: 3px 0; padding: 10px 20px; border-radius: 20px; background: var(--panel-2); border: 1px solid transparent; }
+.lb-pos { font: 800 18px 'Unbounded', sans-serif; color: var(--muted); text-align: center; }
+.lb-meta { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-name { font-weight: 700; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-time { font-size: 18px; font-weight: 800; }
+.lb-small { font-size: 14px; font-weight: 600; }
+.lb-row.lb-podium { padding: 14px 20px; }
+.lb-row.lb-podium .lb-pos { font-size: 26px; color: var(--text); }
+.lb-row.lb-podium .lb-name { font-size: 18px; }
+.lb-row.lb-podium .lb-time { font-size: 24px; }
+.lb-row.top { padding: 18px 20px; background: rgba(255, 201, 60, 0.10); border-color: rgba(255, 201, 60, 0.45); }
+.lb-row.top .lb-pos { font-size: 34px; color: var(--gold); }
+.lb-row.top .lb-name { font-size: 22px; }
+.lb-row.top .lb-time { font-size: 30px; color: var(--gold); }
+.lb-legend { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 10px 20px 0; font-size: 13px; color: var(--muted); }
+.lb-key { display: flex; align-items: center; gap: 6px; }
+.lb-key i { width: 10px; height: 10px; border-radius: 3px; }

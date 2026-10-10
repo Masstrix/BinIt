@@ -76,6 +76,8 @@ export interface LeaderboardEntry {
   setAt: number;
   /** Sector times of the ranked lap (empty for laps recorded before sector timing). */
   sectorsMs: number[];
+  /** The driver's best time in each sector over all their valid laps on this board. */
+  bestSectorsMs: (number | null)[];
 }
 
 export interface SessionView extends Combo {

@@ -129,6 +129,8 @@ pub struct LeaderboardEntry {
     pub set_at: Timestamp,
     /// Sector times of that best lap (empty if unknown).
     pub sectors_ms: Vec<u32>,
+    /// The driver's best time in each sector over all their valid laps on this board.
+    pub best_sectors_ms: Vec<Option<u32>>,
 }
 
 /// Everything the overlay and home screen need about the person driving.

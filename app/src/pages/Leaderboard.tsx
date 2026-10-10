@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { api, useAppState, useDriverMap, useFetch, type Combo } from "../api";
 import { Dropdown } from "../components/Dropdown";
 import { Helmet } from "../components/Helmet";
-import { Podium } from "../components/Podium";
 import { ago, gameName, gap, lapTime, trackName } from "../format";
 
 type Period = "today" | "week" | "all";
@@ -14,6 +13,9 @@ function periodStart(p: Period): number | null {
   if (p === "week") d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); // Monday
   return d.getTime();
 }
+
+const PURPLE = "#C38BFF";
+const MINT = "#4BE3A6";
 
 const trackKey = (c: Pick<Combo, "game" | "track" | "layout">) => `${c.game}|${c.track}|${c.layout}`;
 
@@ -83,6 +85,7 @@ export function LeaderboardPage() {
     const times = board.map((e) => e.sectorsMs[i]).filter((t): t is number => t > 0);
     return times.length ? Math.min(...times) : null;
   });
+  const cols = `56px minmax(160px, 1fr) 120px 72px ${bestSectors.map(() => "72px").join(" ")} 56px`;
   const idealMs = sectorCount > 0 && bestSectors.every((t) => t !== null) ? bestSectors.reduce((a, t) => a! + t!, 0)! : null;
 
   return (
@@ -130,54 +133,80 @@ export function LeaderboardPage() {
           </div>
 
           <div className="row" style={{ alignItems: "flex-start" }}>
-            <div style={{ flex: "999 1 520px", display: "flex", flexDirection: "column", gap: 0 }}>
-              {board.length > 0 && <Podium entries={board} drivers={driverMap} />}
-              <div className="card" style={{ padding: 16, gap: 8, marginTop: board.length > 0 ? -1 : 0 }}>
-                {board.length === 0 && <div className="empty">No laps in this period.</div>}
-                <div className="list">
-                  {board.map((e) => {
+            <section className="card lb" style={{ flex: "999 1 800px", minWidth: 0 }} aria-label="Leaderboard">
+              {board.length === 0 ? (
+                <div className="empty">No laps in this period.</div>
+              ) : (
+                <div className="lb-scroll">
+                  <div className="lb-grid lb-head" style={{ gridTemplateColumns: cols }}>
+                    <span style={{ textAlign: "center" }}>POS</span>
+                    <span>DRIVER</span>
+                    <span className="r">BEST LAP</span>
+                    <span className="r">GAP</span>
+                    {bestSectors.map((_, i) => (
+                      <span key={i} className="r">S{i + 1}</span>
+                    ))}
+                    <span className="r">LAPS</span>
+                  </div>
+                  {board.map((e, idx) => {
                     const d = e.driverId != null ? driverMap.get(e.driverId) : undefined;
+                    const color = d?.color ?? "#5B6488";
+                    const top = idx === 0;
+                    const podium = idx < 3;
+                    const me = e.driverId != null && e.driverId === seat;
                     return (
-                      <div key={e.lapId} className={`list-row${e.driverId != null && e.driverId === seat ? " me" : ""}`}>
-                        <span className="pos">{e.position}</span>
-                        <Helmet color={d?.color ?? "#5B6488"} size={44} />
-                        <span className="grow">
-                          <span style={{ fontWeight: 700 }}>{d?.name ?? "Guest"}</span>
-                          <span className="muted" style={{ fontSize: 13 }}>
-                            {e.lapCount} lap{e.lapCount === 1 ? "" : "s"} · {car ? ago(e.setAt) : `${e.car} · ${ago(e.setAt)}`}
-                          </span>
-                          {sectorCount > 0 && (
-                            <span className="sectors" aria-label="Sector times">
-                              {bestSectors.map((best, i) => {
-                                const t = e.sectorsMs[i];
-                                const purple = t > 0 && t === best;
-                                return (
-                                  <span key={i} className={`sector${purple ? " purple" : ""}`} title={`Sector ${i + 1}`}>
-                                    <span className="sector-label">S{i + 1}</span>
-                                    <span className="mono">{t > 0 ? (t / 1000).toFixed(3) : "--"}</span>
-                                  </span>
-                                );
-                              })}
+                      <div
+                        key={e.lapId}
+                        className={`lb-grid lb-row${top ? " top" : podium ? " lb-podium" : ""}`}
+                        style={{
+                          gridTemplateColumns: cols,
+                          ...(me && !top ? { background: `${color}1F`, borderColor: `${color}73` } : {}),
+                        }}
+                      >
+                        <span className="lb-pos">{e.position}</span>
+                        <span style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+                          <Helmet color={color} size={top ? 60 : podium ? 52 : 44} />
+                          <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                            <span className="lb-name">{d?.name ?? "Guest"}</span>
+                            <span className="lb-meta" style={{ color: me ? color : "var(--muted)" }}>
+                              {me ? "In the seat · " : ""}
+                              {car ? ago(e.setAt) : `${e.car} · ${ago(e.setAt)}`}
                             </span>
-                          )}
+                          </span>
                         </span>
-                        <span className="mono muted" style={{ fontSize: 13, fontWeight: 600, width: 70, textAlign: "right" }}>{gap(e.gapMs)}</span>
-                        <span className="mono" style={{ fontSize: 17, width: 96, textAlign: "right", color: e.position === 1 ? "var(--gold)" : undefined }}>
-                          {lapTime(e.timeMs)}
-                        </span>
+                        <span className="mono r lb-time">{lapTime(e.timeMs)}</span>
+                        <span className="mono r lb-small" style={{ color: "var(--muted)" }}>{top ? "—" : gap(e.gapMs)}</span>
+                        {bestSectors.map((best, i) => {
+                          const t = e.sectorsMs[i];
+                          const own = e.bestSectorsMs[i];
+                          const colour = !(t > 0) ? "var(--muted)" : t === best ? PURPLE : own != null && t <= own ? MINT : "var(--text-2)";
+                          return (
+                            <span key={i} className="mono r lb-small" style={{ color: colour }}>
+                              {t > 0 ? (t / 1000).toFixed(3) : "—"}
+                            </span>
+                          );
+                        })}
+                        <span className="mono r lb-small" style={{ color: "var(--text-2)" }}>{e.lapCount}</span>
                       </div>
                     );
                   })}
                 </div>
+              )}
+              <div className="lb-legend">
+                <span style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+                  <span className="lb-key"><i style={{ background: PURPLE }} />Fastest sector</span>
+                  <span className="lb-key"><i style={{ background: MINT }} />Personal best sector</span>
+                </span>
+                <span>{includeInvalid ? "Cut laps included" : "Valid laps only"} · out and in laps never count</span>
               </div>
-            </div>
+            </section>
 
             <aside className="card" style={{ flex: "1 1 260px" }}>
               <h2 style={{ fontSize: 18 }}>{selected ? trackName(selected.track, selected.layout) : ""} records</h2>
               {idealMs !== null && (
                 <div className="list-row" style={{ justifyContent: "space-between" }} title="Best sectors on this board added together">
                   <span style={{ fontSize: 14 }}>Ideal lap (best sectors)</span>
-                  <span className="mono" style={{ fontSize: 14, color: "#C38BFF" }}>{lapTime(idealMs)}</span>
+                  <span className="mono" style={{ fontSize: 14, color: PURPLE }}>{lapTime(idealMs)}</span>
                 </div>
               )}
               {records.filter((r) => r.top).map((r) => (
