@@ -94,6 +94,7 @@ export interface Status {
   seat: DriverId | null;
   live: LiveView | null;
   overlayEnabled: boolean;
+  overlayFocusOnly: boolean;
 }
 
 export interface ChallengeStanding {
@@ -127,7 +128,7 @@ export type AppEvent =
   | { type: "challengesChanged" }
   | { type: "live"; live: LiveView }
   | { type: "overlayLayoutChanged"; game: string }
-  | { type: "overlayEnabled"; enabled: boolean }
+  | { type: "overlaySettings"; enabled: boolean; focusOnly: boolean }
   | { type: "resync" };
 
 // ---- transport ----------------------------------------------------------------
@@ -168,6 +169,7 @@ export const api = {
   overlayLayout: (game: string) => request<unknown | null>("GET", `/overlay/layout/${game}`),
   setOverlayLayout: (game: string, layout: unknown) => request<null>("PUT", `/overlay/layout/${game}`, layout),
   setOverlayEnabled: (enabled: boolean) => request<boolean>("PUT", "/overlay/enabled", { enabled }),
+  setOverlayFocusOnly: (enabled: boolean) => request<boolean>("PUT", "/overlay/focus-only", { enabled }),
   resetOverlayLayout: (game: string) => request<null>("DELETE", `/overlay/layout/${game}`),
 };
 
@@ -264,8 +266,8 @@ class Store {
       case "live":
         if (status) this.set({ status: { ...status, live: e.live } });
         break;
-      case "overlayEnabled":
-        if (status) this.set({ status: { ...status, overlayEnabled: e.enabled } });
+      case "overlaySettings":
+        if (status) this.set({ status: { ...status, overlayEnabled: e.enabled, overlayFocusOnly: e.focusOnly } });
         break;
       case "driversChanged":
         api.drivers().then((drivers) => this.set({ drivers }));

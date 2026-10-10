@@ -16,3 +16,22 @@ export function OverlayToggle({ compact = false }: { compact?: boolean }) {
     </label>
   );
 }
+
+/** Only draw the overlay while a supported game is the focused app. */
+export function OverlayFocusToggle() {
+  const { status } = useAppState();
+  const focusOnly = status?.overlayFocusOnly ?? true;
+  return (
+    <label className="overlay-toggle" title="Hide the overlay when you switch to another app">
+      <span className="overlay-toggle-label">Only while a game is focused</span>
+      <button
+        className="toggle"
+        role="switch"
+        aria-checked={focusOnly}
+        aria-label="Only show the overlay while a game is focused"
+        onClick={() => api.setOverlayFocusOnly(!focusOnly).catch(() => {})}
+        disabled={!status || !status.overlayEnabled}
+      />
+    </label>
+  );
+}

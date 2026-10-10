@@ -23,6 +23,7 @@ pub const HELMET_COLORS: [&str; 10] = [
 
 const SEAT_KEY: &str = "seat_driver_id";
 const OVERLAY_KEY: &str = "overlay_enabled";
+const OVERLAY_FOCUS_KEY: &str = "overlay_focus_only";
 
 /// Pushed to every connected UI (desktop window, overlay, office browsers).
 #[derive(Debug, Clone, Serialize)]
@@ -39,7 +40,8 @@ pub enum AppEvent {
     ChallengesChanged,
     Live { live: LiveView },
     OverlayLayoutChanged { game: String },
-    OverlayEnabled { enabled: bool },
+    #[serde(rename_all = "camelCase")]
+    OverlaySettings { enabled: bool, focus_only: bool },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -71,6 +73,7 @@ pub struct Status {
     pub seat: Option<DriverId>,
     pub live: Option<LiveView>,
     pub overlay_enabled: bool,
+    pub overlay_focus_only: bool,
 }
 
 #[derive(Default)]
@@ -136,6 +139,7 @@ impl TimeTrial {
             seat: self.seat()?,
             live: rt.live.clone(),
             overlay_enabled: self.overlay_enabled()?,
+            overlay_focus_only: self.overlay_focus_only()?,
         })
     }
 
@@ -146,7 +150,21 @@ impl TimeTrial {
 
     pub fn set_overlay_enabled(&self, enabled: bool) -> Result<()> {
         self.store().set_setting(OVERLAY_KEY, Some(if enabled { "1" } else { "0" }))?;
-        self.emit(AppEvent::OverlayEnabled { enabled });
+        self.emit_overlay_settings()
+    }
+
+    /// Only draw the overlay while a supported game is the focused app. On by default.
+    pub fn overlay_focus_only(&self) -> Result<bool> {
+        Ok(self.store().setting(OVERLAY_FOCUS_KEY)?.is_none_or(|v| v == "1"))
+    }
+
+    pub fn set_overlay_focus_only(&self, focus_only: bool) -> Result<()> {
+        self.store().set_setting(OVERLAY_FOCUS_KEY, Some(if focus_only { "1" } else { "0" }))?;
+        self.emit_overlay_settings()
+    }
+
+    fn emit_overlay_settings(&self) -> Result<()> {
+        self.emit(AppEvent::OverlaySettings { enabled: self.overlay_enabled()?, focus_only: self.overlay_focus_only()? });
         Ok(())
     }
 

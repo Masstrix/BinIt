@@ -12,7 +12,7 @@ import {
   type Anchor,
   type WidgetId,
 } from "../overlayLayout";
-import { OverlayToggle } from "./OverlayToggle";
+import { OverlayFocusToggle, OverlayToggle } from "./OverlayToggle";
 import { SectionWidgets, useOverlayData } from "./OverlayWidgets";
 
 const VIRTUAL_W = 1920;
@@ -111,6 +111,7 @@ export function OverlayEditor() {
         <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
           <h2 style={{ fontSize: 20 }}>Overlay layout</h2>
           <OverlayToggle />
+          <OverlayFocusToggle />
         </div>
         <div className="segmented" role="group" aria-label="Game" style={{ flexWrap: "wrap" }}>
           {GAME_PROFILES.map((p) => (

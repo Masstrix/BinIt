@@ -14,6 +14,22 @@ use std::time::Duration;
 
 pub use process::is_process_running;
 
+/// Executables of games TimeTrial supports (or will), mapped to the game key.
+/// Used to tell whether a game is the app the player is currently in.
+pub const GAME_PROCESSES: &[(&str, &str)] = &[
+    ("AssettoCorsaEVO.exe", "acevo"),
+    ("acs.exe", "ac"),
+    ("acs_x86.exe", "ac"),
+    ("AC2-Win64-Shipping.exe", "acc"),
+    ("dirtrally2.exe", "dr2"),
+    ("WRC.exe", "wrc"),
+];
+
+/// The game key for an executable name (case-insensitive), if it's a supported game.
+pub fn game_for_process(exe_name: &str) -> Option<&'static str> {
+    GAME_PROCESSES.iter().find(|(exe, _)| exe.eq_ignore_ascii_case(exe_name)).map(|(_, key)| *key)
+}
+
 /// Identifies a supported game. Stored with every lap so leaderboards stay per-game.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GameId {

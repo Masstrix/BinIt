@@ -63,6 +63,7 @@ pub async fn serve(tt: Arc<TimeTrial>, app: AppHandle, lan: bool) -> anyhow::Res
         .route("/settings/lan", put(set_lan))
         .route("/overlay/visible", put(set_overlay_visible))
         .route("/overlay/enabled", put(set_overlay_enabled))
+        .route("/overlay/focus-only", put(set_overlay_focus_only))
         .route("/overlay/layout/{game}", get(overlay_layout).put(set_overlay_layout).delete(reset_overlay_layout))
         .route("/events", get(events));
 
@@ -128,9 +129,22 @@ async fn set_overlay_visible(State(c): State<Ctx>, Json(body): Json<SetLan>) -> 
 /// The saved on/off setting for the in-game overlay.
 async fn set_overlay_enabled(State(c): State<Ctx>, Json(body): Json<SetLan>) -> ApiResult<bool> {
     c.tt.set_overlay_enabled(body.enabled)?;
-    let app = c.app.clone();
-    let _ = c.app.run_on_main_thread(move || crate::overlay::apply_enabled(&app, body.enabled));
+    apply_overlay_settings(&c)?;
     Ok(Json(body.enabled))
+}
+
+/// Only show the overlay while a supported game is the focused app.
+async fn set_overlay_focus_only(State(c): State<Ctx>, Json(body): Json<SetLan>) -> ApiResult<bool> {
+    c.tt.set_overlay_focus_only(body.enabled)?;
+    apply_overlay_settings(&c)?;
+    Ok(Json(body.enabled))
+}
+
+fn apply_overlay_settings(c: &Ctx) -> anyhow::Result<()> {
+    let (enabled, focus_only) = (c.tt.overlay_enabled()?, c.tt.overlay_focus_only()?);
+    let app = c.app.clone();
+    c.app.run_on_main_thread(move || crate::overlay::apply_settings(&app, enabled, focus_only))?;
+    Ok(())
 }
 
 async fn overlay_layout(State(c): State<Ctx>, Path(game): Path<String>) -> ApiResult<Option<serde_json::Value>> {

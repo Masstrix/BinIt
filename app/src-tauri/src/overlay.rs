@@ -167,26 +167,128 @@ pub fn set_switcher(app: &AppHandle, open: bool) {
 }
 
 /// The user's on/off setting. Off = nothing is ever drawn over the game; F8 still works
-/// (blind, with the spoken confirmation).
+/// (blind, with the optional spoken confirmation).
 static ENABLED: AtomicBool = AtomicBool::new(true);
+/// Only draw while a supported game is the focused app.
+static FOCUS_ONLY: AtomicBool = AtomicBool::new(true);
+/// Updated by the foreground watcher.
+static GAME_FOCUSED: AtomicBool = AtomicBool::new(false);
 
 pub fn is_enabled() -> bool {
     ENABLED.load(Ordering::SeqCst)
 }
 
-/// Applies the saved on/off setting to the window. Call on the main thread.
-pub fn apply_enabled(app: &AppHandle, enabled: bool) {
-    ENABLED.store(enabled, Ordering::SeqCst);
-    set_visible(app, enabled);
+/// Should the overlay be drawn right now?
+fn wanted() -> bool {
+    is_enabled() && (!FOCUS_ONLY.load(Ordering::SeqCst) || GAME_FOCUSED.load(Ordering::SeqCst))
 }
 
-/// Ctrl+Shift+H: flip the saved setting, so the app's toggle stays in sync.
+/// Shows or hides the window to match the settings and focus. Call on the main thread.
+pub fn refresh(app: &AppHandle) {
+    set_visible(app, wanted());
+}
+
+/// Applies the saved settings. Call on the main thread.
+pub fn apply_settings(app: &AppHandle, enabled: bool, focus_only: bool) {
+    ENABLED.store(enabled, Ordering::SeqCst);
+    FOCUS_ONLY.store(focus_only, Ordering::SeqCst);
+    refresh(app);
+}
+
+/// Ctrl+Shift+H: flip the saved on/off setting, so the app's toggle stays in sync.
 pub fn toggle_enabled(app: &AppHandle) {
     let enabled = !is_enabled();
     if let Some(tt) = app.try_state::<std::sync::Arc<tt_core::TimeTrial>>() {
         let _ = tt.set_overlay_enabled(enabled);
     }
-    apply_enabled(app, enabled);
+    ENABLED.store(enabled, Ordering::SeqCst);
+    refresh(app);
+}
+
+/// Watches which app is in the foreground, using a Windows event hook (no polling), and
+/// shows the overlay only while a supported game is focused (when that option is on).
+#[cfg(windows)]
+pub fn spawn_focus_watcher(app: AppHandle) {
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        DispatchMessageW, EVENT_SYSTEM_FOREGROUND, GetForegroundWindow, GetMessageW, MSG, TranslateMessage,
+        WINEVENT_OUTOFCONTEXT,
+    };
+
+    static APP: OnceLock<AppHandle> = OnceLock::new();
+
+    fn on_foreground(hwnd: HWND) {
+        let focused = foreground_game(hwnd).is_some();
+        if GAME_FOCUSED.swap(focused, Ordering::SeqCst) != focused
+            && let Some(app) = APP.get()
+        {
+            let handle = app.clone();
+            let _ = app.run_on_main_thread(move || refresh(&handle));
+        }
+    }
+
+    unsafe extern "system" fn callback(_: HWINEVENTHOOK, _: u32, hwnd: HWND, _: i32, _: i32, _: u32, _: u32) {
+        on_foreground(hwnd);
+    }
+
+    let _ = APP.set(app);
+    std::thread::Builder::new()
+        .name("focus-watcher".into())
+        .spawn(|| unsafe {
+            // Out-of-context hooks deliver events to this thread's message loop.
+            let hook = SetWinEventHook(EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND, std::ptr::null_mut(), Some(callback), 0, 0, WINEVENT_OUTOFCONTEXT);
+            if hook.is_null() {
+                eprintln!("[overlay] could not watch the foreground window; showing the overlay regardless of focus");
+                GAME_FOCUSED.store(true, Ordering::SeqCst);
+                return;
+            }
+            on_foreground(GetForegroundWindow());
+            let mut msg: MSG = std::mem::zeroed();
+            while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        })
+        .expect("spawn focus watcher");
+}
+
+#[cfg(not(windows))]
+pub fn spawn_focus_watcher(_app: AppHandle) {
+    GAME_FOCUSED.store(true, Ordering::SeqCst);
+}
+
+/// The game key of the process owning `hwnd`, if it's a supported game.
+#[cfg(windows)]
+fn foreground_game(hwnd: windows_sys::Win32::Foundation::HWND) -> Option<&'static str> {
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW};
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowThreadProcessId;
+
+    if hwnd.is_null() {
+        return None;
+    }
+    unsafe {
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == 0 {
+            return None;
+        }
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if process.is_null() {
+            return None;
+        }
+        let mut buf = [0u16; 512];
+        let mut len = buf.len() as u32;
+        let ok = QueryFullProcessImageNameW(process, 0, buf.as_mut_ptr(), &mut len) != 0;
+        CloseHandle(process);
+        if !ok {
+            return None;
+        }
+        let path = String::from_utf16_lossy(&buf[..len as usize]);
+        let exe = path.rsplit(['\\', '/']).next().unwrap_or_default();
+        tt_games::game_for_process(exe)
+    }
 }
 
 /// Shows or hides the window without changing the saved setting (benchmarks).
