@@ -33,6 +33,8 @@ pub fn sector_status(time_ms: u32, best_overall: Option<u32>, best_driver: Optio
 #[serde(rename_all = "camelCase")]
 pub struct LiveSector {
     pub time_ms: Option<u32>,
+    /// Sector time minus the reference lap's time for the same sector (negative = faster).
+    pub delta_ms: Option<i32>,
     pub status: SectorStatus,
 }
 
@@ -70,6 +72,11 @@ pub struct LiveTiming {
 impl LiveTiming {
     pub fn configure(&mut self, ctx: TimingContext) {
         self.ctx = ctx;
+        self.reset_lap();
+    }
+
+    /// Stop timing until the car next starts a lap at the line (e.g. on an out lap).
+    pub fn pause(&mut self) {
         self.reset_lap();
     }
 
@@ -116,16 +123,18 @@ impl LiveTiming {
         }
         self.last = Some((progress, elapsed_ms));
 
+        let ref_sectors = self.ctx.reference.as_ref().map(|(prof, _)| prof.split(&self.ctx.boundaries));
         let current = self.ctx.boundaries.iter().skip(1).position(|&b| progress < b).unwrap_or(sectors - 1);
         let views = (0..sectors)
             .map(|i| match (self.crossings[i], self.crossings[i + 1]) {
                 (Some(a), Some(b)) if i < current => {
                     let t = b.saturating_sub(a);
                     let best = |v: &Vec<Option<u32>>| v.get(i).copied().flatten();
-                    LiveSector { time_ms: Some(t), status: sector_status(t, best(&self.ctx.best_overall), best(&self.ctx.best_driver)) }
+                    let delta_ms = ref_sectors.as_ref().and_then(|r| r.get(i)).map(|&r| t as i32 - r as i32);
+                    LiveSector { time_ms: Some(t), delta_ms, status: sector_status(t, best(&self.ctx.best_overall), best(&self.ctx.best_driver)) }
                 }
-                _ if i == current => LiveSector { time_ms: None, status: SectorStatus::Current },
-                _ => LiveSector { time_ms: None, status: SectorStatus::Pending },
+                _ if i == current => LiveSector { time_ms: None, delta_ms: None, status: SectorStatus::Current },
+                _ => LiveSector { time_ms: None, delta_ms: None, status: SectorStatus::Pending },
             })
             .collect();
 
@@ -178,6 +187,8 @@ mod tests {
         // S1 crossed at ~29.5 s: beats the driver's 30.5 but not the overall 29.0 → green.
         assert_eq!(v.sectors[0].status, SectorStatus::Green);
         assert!((29_400..29_600).contains(&v.sectors[0].time_ms.unwrap()));
+        // Reference S1 is 30.0 s.
+        assert!((-600..-400).contains(&v.sectors[0].delta_ms.unwrap()));
         assert_eq!(v.sectors[1].status, SectorStatus::Current);
         assert_eq!(v.sectors[2].status, SectorStatus::Pending);
     }

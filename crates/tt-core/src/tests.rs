@@ -210,7 +210,7 @@ fn live_timing_compares_against_the_seated_drivers_pb() {
     tt.record_lap(&profiled_lap(100_000)).unwrap();
 
     let mut rx = tt.subscribe();
-    let live = |p: f32, t: u32| GameEvent::Live(tt_games::LiveState { driving: true, current_lap_ms: t, lap_valid: true, lap_progress: p });
+    let live = |p: f32, t: u32| GameEvent::Live(tt_games::LiveState { driving: true, current_lap_ms: t, lap_valid: true, out_lap: false, lap_progress: p });
     tt.handle_game_event(live(0.0, 0)).unwrap();
     tt.handle_game_event(live(0.25, 24_000)).unwrap();
     tt.handle_game_event(live(0.40, 38_500)).unwrap();

@@ -163,7 +163,7 @@ function contentHeight(items: WidgetId[]): number {
       if (!inStrip) h += 6.5;
       inStrip = true;
     } else {
-      h += w === "timing" ? 8 : w === "standings" ? 13 : w === "leaderboard" ? 18 : 7.5;
+      h += w === "timing" ? 11 : w === "standings" ? 13 : w === "leaderboard" ? 18 : 7.5;
       inStrip = false;
     }
   }

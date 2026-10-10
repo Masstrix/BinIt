@@ -65,6 +65,7 @@ pub struct LiveView {
     pub driving: bool,
     pub current_lap_ms: u32,
     pub lap_valid: bool,
+    pub out_lap: bool,
     pub lap_progress: f32,
     /// Delta and sector bars for the lap in progress (when there's a session).
     pub timing: Option<LiveTimingView>,
@@ -457,14 +458,17 @@ impl TimeTrial {
             GameEvent::LapCompleted(lap) => {
                 self.record_lap(&lap)?;
             }
-            GameEvent::Live(LiveState { driving, current_lap_ms, lap_valid, lap_progress }) => {
+            GameEvent::Live(LiveState { driving, current_lap_ms, lap_valid, out_lap, lap_progress }) => {
                 let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
-                let timing = if driving && rt.session_info.is_some() {
+                let timing = if out_lap {
+                    rt.timing.pause();
+                    None
+                } else if driving && rt.session_info.is_some() {
                     rt.timing.update(lap_progress, current_lap_ms)
                 } else {
                     None
                 };
-                let live = LiveView { driving, current_lap_ms, lap_valid, lap_progress, timing };
+                let live = LiveView { driving, current_lap_ms, lap_valid, out_lap, lap_progress, timing };
                 rt.live = Some(live.clone());
                 drop(rt);
                 self.emit(AppEvent::Live { live });

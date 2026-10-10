@@ -127,6 +127,8 @@ pub struct LiveState {
     pub driving: bool,
     pub current_lap_ms: u32,
     pub lap_valid: bool,
+    /// On an out lap (from the pits or a spawn point): not a timed attempt.
+    pub out_lap: bool,
     /// 0.0..1.0 progress around the lap.
     pub lap_progress: f32,
 }

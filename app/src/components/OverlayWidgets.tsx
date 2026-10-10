@@ -26,6 +26,7 @@ export interface OverlayData {
   /** Top 5 on the current track + car, plus the seated driver's row if outside it. */
   comboTop: { position: number; name: string; color: string; timeMs: number; gapMs: number; isSeat: boolean }[];
   timing: LiveTiming | null;
+  outLap: boolean;
 }
 
 /** Everything the widgets show, from live app state. */
@@ -65,6 +66,7 @@ export function useOverlayData(): OverlayData {
     comboLabel: session ? `${trackName(session.track, session.layout)}` : null,
     comboTop,
     timing: status?.live?.driving ? status.live.timing : null,
+    outLap: !!(status?.live?.driving && status.live.outLap),
   };
 }
 
@@ -94,11 +96,12 @@ export const MOCK_DATA: OverlayData = {
     reference: "PB",
     currentSector: 2,
     sectors: [
-      { timeMs: 33902, status: "purple" },
-      { timeMs: 38546, status: "green" },
-      { timeMs: null, status: "current" },
+      { timeMs: 33902, deltaMs: -215, status: "purple" },
+      { timeMs: 38546, deltaMs: 73, status: "green" },
+      { timeMs: null, deltaMs: null, status: "current" },
     ],
   },
+  outLap: false,
 };
 
 export const MOCK_TOAST: Toast = { id: 0, tone: "pb", title: "New PB 1:42.318", detail: "Up to P2 in Imola Hot Lap Week" };
@@ -114,7 +117,7 @@ export function hasContent(w: WidgetId, data: OverlayData): boolean {
     case "leaderboard":
       return data.comboTop.length > 0;
     case "timing":
-      return data.timing !== null;
+      return data.timing !== null || data.outLap;
     default:
       return true;
   }
@@ -188,23 +191,44 @@ const SECTOR_COLOURS = { purple: "#C38BFF", green: "#4BE3A6", yellow: "#FFC93C",
 /** Delta to the reference lap plus one bar per sector (purple / green / yellow). */
 export function TimingCard({ data }: { data: OverlayData }) {
   const t = data.timing;
-  if (!t) return null;
+  if (data.outLap || !t) {
+    return data.outLap ? (
+      <div style={{ ...card, padding: "10px 14px", minWidth: 240, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 1, color: "var(--muted)" }}>OUT LAP</span>
+        <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>TIMING STARTS AT THE LINE</span>
+      </div>
+    ) : null;
+  }
   const d = t.deltaMs;
   return (
     <div style={{ ...card, padding: "10px 14px", minWidth: 240, display: "flex", flexDirection: "column", gap: 8 }}>
       <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
-        <span className="mono" style={{ fontSize: 24, color: d === null ? "var(--muted)" : d <= 0 ? "#4BE3A6" : "#FF6B8A" }}>
-          {d === null ? "--.---" : `${d <= 0 ? "-" : "+"}${(Math.abs(d) / 1000).toFixed(3)}`}
-        </span>
+        <span className="mono" style={{ fontSize: 24, color: deltaColour(d) }}>{deltaText(d)}</span>
         <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>{t.reference ? `VS ${t.reference.toUpperCase()}` : "NO REFERENCE"}</span>
       </span>
       <span style={{ display: "flex", gap: 4 }}>
         {t.sectors.map((s, i) => (
-          <span key={i} title={s.timeMs ? lapTime(s.timeMs) : undefined} style={{ flex: 1, height: 8, borderRadius: 4, background: SECTOR_COLOURS[s.status], opacity: s.status === "current" ? 0.5 : 1 }} />
+          <span key={i} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+            <span style={{ height: 8, borderRadius: 4, background: SECTOR_COLOURS[s.status], opacity: s.status === "current" ? 0.5 : 1 }} />
+            <span className="mono" style={{ fontSize: 11, lineHeight: 1.2, textAlign: "center", color: s.timeMs ? "var(--text)" : "var(--muted)" }}>
+              {s.timeMs ? (s.timeMs / 1000).toFixed(3) : `S${i + 1}`}
+            </span>
+            {s.deltaMs !== null && (
+              <span className="mono" style={{ fontSize: 10, lineHeight: 1.1, textAlign: "center", color: deltaColour(s.deltaMs) }}>{deltaText(s.deltaMs)}</span>
+            )}
+          </span>
         ))}
       </span>
     </div>
   );
+}
+
+function deltaColour(ms: number | null) {
+  return ms === null ? "var(--muted)" : ms <= 0 ? "#4BE3A6" : "#FF6B8A";
+}
+
+function deltaText(ms: number | null) {
+  return ms === null ? "--.---" : `${ms <= 0 ? "-" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
 }
 
 /** Top of the leaderboard for what's being driven right now, independent of challenges. */

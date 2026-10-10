@@ -85,6 +85,8 @@ export interface LiveView {
   driving: boolean;
   currentLapMs: number;
   lapValid: boolean;
+  /** From the pits or a spawn point: not a timed attempt. */
+  outLap: boolean;
   lapProgress: number;
   timing: LiveTiming | null;
 }
@@ -95,7 +97,8 @@ export interface LiveTiming {
   deltaMs: number | null;
   reference: string | null;
   currentSector: number;
-  sectors: { timeMs: number | null; status: SectorStatus }[];
+  /** deltaMs: sector time minus the reference lap's (negative = faster). */
+  sectors: { timeMs: number | null; deltaMs: number | null; status: SectorStatus }[];
 }
 
 export interface Status {

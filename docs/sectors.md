@@ -62,6 +62,18 @@ current lap's crossings and, for each update, computes:
 
 The overlay's **Live timing** widget shows lap time, the delta, and one bar per sector.
 
+## AC EVO and real sector lines (checked 2026-10-11)
+
+- The shared memory (`graphics` / `static`) has no sector index or split times. The
+  `timing_state` / `session_state` placeholders were empty in our dumps.
+- `Documents/ACE/Results/*.sessionresults.json` has a `splits` field, but the files on
+  the rig are only written for some session types, and the ones we have show `"splits": []`.
+- Plan: when a results file with splits appears for a combo, find where the best lap's
+  stored profile reaches each split and save those boundaries as `learned`; all laps
+  are then re-split from their profiles (`Store::resplit`). Until then, 3 even sectors.
+- Worth re-probing the placeholders while driving through a sector line in case a
+  future build fills them.
+
 ## Not done yet
 
 - Learning AC EVO's sector lines from its results files (`learned` source).

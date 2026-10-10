@@ -245,6 +245,7 @@ impl GameAdapter for AcEvoAdapter {
                 driving: g.status == layout::STATUS_LIVE,
                 current_lap_ms: g.current_lap_time_ms.max(0) as u32,
                 lap_valid: sample(&g).lap_valid,
+                out_lap: self.tracker.on_out_lap(),
                 lap_progress: g.npos.clamp(0.0, 1.0),
             }));
         }
