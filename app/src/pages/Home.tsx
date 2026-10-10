@@ -44,9 +44,9 @@ export function Home() {
               {seat ? `Every lap is saved to ${seat.name}` : "Laps are saved as guest laps and can be claimed later"}
             </div>
           </div>
-          <a className="btn white" href="#pick">
+          <button className="btn white" onClick={() => document.getElementById("pick")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
             Switch driver <span className="kbd">F8</span>
-          </a>
+          </button>
         </div>
 
         <div className="stat-grid">

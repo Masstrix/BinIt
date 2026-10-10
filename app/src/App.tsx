@@ -29,6 +29,10 @@ function useHashPath() {
 
 export function App() {
   const path = useHashPath();
+  // Each page starts at the top (the content column keeps its own scroll position).
+  useEffect(() => {
+    document.querySelector(".content")?.scrollTo(0, 0);
+  }, [path]);
   if (path.startsWith("/overlay")) return <Overlay />;
 
   let page;
@@ -57,20 +61,20 @@ function Sidebar({ path }: { path: string }) {
         <Logo />
         <span>timetrial</span>
       </a>
-      <div className="game-pill" title={online ? undefined : "Can't reach the TimeTrial service"}>
+      <div className="game-pill" title={!online ? "Can't reach the TimeTrial service" : status?.connected ? `${status.gameName} is running` : "No game running"}>
         <span className={`dot${status?.connected ? " on" : ""}`} />
-        <span style={{ flex: 1 }}>{!online ? "Offline" : status?.connected ? status.gameName : "No game running"}</span>
-        {status?.connected && <span style={{ fontSize: 12, color: "var(--mint)" }}>live</span>}
+        <span className="game-name" style={{ flex: 1 }}>{!online ? "Offline" : status?.connected ? status.gameName : "No game running"}</span>
+        {status?.connected && <span className="live" style={{ fontSize: 12, color: "var(--mint)" }}>live</span>}
       </div>
       <nav className="nav" aria-label="Main">
         {ROUTES.map((r) => {
           const current = r.path === "/" ? path === "/" : path.startsWith(r.path);
           return (
-            <a key={r.path} href={`#${r.path}`} aria-current={current ? "page" : undefined}>
+            <a key={r.path} href={`#${r.path}`} aria-current={current ? "page" : undefined} title={r.label}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d={r.icon} />
               </svg>
-              {r.label}
+              <span className="nav-label">{r.label}</span>
             </a>
           );
         })}

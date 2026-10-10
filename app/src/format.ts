@@ -47,6 +47,12 @@ export function prettify(id: string): string {
     .join(" ");
 }
 
+const GAME_NAMES: Record<string, string> = { acevo: "AC EVO", ac: "Assetto Corsa", acc: "ACC", dr2: "DiRT Rally 2.0", wrc: "EA WRC" };
+
+export function gameName(key: string): string {
+  return GAME_NAMES[key] ?? key;
+}
+
 export function ordinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;

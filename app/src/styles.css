@@ -48,32 +48,43 @@ h2 { font-size: 22px; }
 
 /* ---- layout ------------------------------------------------------------- */
 
+/* Desktop: fixed sidebar, only the content column scrolls. */
 .shell {
-  min-height: 100vh;
-  display: flex;
-  flex-wrap: wrap;
+  height: 100vh;
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr);
   gap: 24px;
-  padding: 24px;
+  padding: 24px 0 0 24px;
 }
 .sidebar {
-  flex: 1 1 220px;
-  max-width: 260px;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 24px;
   padding: 24px 16px;
+  margin-bottom: 24px;
   display: flex;
   flex-direction: column;
   gap: 20px;
-  align-self: stretch;
+  min-height: 0;
+  overflow-y: auto;
 }
-.content { flex: 999 1 620px; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
-@media (max-width: 760px) {
-  .shell { padding: 16px; gap: 16px; }
-  .sidebar { max-width: none; flex-basis: 100%; padding: 14px; gap: 12px; }
-  .sidebar nav { flex-direction: row !important; flex-wrap: wrap; }
-  .sidebar .lan-box { display: none; }
+.content {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 0 24px 24px 0;
+  scrollbar-gutter: stable;
 }
+.content > * { flex: none; }
+
+/* Dark, slim scrollbars to match the theme. */
+.content, .sidebar, .dropdown-menu { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.content::-webkit-scrollbar, .dropdown-menu::-webkit-scrollbar { width: 10px; }
+.content::-webkit-scrollbar-thumb, .dropdown-menu::-webkit-scrollbar-thumb { background: var(--line); border-radius: 10px; border: 3px solid var(--bg); }
+.content::-webkit-scrollbar-track { background: transparent; }
 
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; color: var(--text); text-decoration: none; }
 .brand span { font: 800 20px var(--font-display); }
@@ -82,7 +93,10 @@ h2 { font-size: 22px; }
   display: flex; align-items: center; gap: 12px;
   min-height: 46px; padding: 0 14px; border-radius: 14px;
   color: var(--text-2); text-decoration: none; font-weight: 500;
+  white-space: nowrap;
 }
+.nav svg { flex: none; }
+
 .nav a[aria-current="page"] { background: var(--line); color: var(--text); font-weight: 600; }
 .nav a:hover { background: var(--panel-2); color: var(--text); }
 
@@ -134,12 +148,49 @@ h2 { font-size: 22px; }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .kbd { font: 600 12px var(--font-mono); padding: 3px 7px; border-radius: 6px; background: #e6e3ff; color: var(--violet-ink); }
 
-.input, .select {
+.input {
   min-height: 48px; padding: 0 16px; border-radius: 14px; border: 2px solid var(--line);
   background: var(--bg); color: var(--text); width: 100%;
 }
-.input:focus, .select:focus { border-color: var(--violet); outline: none; }
+.input:focus { border-color: var(--violet); outline: none; }
+.input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
 .field { display: flex; flex-direction: column; gap: 8px; font-weight: 600; }
+
+/* ---- dropdown --------------------------------------------------------------------- */
+
+.dropdown { position: relative; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dropdown-label { font-weight: 600; }
+.dropdown-trigger {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  min-height: 52px; padding: 0 16px; border-radius: 16px; width: 100%;
+  background: var(--panel); border: 1px solid var(--line); color: var(--text); font-weight: 500; text-align: left;
+}
+.dropdown-trigger:hover { border-color: #3a4672; }
+.dropdown-trigger[aria-expanded="true"] { border-color: var(--violet); }
+.dropdown-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.dropdown.pill .dropdown-trigger { min-height: 42px; border-radius: 21px; padding: 0 14px 0 16px; font-weight: 600; font-size: 14px; width: auto; max-width: 340px; }
+.dropdown-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  min-width: 100%; max-width: min(420px, 90vw); max-height: 320px; overflow-y: auto;
+  margin: 0; padding: 6px; list-style: none;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 18px;
+  box-shadow: 0 18px 40px rgba(4, 6, 16, 0.55);
+}
+.dropdown-menu.up { top: auto; bottom: calc(100% + 6px); }
+.dropdown.field .dropdown-menu { top: calc(100% + 6px); }
+.dropdown-menu li {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 44px; padding: 8px 12px; border-radius: 12px; cursor: pointer;
+}
+.dropdown-menu li.active { background: var(--panel-3); }
+.dropdown-menu li[aria-selected="true"] .dropdown-option { color: var(--peri-1); font-weight: 700; }
+.dropdown-option { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.filter-pill {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 16px; border-radius: 21px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text-2); font-weight: 600; font-size: 14px;
+}
+.filter-pill[aria-pressed="true"], .filter-pill.on { border-color: var(--violet); background: rgba(106, 88, 245, 0.18); color: var(--text); }
 
 .segmented { display: flex; gap: 4px; padding: 4px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); }
 .segmented button { min-height: 40px; padding: 0 16px; border-radius: 12px; border: none; background: transparent; color: var(--text-2); font-weight: 600; }
@@ -191,3 +242,30 @@ h2 { font-size: 22px; }
 .toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
 .toggle[aria-checked="true"] { background: var(--violet); }
 .toggle[aria-checked="true"]::after { transform: translateX(18px); }
+
+/* ---- responsive (keep last so these win) ---------------------------------------------- */
+
+/* Narrower windows: collapse the sidebar to an icon rail. */
+@media (max-width: 1100px) {
+  .shell { grid-template-columns: 76px minmax(0, 1fr); gap: 16px; padding: 16px 0 0 16px; }
+  .content { padding: 0 16px 16px 0; }
+  .sidebar { padding: 16px 10px; margin-bottom: 16px; align-items: center; }
+  .brand { padding: 0; }
+  .brand span, .nav-label, .game-pill .game-name, .game-pill .live, .lan-box { display: none; }
+  .nav a { justify-content: center; padding: 0; width: 48px; }
+  .game-pill { width: 48px; padding: 0; justify-content: center; }
+}
+
+/* Phones (office network page): top bar + normal page scrolling. */
+@media (max-width: 640px) {
+  .shell { display: block; height: auto; padding: 0; }
+  .sidebar {
+    position: sticky; top: 0; z-index: 10; margin: 0; border-radius: 0; border-width: 0 0 1px;
+    flex-direction: row; align-items: center; padding: 10px 12px; gap: 10px; overflow-x: auto; overflow-y: hidden;
+  }
+  .sidebar .game-pill { display: none; }
+  .nav { flex-direction: row; gap: 2px; }
+  .nav a { width: 44px; min-height: 44px; }
+  .content { overflow: visible; padding: 16px; gap: 16px; }
+  .card, .hero { padding: 18px; border-radius: 22px; }
+}

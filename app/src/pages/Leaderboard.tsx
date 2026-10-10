@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, useAppState, useDriverMap, useFetch, type Combo } from "../api";
+import { Dropdown } from "../components/Dropdown";
 import { Helmet } from "../components/Helmet";
 import { Podium } from "../components/Podium";
-import { ago, gap, lapTime, trackName } from "../format";
+import { ago, gameName, gap, lapTime, trackName } from "../format";
 
 type Period = "today" | "week" | "all";
 
@@ -93,29 +94,31 @@ export function LeaderboardPage() {
         <div className="empty">No laps recorded yet. Once someone finishes a lap it'll show up here.</div>
       ) : (
         <>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-            <label className="field" style={{ flex: "1 1 240px" }}>
-              Track
-              <select className="select" value={track ?? ""} onChange={(e) => { setTrack(e.target.value); setCar(null); }}>
-                {tracks.map((t) => (
-                  <option key={trackKey(t)} value={trackKey(t)}>{trackName(t.track, t.layout)}</option>
-                ))}
-              </select>
-            </label>
-            <label className="field" style={{ flex: "1 1 240px" }}>
-              Car
-              <select className="select" value={car ?? ""} onChange={(e) => setCar(e.target.value || null)}>
-                <option value="">Any car</option>
-                {carsHere.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </label>
-            <label className="field" style={{ flex: "0 1 200px" }}>
-              Laps
-              <span style={{ display: "flex", alignItems: "center", gap: 10, minHeight: 48, fontWeight: 500 }}>
-                <button className="toggle" role="switch" aria-checked={includeInvalid} aria-label="Include invalid laps" onClick={() => setIncludeInvalid(!includeInvalid)} />
-                Include cut laps
-              </span>
-            </label>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            {selected && <span className="filter-pill on">{gameName(selected.game)}</span>}
+            <Dropdown
+              variant="pill"
+              label="Track"
+              value={track ?? ""}
+              options={tracks.map((t) => ({ value: trackKey(t), label: trackName(t.track, t.layout) }))}
+              onChange={(v) => {
+                setTrack(v);
+                setCar(null);
+              }}
+            />
+            <Dropdown
+              variant="pill"
+              label="Car"
+              value={car ?? ""}
+              options={[{ value: "", label: "Any car" }, ...carsHere.map((c) => ({ value: c, label: c }))]}
+              onChange={(v) => setCar(v || null)}
+            />
+            <button className="filter-pill" aria-pressed={!includeInvalid} onClick={() => setIncludeInvalid(!includeInvalid)}>
+              {!includeInvalid && (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10" /></svg>
+              )}
+              Valid laps only
+            </button>
           </div>
 
           <div className="row" style={{ alignItems: "flex-start" }}>

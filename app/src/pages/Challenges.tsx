@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, isActive, useAppState, useDriverMap, useFetch, type Challenge, type Combo, type Prize } from "../api";
 import { Helmet } from "../components/Helmet";
-import { countdown, gap, lapTime, ordinal, trackName } from "../format";
+import { Dropdown } from "../components/Dropdown";
+import { countdown, gameName, gap, lapTime, ordinal, trackName } from "../format";
 
 type EndPreset = "lunch" | "five" | "friday" | "custom" | "never";
 
@@ -208,19 +209,25 @@ function NewChallengeForm() {
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder={selected ? `${trackName(selected.track)} Hot Lap` : ""} style={{ fontSize: 20, fontWeight: 700, minHeight: 56 }} />
         </label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-          <label className="field" style={{ flex: "1 1 220px" }}>
-            Track
-            <select className="select" value={track} onChange={(e) => { setTrack(e.target.value); setCar(""); }}>
-              {known.tracks.map((t) => <option key={trackKey(t)} value={trackKey(t)}>{trackName(t.track, t.layout)}</option>)}
-            </select>
-          </label>
-          <label className="field" style={{ flex: "1 1 220px" }}>
-            Car
-            <select className="select" value={car} onChange={(e) => setCar(e.target.value)}>
-              <option value="">Any car</option>
-              {cars.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </label>
+          <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+            <Dropdown
+              label="Track"
+              value={track}
+              options={known.tracks.map((t) => ({ value: trackKey(t), label: trackName(t.track, t.layout), hint: gameName(t.game) }))}
+              onChange={(v) => {
+                setTrack(v);
+                setCar("");
+              }}
+            />
+          </div>
+          <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+            <Dropdown
+              label="Car"
+              value={car}
+              options={[{ value: "", label: "Any car" }, ...cars.map((c) => ({ value: c, label: c }))]}
+              onChange={setCar}
+            />
+          </div>
         </div>
 
         <fieldset style={{ border: "none", margin: 0, padding: 0 }}>
