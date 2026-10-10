@@ -4,9 +4,9 @@ import type { CSSProperties } from "react";
 export function Helmet({ color, size = 48, tile = true }: { color: string; size?: number; tile?: boolean }) {
   const svg = (
     <svg width={tile ? size * 0.76 : size} height={tile ? size * 0.76 : size} viewBox="0 0 48 48" aria-hidden="true">
-      <path d="M6 30C6 16 16 8 27 8c10 0 16 7 16 16v8c0 2-1 3-3 3H22l-4 5H9c-2 0-3-2-3-4z" fill={color} />
-      <path d="M25 17h17v8H27c-1.2 0-2-.8-2-2z" fill="#0D1224" />
-      <path d="M8 30h33" stroke="#fff" strokeWidth="3" opacity="0.6" />
+      <path d="M7 31C7 16 17 7 29 7c10 0 16 7 17 17l1 8c.3 3-1.5 5-4.5 5.5L35 38.5c-1 2.5-3 3.5-6 3.5H12c-3 0-5-2-5-5z" fill={color} />
+      <path d="M24 15.5c6-2.5 14-2 20 2.5l1 8.5c-7 1.5-14 1.5-20-.5-2-3-2.3-7.3-1-10.5z" fill="#0D1224" />
+      <path d="M8.5 29.5c5-1.2 10-1.8 15-2.2" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" opacity="0.6" />
     </svg>
   );
   if (!tile) return svg;
