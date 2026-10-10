@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
-import { lapTime } from "../format";
+import { lapTime, trackName } from "../format";
 import type { WidgetId } from "../overlayLayout";
 import { Crown, Helmet } from "./Helmet";
 
@@ -21,6 +21,10 @@ export interface OverlayData {
   position: number | null;
   gapMs: number | null;
   top3: { name: string; color: string; timeMs: number }[];
+  /** "Mount Panorama · GP" style label for the track leaderboard. */
+  comboLabel: string | null;
+  /** Top 5 on the current track + car, plus the seated driver's row if outside it. */
+  comboTop: { position: number; name: string; color: string; timeMs: number; gapMs: number; isSeat: boolean }[];
 }
 
 /** Everything the widgets show, from live app state. */
@@ -40,6 +44,14 @@ export function useOverlayData(): OverlayData {
     const d = e.driverId != null ? drivers.get(e.driverId) : undefined;
     return { name: d?.name ?? "Guest", color: d?.color ?? "#9AA3C7", timeMs: e.timeMs };
   };
+  const ranked = (e: LeaderboardEntry) => ({
+    ...named(e),
+    position: e.position,
+    gapMs: e.gapMs,
+    isSeat: seat != null && e.driverId === seat.id,
+  });
+  const comboTop = (comboBoard ?? []).slice(0, 5).map(ranked);
+  if (pb && pb.position > 5) comboTop.push(ranked(pb));
   return {
     driverName: seat?.name ?? "Guest",
     driverColor: seat?.color ?? "#9AA3C7",
@@ -48,6 +60,8 @@ export function useOverlayData(): OverlayData {
     position: standing?.position ?? null,
     gapMs: standing?.gapMs ?? null,
     top3: board.slice(0, 3).map(named),
+    comboLabel: session ? `${trackName(session.track, session.layout)}` : null,
+    comboTop,
   };
 }
 
@@ -103,6 +117,46 @@ export function StandingsCard({ data }: { data: OverlayData }) {
           {i === 0 ? <Crown size={14} /> : <span style={{ width: 14 }} />}
           <span style={{ flex: 1, fontWeight: 600 }}>{r.name}</span>
           <span className="mono" style={{ fontSize: 14, color: i === 0 ? "var(--gold)" : undefined }}>{lapTime(r.timeMs)}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Top of the leaderboard for what's being driven right now, independent of challenges. */
+export function LeaderboardCard({ data }: { data: OverlayData }) {
+  return (
+    <div style={{ ...card, padding: "10px 14px", minWidth: 260, display: "flex", flexDirection: "column", gap: 5 }}>
+      <span style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+        <span style={{ font: "800 13px var(--font-display)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {data.comboLabel ?? "Leaderboard"}
+        </span>
+        <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>THIS CAR</span>
+      </span>
+      {data.comboTop.length === 0 && <span className="muted" style={{ fontSize: 13 }}>{data.comboLabel ? "No laps yet. Set the first!" : "Waiting for a session"}</span>}
+      {data.comboTop.map((r, i) => (
+        <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
+          {i === 5 && <span style={{ height: 1, background: "var(--line)", margin: "2px 0" }} />}
+          <span
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 14,
+              padding: "2px 6px",
+              margin: "0 -6px",
+              borderRadius: 8,
+              background: r.isSeat ? "rgba(255,159,107,0.18)" : undefined,
+            }}
+          >
+            <span style={{ width: 18, fontWeight: 800, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}>{r.position}</span>
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: r.color, flex: "none" }} />
+            <span style={{ flex: 1, fontWeight: r.isSeat ? 800 : 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
+            <span className="mono" style={{ fontSize: 12, color: "var(--muted)", width: 58, textAlign: "right" }}>
+              {r.gapMs ? `+${(r.gapMs / 1000).toFixed(3)}` : ""}
+            </span>
+            <span className="mono" style={{ fontSize: 14, color: r.position === 1 ? "var(--gold)" : undefined }}>{lapTime(r.timeMs)}</span>
+          </span>
         </span>
       ))}
     </div>
@@ -204,6 +258,8 @@ export function SectionWidgets({ items, data, toast, preview = false }: { items:
           <StripCard key={g.join()} items={g} data={data} />
         ) : g === "standings" ? (
           <StandingsCard key={g} data={data} />
+        ) : g === "leaderboard" ? (
+          <LeaderboardCard key={g} data={data} />
         ) : toast ? (
           <ToastCard key={g} toast={toast} animate={!preview} />
         ) : preview ? (

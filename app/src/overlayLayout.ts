@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { api, useAppEvent, type AppEvent } from "./api";
 
-export type WidgetId = "driver" | "pb" | "challenge" | "standings" | "toasts";
+export type WidgetId = "driver" | "pb" | "challenge" | "standings" | "leaderboard" | "toasts";
 export type Anchor =
   | "top-left"
   | "top-center"
@@ -26,6 +26,7 @@ export const WIDGETS: Record<WidgetId, { label: string; description: string; com
   pb: { label: "Personal best", description: "Their best lap on this track and car", compact: true },
   challenge: { label: "Challenge position", description: "P2 +0.204 in the running challenge", compact: true },
   standings: { label: "Challenge top 3", description: "Mini podium for the running challenge", compact: false },
+  leaderboard: { label: "Track leaderboard", description: "Top 5 on this track and car, plus where the driver is", compact: false },
   toasts: { label: "Pop-ups", description: "New PB, record, new leader, cut lap. Shows for 4s", compact: false },
 };
 
@@ -162,7 +163,7 @@ function contentHeight(items: WidgetId[]): number {
       if (!inStrip) h += 6.5;
       inStrip = true;
     } else {
-      h += w === "standings" ? 13 : 7.5;
+      h += w === "standings" ? 13 : w === "leaderboard" ? 18 : 7.5;
       inStrip = false;
     }
   }
