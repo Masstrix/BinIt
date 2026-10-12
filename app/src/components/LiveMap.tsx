@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useState } from "react";
 import { api, useAppState, useDriverMap, useTrackMaps } from "../api";
 import { findMap } from "../catalogueItems";
 import { carName, lapTime, trackName } from "../format";
@@ -22,27 +22,25 @@ const SECTOR_COLOURS: Record<SectorStatus, string> = {
 
 const deltaText = (ms: number) => `${ms <= 0 ? "-" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
 
-const LEARN_BINS = 240;
-
 /**
- * The path driven so far, for drawing a map while it is being learned: one point per slice of progress, kept
- * in driving order, started over when a new lap or a restart begins. Only while there is no stored map.
+ * The path driven so far while the map is still being learned. The app records it (so it survives a page
+ * refresh and shows to anyone who opens the page mid-lap); this just asks for it every moment or two.
  */
-function useLearningPath(key: string | null, active: boolean, rally: boolean, progress: number, clockMs: number, position: [number, number] | null) {
-  const state = useRef<{ key: string | null; bins: ([number, number] | undefined)[]; last: number; clock: number }>({ key: null, bins: [], last: 0, clock: 0 });
-  const s = state.current;
-  if (s.key !== key || !active || progress + 0.3 < s.last || (rally && clockMs + 1000 < s.clock)) {
-    s.key = key;
-    s.bins = new Array(LEARN_BINS);
-    s.last = 0;
-    s.clock = 0;
-  }
-  if (active && position && progress >= 0 && progress < 1 && (!rally || clockMs > 0)) {
-    s.bins[Math.floor(progress * LEARN_BINS)] = position;
-  }
-  s.last = progress;
-  s.clock = clockMs;
-  return s.bins.filter((p): p is [number, number] => !!p);
+function useLearningPath(active: boolean, key: string): [number, number][] {
+  const [path, setPath] = useState<{ key: string; points: [number, number][] }>({ key: "", points: [] });
+  useEffect(() => {
+    if (!active) return;
+    let stop = false;
+    const load = () =>
+      api.learningPath().then((points) => !stop && setPath({ key, points })).catch(() => {});
+    load();
+    const t = setInterval(load, 1500);
+    return () => {
+      stop = true;
+      clearInterval(t);
+    };
+  }, [active, key]);
+  return path.key === key ? path.points : [];
 }
 
 export function LiveMap() {
@@ -53,7 +51,7 @@ export function LiveMap() {
   const w = words(session?.game);
   const maps = useTrackMaps(session?.game ?? null);
   const map = session ? findMap(maps, session.track, session.layout) : undefined;
-  const learned = useLearningPath(session ? `${session.game}|${session.track}|${session.layout}|${session.car}` : null, !!live?.driving && !map, w.rally, live?.lapProgress ?? 0, live?.currentLapMs ?? 0, live?.position ?? null);
+  const learned = useLearningPath(!!session && !!live?.driving && !map, session ? `${session.game}|${session.track}|${session.layout}|${session.car}` : "");
   if (!session || !live?.driving) return null;
 
   const setView = (patch: { rotate?: number; mirror?: boolean }) =>

@@ -729,6 +729,8 @@ impl TimeTrial {
                     let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
                     rt.session = Some(view.clone());
                     rt.session_info = Some(info);
+                    // The path so far belonged to the previous track.
+                    rt.map.reset();
                 }
                 self.refresh_timing()?;
                 self.emit(AppEvent::Session { session: Some(view) });
@@ -801,6 +803,11 @@ impl TimeTrial {
 }
 
 impl TimeTrial {
+    /// The path driven so far on the current lap or stage, for drawing a map while it is learned.
+    pub fn learning_path(&self) -> Vec<[f32; 2]> {
+        self.runtime.lock().expect("runtime mutex poisoned").map.partial()
+    }
+
     /// Keeps the outline of a clean lap as the track's map, if the track has none yet.
     fn learn_map(&self, lap: &CompletedLap) -> Result<()> {
         let mut rt = self.runtime.lock().expect("runtime mutex poisoned");

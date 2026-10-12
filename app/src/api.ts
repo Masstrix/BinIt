@@ -313,6 +313,7 @@ export const api = {
   setMapView: (m: { game: string; track: string; layout: string; rotate: number; mirror: boolean }) => request<null>("PUT", "/maps/view", m),
   sectorBoundaries: (game: string, track: string, layout: string) =>
     request<number[] | null>("GET", `/sectors?game=${encodeURIComponent(game)}&track=${encodeURIComponent(track)}&layout=${encodeURIComponent(layout)}`),
+  learningPath: () => request<[number, number][]>("GET", "/learning"),
   trackMaps: (game: string) => request<TrackMapData[]>("GET", `/maps?game=${encodeURIComponent(game)}`),
   leaderboard: (q: LeaderboardQuery) => request<LeaderboardEntry[]>("POST", "/leaderboard", q),
   challenges: () => request<Challenge[]>("GET", "/challenges"),

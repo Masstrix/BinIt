@@ -45,6 +45,11 @@ impl MapRecorder {
         }
     }
 
+    /// What has been recorded so far, in driving order, for drawing a map while it is being learned.
+    pub fn partial(&self) -> Vec<[f32; 2]> {
+        self.bins.iter().flatten().copied().collect()
+    }
+
     /// The finished path of a point-to-point stage, if it was sampled well enough. The same bins as a lap
     /// (so a progress still finds its place on the path), but not joined end to start: the stage may start
     /// after bin 0 (a drive-up) and end before the last bin (the stretch past the finish), and the bins

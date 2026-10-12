@@ -60,6 +60,7 @@ pub async fn serve(tt: Arc<TimeTrial>, app: AppHandle, lan: bool) -> anyhow::Res
         .route("/combos", get(combos))
         .route("/catalogue", get(catalogue))
         .route("/maps", get(track_maps))
+        .route("/learning", get(learning_path))
         .route("/sectors", get(sector_boundaries))
         .route("/maps/view", put(set_map_view))
         .route("/admin/about", get(admin_about))
@@ -349,6 +350,11 @@ struct SectorQuery {
 /// Where a track layout's sectors split, as fractions of the lap (`null` until the track has been driven).
 async fn sector_boundaries(State(c): State<Ctx>, Query(q): Query<SectorQuery>) -> ApiResult<Option<Vec<f32>>> {
     Ok(Json(c.tt.sector_boundaries(&q.game, &q.track, &q.layout)?))
+}
+
+/// The path driven so far, for the live map while the track's map is still being learned.
+async fn learning_path(State(c): State<Ctx>) -> ApiResult<Vec<[f32; 2]>> {
+    Ok(Json(c.tt.learning_path()))
 }
 
 #[derive(Deserialize)]
