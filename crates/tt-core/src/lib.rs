@@ -21,7 +21,7 @@ use trackmap::{MapRecorder, TrackMap};
 use live::{LiveTiming, LiveTimingView, TimingContext, sector_status};
 
 pub use model::*;
-pub use store::Store;
+pub use store::{Store, holds_records};
 
 /// Helmet colours handed out to drivers who don't pick one.
 pub const HELMET_COLORS: [&str; 10] = [

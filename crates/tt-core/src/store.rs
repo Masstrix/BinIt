@@ -3,7 +3,7 @@
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use rusqlite::{Connection, OptionalExtension, Row, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, Row, params};
 
 use crate::model::*;
 use crate::trackmap::TrackMap;
@@ -13,6 +13,21 @@ const SCHEMA_VERSION: i32 = 6;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
+
+/// Whether the database at `path` holds anything someone made: drivers, laps or challenges. It is
+/// opened read-only, so this changes nothing. A database that can't be read counts as holding
+/// records, so a caller that would replace an empty database leaves that one alone.
+pub fn holds_records(path: &Path) -> bool {
+    let count = || -> Result<u32> {
+        let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)?;
+        Ok(conn.query_row(
+            "SELECT (SELECT COUNT(*) FROM drivers) + (SELECT COUNT(*) FROM laps) + (SELECT COUNT(*) FROM challenges)",
+            [],
+            |r| r.get(0),
+        )?)
+    };
+    count().map_or(true, |n| n > 0)
+}
 
 pub struct Store {
     conn: Connection,
