@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 /**
  * How the driver looks through the visor: `happy` for a win, `binned` for a lap the game threw out,
@@ -32,10 +32,74 @@ function Eyes({ mood }: { mood: HelmetMood }) {
   }
 }
 
-/** A driver's identity: a racing helmet in their colour, with eyes in the visor, on a tinted tile. */
-export function Helmet({ color, size = 48, tile = true, mood = "idle" }: { color: string; size?: number; tile?: boolean; mood?: HelmetMood }) {
+/** Small seeded PRNG (mulberry32), so a driver's quirks are the same on every screen and every visit. */
+function seeded(seed: string) {
+  let h = 2166136261;
+  for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
+  return () => {
+    h = (h + 0x6d2b79f5) | 0;
+    let t = Math.imul(h ^ (h >>> 15), 1 | h);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const AMBIENT: HelmetMood[] = ["happy", "wink", "focus"];
+
+/** A driver's personality: how often they blink and glance, and the face they pull most when idle. */
+function personality(seed: string) {
+  const r = seeded(seed);
+  const blink = 2.6 + r() * 4;
+  const look = 7 + r() * 7;
+  return {
+    vars: {
+      "--blink": `${blink.toFixed(2)}s`,
+      "--blink-delay": `${(-r() * blink).toFixed(2)}s`,
+      "--look": `${look.toFixed(2)}s`,
+      "--look-delay": `${(-r() * look).toFixed(2)}s`,
+      "--look-x": `${((r() < 0.5 ? -1 : 1) * (0.8 + r() * 0.8)).toFixed(2)}px`,
+    } as CSSProperties,
+    favourite: AMBIENT[Math.floor(r() * AMBIENT.length)],
+    rand: r,
+  };
+}
+
+const reducedMotion = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** While idle, now and then pull a face for a moment (mostly the driver's favourite), then relax. */
+function useAmbientMood(base: HelmetMood, seed: string): HelmetMood {
+  const [face, setFace] = useState<HelmetMood | null>(null);
+  useEffect(() => {
+    setFace(null);
+    if (base !== "idle" || reducedMotion()) return;
+    const { rand, favourite } = personality(`${seed}:mood`);
+    let timer: ReturnType<typeof setTimeout>;
+    const relax = () => {
+      setFace(null);
+      timer = setTimeout(pull, 6000 + rand() * 14000);
+    };
+    const pull = () => {
+      setFace(rand() < 0.6 ? favourite : AMBIENT[Math.floor(rand() * AMBIENT.length)]);
+      timer = setTimeout(relax, 1200 + rand() * 1800);
+    };
+    timer = setTimeout(pull, 2000 + rand() * 12000);
+    return () => clearTimeout(timer);
+  }, [base, seed]);
+  return face ?? base;
+}
+
+/**
+ * A driver's identity: a racing helmet in their colour, with eyes in the visor, on a tinted tile.
+ * The eyes are alive: they blink, glance about and pull faces, on a rhythm unique to `seed`
+ * (pass the driver's id; it defaults to the colour).
+ */
+export function Helmet({ color, size = 48, tile = true, mood = "idle", seed }: { color: string; size?: number; tile?: boolean; mood?: HelmetMood; seed?: string | number }) {
+  const key = String(seed ?? color);
+  const { vars } = useMemo(() => personality(key), [key]);
+  const face = useAmbientMood(mood, key);
+  const blinks = face === "idle" || face === "focus";
   const svg = (
-    <svg width={tile ? size * 0.76 : size} height={tile ? size * 0.76 : size} viewBox="0 0 48 48" aria-hidden="true">
+    <svg className={face === "binned" ? "helmet-shake" : undefined} width={tile ? size * 0.76 : size} height={tile ? size * 0.76 : size} viewBox="0 0 48 48" aria-hidden="true">
       {/* Full-face shell: the straight underside rises from the chin to the nape, as on a race helmet. */}
       <path d="M11.2 34C7.4 26.4 8 15.6 15.6 10.2C21.6 6 31.6 5.6 38 9C43 11.8 46.2 17 46.6 23L46.6 31.4C46.6 36.4 44.6 39.6 40.8 40L13.4 35.6C12.4 35.4 11.6 34.8 11.2 34Z" fill={color} />
       <path d="M11.2 34L13.4 35.6L40.8 40C43 39.8 44.6 38.6 45.6 36.8L11.6 31.4Z" fill="#0D1224" opacity="0.25" />
@@ -43,7 +107,13 @@ export function Helmet({ color, size = 48, tile = true, mood = "idle" }: { color
       <circle cx="18" cy="20.6" r="1.6" fill="#0D1224" opacity="0.5" />
       <path d="M13 28C12.4 19.6 17 12.6 25.4 10.4" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" opacity="0.55" />
       <path d="M36.6 32.4L43.6 33.5M37.2 35.2L42.6 36.1" stroke="#0D1224" strokeWidth="1.3" strokeLinecap="round" opacity="0.45" />
-      <Eyes mood={mood} />
+      <g className="helmet-look" style={vars}>
+        <g key={face} className="helmet-pop">
+          <g className={blinks ? "helmet-blink" : undefined}>
+            <Eyes mood={face} />
+          </g>
+        </g>
+      </g>
     </svg>
   );
   if (!tile) return svg;

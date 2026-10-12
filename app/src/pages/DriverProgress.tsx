@@ -41,7 +41,7 @@ export function DriverProgress({ id }: { id: number }) {
       <a href="#/drivers" className="back-link">← Drivers</a>
       <div className="head" style={{ alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-          <Helmet color={driver.color} size={64} />
+          <Helmet color={driver.color} size={64} seed={driver.id} />
           <div style={{ minWidth: 0 }}>
             <h1 style={{ overflowWrap: "anywhere" }}>{driver.name}</h1>
             <span className="muted">{status?.seat === driver.id ? "In the seat now" : "Progress over time"}</span>

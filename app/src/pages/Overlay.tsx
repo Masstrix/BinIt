@@ -162,7 +162,7 @@ function Switcher({ onClose, keyHandler }: { onClose: () => void; keyHandler: Re
                   onClick={() => pick(d)}
                 >
                   <span className="mono" style={{ position: "absolute", left: 10, top: 8, fontSize: 12, color: "var(--muted)" }}>{i + 1}</span>
-                  <Helmet color={d.color} size={52} />
+                  <Helmet color={d.color} size={52} seed={d.id} />
                   <span className="name">{d.name}</span>
                 </button>
               );

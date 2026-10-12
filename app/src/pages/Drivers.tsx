@@ -183,7 +183,7 @@ function DriverCard({ driver, seated, rating }: { driver: Driver; seated: boolea
   return (
     <div className="driver-card" data-seated={seated || undefined}>
       <div className="dc-top">
-        <Helmet color={driver.color} size={52} />
+        <Helmet color={driver.color} size={52} seed={driver.id} />
         <a className="dc-name driver-link" href={`#/drivers/${driver.id}`} title={`See how ${driver.name} has improved`}>
           <span style={{ fontWeight: 700, fontSize: 17, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{driver.name}</span>
           <span className="dc-sub">

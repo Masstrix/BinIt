@@ -234,6 +234,22 @@ h2 { font-size: 22px; }
 /* ---- drivers ------------------------------------------------------------------------ */
 
 .helmet-tile { display: grid; place-items: center; flex: none; }
+/* Helmet eyes: per-driver timings arrive as --blink / --look custom properties (see Helmet.tsx). */
+.helmet-look, .helmet-pop, .helmet-blink { transform-box: fill-box; transform-origin: center; }
+.helmet-look { animation: helmet-look var(--look, 9s) ease-in-out var(--look-delay, 0s) infinite; }
+.helmet-blink { animation: helmet-blink var(--blink, 4s) linear var(--blink-delay, 0s) infinite; }
+.helmet-pop { animation: helmet-pop 0.22s ease-out; }
+.helmet-shake { transform-origin: center; animation: helmet-shake 0.5s ease-in-out; }
+@keyframes helmet-blink { 0%, 93%, 100% { transform: scaleY(1); } 96.5% { transform: scaleY(0.1); } }
+@keyframes helmet-look {
+  0%, 30%, 100% { transform: translateX(0); }
+  36%, 52% { transform: translateX(var(--look-x, 1.2px)); }
+  60%, 70% { transform: translateX(calc(var(--look-x, 1.2px) * -0.6)); }
+  76% { transform: translateX(0); }
+}
+@keyframes helmet-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes helmet-shake { 0%, 100% { transform: rotate(0); } 20% { transform: rotate(-9deg); } 40% { transform: rotate(7deg); } 60% { transform: rotate(-5deg); } 80% { transform: rotate(3deg); } }
+@media (prefers-reduced-motion: reduce) { .helmet-look, .helmet-blink, .helmet-pop, .helmet-shake { animation: none; } }
 .driver-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
 .driver-btn {
   display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 8px 14px;

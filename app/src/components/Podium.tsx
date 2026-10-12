@@ -49,7 +49,7 @@ export function Podium({
               {e && helmets ? (
                 <span className="podium-avatar">
                   {b.place === 1 && <CrownBadge size={big ? 40 : 30} />}
-                  <Helmet color={d?.color ?? "#5B6488"} size={helmet(b.place)} mood={b.place === 1 ? "happy" : "idle"} />
+                  <Helmet color={d?.color ?? "#5B6488"} size={helmet(b.place)} seed={d?.id} mood={b.place === 1 ? "happy" : "idle"} />
                 </span>
               ) : (
                 b.place === 1 && e && <CrownBadge size={big ? 40 : 30} />
