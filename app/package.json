@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File ../scripts/build.ps1"
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.3.0",

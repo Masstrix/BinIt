@@ -1,4 +1,4 @@
-import { api, useAppState } from "../api";
+import { api, useAppState, type OverlayShow } from "../api";
 
 /** On/off switch for the in-game overlay. Same setting as Ctrl+Shift+H. */
 export function OverlayToggle({ compact = false }: { compact?: boolean }) {
@@ -14,6 +14,29 @@ export function OverlayToggle({ compact = false }: { compact?: boolean }) {
       <span className="overlay-toggle-label">In-game overlay</span>
       <button className="toggle" role="switch" aria-checked={enabled} aria-label="In-game overlay" onClick={flip} disabled={!status} />
     </label>
+  );
+}
+
+/** When the widgets are drawn: always, not in menus, or only while driving. */
+export function OverlayShowPicker() {
+  const { status } = useAppState();
+  const mode = status?.overlayShow ?? "drivingPaused";
+  const options: { value: OverlayShow; label: string; hint: string }[] = [
+    { value: "always", label: "Always", hint: "Even in menus" },
+    { value: "drivingPaused", label: "Not in menus", hint: "While driving, and when paused" },
+    { value: "driving", label: "Only driving", hint: "Hidden when paused too" },
+  ];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      <span className="overlay-toggle-label">Show widgets</span>
+      <div className="segmented" role="group" aria-label="When to show the widgets">
+        {options.map((o) => (
+          <button key={o.value} title={o.hint} aria-pressed={mode === o.value} disabled={!status || !status.overlayEnabled} onClick={() => api.setOverlayShow(o.value).catch(() => {})}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent } from "react";
 import { isTauri, useAppState } from "../api";
 import {
   ANCHORS,
@@ -12,9 +12,10 @@ import {
   type Anchor,
   type WidgetId,
 } from "../overlayLayout";
-import { OverlayFocusToggle, OverlayToggle } from "./OverlayToggle";
+import { OverlayFocusToggle, OverlayShowPicker, OverlayToggle } from "./OverlayToggle";
 import {
   LeaderboardCard,
+  QrCard,
   MOCK_DATA,
   MOCK_TOAST,
   SectionWidgets,
@@ -44,6 +45,38 @@ const ANCHOR_NAMES: Record<Anchor, string> = {
 
 const WIDGET_ORDER = Object.keys(WIDGETS) as WidgetId[];
 
+/** Tracks a CSS media query (phones, touch screens). */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => matchMedia(query).matches);
+  useEffect(() => {
+    const mq = matchMedia(query);
+    const on = () => setMatches(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, [query]);
+  return matches;
+}
+
+/** Where on the screen a widget goes: a 3 x 3 grid of big tap targets, the middle one hides it. */
+function PositionPicker({ widget, at, onPick }: { widget: WidgetId; at: Anchor | null; onPick: (to: Anchor | null) => void }) {
+  const cells: (Anchor | "hide")[] = ["top-left", "top-center", "top-right", "middle-left", "hide", "middle-right", "bottom-left", "bottom-center", "bottom-right"];
+  return (
+    <div className="ed-positions" role="group" aria-label={`Where ${WIDGETS[widget].label} goes`}>
+      {cells.map((c) =>
+        c === "hide" ? (
+          <button key={c} type="button" className="ed-pos hide" aria-pressed={at === null} onClick={() => onPick(null)}>
+            Hide
+          </button>
+        ) : (
+          <button key={c} type="button" className="ed-pos" aria-pressed={at === c} aria-label={ANCHOR_NAMES[c]} title={ANCHOR_NAMES[c]} onClick={() => onPick(c)}>
+            <span aria-hidden="true" />
+          </button>
+        ),
+      )}
+    </div>
+  );
+}
+
 interface DropTarget {
   anchor: Anchor;
   index: number;
@@ -66,6 +99,11 @@ export function OverlayEditor() {
   const [dragging, setDragging] = useState<WidgetId | null>(null);
   const [target, setTarget] = useState<DropTarget | null>(null);
   const [overTray, setOverTray] = useState(false);
+  // Touch (and pen) dragging: the browser's own drag and drop does not fire on touch screens.
+  const [ghost, setGhost] = useState<{ w: WidgetId; x: number; y: number } | null>(null);
+  const tray = useRef<HTMLDivElement>(null);
+  const compact = useMediaQuery("(max-width: 640px)");
+  const touch = useMediaQuery("(pointer: coarse), (max-width: 640px)");
 
   const frame = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.4);
@@ -153,11 +191,54 @@ export function OverlayEditor() {
     setOverTray(false);
   };
 
+  const touchDown = (w: WidgetId) => (e: PointerEvent<HTMLElement>) => {
+    if (e.pointerType === "mouse") return;
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Not capturable (e.g. a synthetic event): dragging still works while the pointer stays over this element.
+    }
+    setDragging(w);
+    setSelected(null);
+    setGhost({ w, x: e.clientX, y: e.clientY });
+  };
+  const insideTray = (x: number, y: number) => {
+    const r = tray.current?.getBoundingClientRect();
+    return !!r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  };
+  const touchMove = (e: PointerEvent<HTMLElement>) => {
+    if (!ghost) return;
+    setGhost({ ...ghost, x: e.clientX, y: e.clientY });
+    const overTrayNow = insideTray(e.clientX, e.clientY);
+    setOverTray(overTrayNow);
+    const f = frame.current?.getBoundingClientRect();
+    const inFrame = !!f && e.clientX >= f.left && e.clientX <= f.right && e.clientY >= f.top && e.clientY <= f.bottom;
+    setTarget(!overTrayNow && inFrame ? targetAt(e.clientX, e.clientY, ghost.w) : null);
+  };
+  const touchUp = (cancelled: boolean) => (e: PointerEvent<HTMLElement>) => {
+    if (!ghost) return;
+    if (!cancelled) {
+      if (insideTray(e.clientX, e.clientY)) place(ghost.w, null);
+      else if (target) place(ghost.w, target.anchor, target.index);
+    }
+    setGhost(null);
+    endDrag();
+  };
+  const touchHandlers = (w: WidgetId) => ({
+    onPointerDown: touchDown(w),
+    onPointerMove: touchMove,
+    onPointerUp: touchUp(false),
+    onPointerCancel: touchUp(true),
+  });
+
   /** Makes each widget in the preview individually draggable. */
   const itemProps: ItemProps = (w) => ({
     draggable: true,
     onDragStart: startDrag(w),
     onDragEnd: endDrag,
+    ...touchHandlers(w),
     className: `ed-item${dragging === w ? " is-dragging" : ""}`,
     title: `${WIDGETS[w].label}: drag to move`,
   });
@@ -191,6 +272,7 @@ export function OverlayEditor() {
           <h2 style={{ fontSize: 20 }}>Overlay layout</h2>
           <OverlayToggle />
           <OverlayFocusToggle />
+          <OverlayShowPicker />
         </div>
         <div className="segmented" role="group" aria-label="Game" style={{ flexWrap: "wrap" }}>
           {GAME_PROFILES.map((p) => (
@@ -299,6 +381,8 @@ export function OverlayEditor() {
       </div>
 
       <div
+        ref={tray}
+        className="ed-tray"
         onDragOver={(e) => {
           if (!dragging) return;
           e.preventDefault();
@@ -314,9 +398,6 @@ export function OverlayEditor() {
         }}
         aria-label="Widgets. Drop a widget here to hide it."
         style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))",
-          gap: 10,
           padding: 10,
           borderRadius: 18,
           background: overTray ? "rgba(106,88,245,0.18)" : "var(--panel-2)",
@@ -332,12 +413,8 @@ export function OverlayEditor() {
               draggable
               onDragStart={startDrag(w)}
               onDragEnd={endDrag}
+              className="ed-card"
               style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-                padding: 10,
-                borderRadius: 14,
                 cursor: "grab",
                 background: isSel ? "rgba(106,88,245,0.22)" : "var(--panel)",
                 border: `2px solid ${isSel ? "var(--violet)" : "var(--line)"}`,
@@ -345,7 +422,10 @@ export function OverlayEditor() {
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                <span style={{ fontWeight: 700 }}>{WIDGETS[w].label}</span>
+                <span style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="ed-handle" aria-hidden="true" title="Drag to the preview" {...touchHandlers(w)}>⠿</span>
+                  {WIDGETS[w].label}
+                </span>
                 <button
                   className={`chip ${at ? "pb" : "plain"}`}
                   style={{ border: "none", padding: "3px 8px" }}
@@ -356,12 +436,13 @@ export function OverlayEditor() {
                   {isSel ? "Click a spot…" : at ? ANCHOR_NAMES[at] : "Hidden"}
                 </button>
               </div>
-              <div style={{ height: 92, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: 10, background: "#2B3138", pointerEvents: "none" }}>
-                <div style={{ zoom: w === "leaderboard" ? 0.42 : w === "standings" ? 0.5 : 0.62 }}>
+              <div className="ed-preview" style={{ pointerEvents: "none" }}>
+                <div style={{ zoom: compact ? (w === "leaderboard" ? 0.9 : w === "standings" ? 0.95 : 0.85) : w === "leaderboard" ? 0.42 : w === "standings" ? 0.5 : 0.62 }}>
                   <WidgetPreview w={w} />
                 </div>
               </div>
               <span className="muted" style={{ fontSize: 12 }}>{WIDGETS[w].description}</span>
+              {touch && <PositionPicker widget={w} at={at} onPick={(to) => place(w, to)} />}
             </div>
           );
         })}
@@ -381,7 +462,14 @@ export function OverlayEditor() {
         </div>
       )}
 
+      {ghost && (
+        <div className="ed-ghost" style={{ left: ghost.x, top: ghost.y }} aria-hidden="true">
+          {WIDGETS[ghost.w].label}
+        </div>
+      )}
+
       <span className="muted" style={{ fontSize: 13 }}>
+        {touch ? "On a touch screen: pick a spot on each widget's grid below, or press and drag a widget (or its handle) onto the preview. " : ""}
         Drag widgets from the tray onto the screen, and drag them around the preview to move or reorder them. Drop one back on the tray to hide it.
         The preview uses example data. In game, challenge widgets only appear when a challenge is running for that track and car.
       </span>
@@ -422,6 +510,7 @@ function WidgetPreview({ w }: { w: WidgetId }) {
   if (w === "standings") return <StandingsCard data={MOCK_DATA} />;
   if (w === "timing") return <TimingCard data={MOCK_DATA} />;
   if (w === "leaderboard") return <LeaderboardCard data={MOCK_DATA} />;
+  if (w === "qr") return <QrCard data={MOCK_DATA} />;
   return <ToastCard toast={MOCK_TOAST} animate={false} />;
 }
 

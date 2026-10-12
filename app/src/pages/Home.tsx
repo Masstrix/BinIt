@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { api, useAppState, useCurrentChallenge, useDriverMap, useFetch, type Driver } from "../api";
 import { Helmet, Sparkle } from "../components/Helmet";
+import { LiveMap } from "../components/LiveMap";
+import { useSeatSwitcher } from "../components/SeatSwitcher";
 import { Podium } from "../components/Podium";
 import { LAP_BADGE, ago, countdown, gap, lapKind, lapTime, trackName } from "../format";
 
@@ -9,6 +11,9 @@ export function Home() {
   const driverMap = useDriverMap();
   const seat = status?.seat != null ? driverMap.get(status.seat) : undefined;
   const session = status?.session ?? null;
+  // Cut / off the track: the game has invalidated this lap (not just an out lap from the pits).
+  const cutLap = !!(status?.live?.driving && !status.live.outLap && !status.live.lapValid);
+  const swapped = cutLap && status?.live?.voidReason === "driverChange";
   const { challenge, board } = useCurrentChallenge();
 
   const comboBoard = useFetch(
@@ -33,26 +38,29 @@ export function Home() {
 
       <section className="hero" aria-label="Current driver">
         <Sparkle size={26} opacity={0.7} style={{ right: 36, top: 28 }} />
-        <Sparkle size={14} opacity={0.5} style={{ right: 80, top: 70 }} />
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 20 }}>
-          <span style={{ width: 92, height: 92, borderRadius: 26, background: "#EEF0FF", display: "grid", placeItems: "center" }}>
+        <Sparkle size={14} opacity={0.5} style={{ right: 80, top: 70 }} delay={0.9} />
+        <Sparkle size={10} opacity={0.6} style={{ right: 128, top: 24 }} delay={1.7} />
+        <Sparkle size={16} opacity={0.4} style={{ right: 22, top: 104 }} delay={2.4} />
+        <div className="hero-top">
+          <span className="hero-tile">
             <Helmet color={seat?.color ?? "#9AA3C7"} size={70} tile={false} />
           </span>
-          <div style={{ flex: "1 1 240px", minWidth: 0 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, opacity: 0.85 }}>{seat ? "Driving now" : "Nobody picked"}</div>
+          <div className="hero-who">
+            <div className="hero-kicker">{seat ? "Driving now" : "Nobody picked"}</div>
             <div className="hero-name">{seat?.name ?? "Guest"}</div>
-            <div style={{ opacity: 0.85, marginTop: 4 }}>
+            <div className="hero-sub">
               {seat ? `Every lap is saved to ${seat.name}` : "Laps are saved as guest laps and can be claimed later"}
             </div>
           </div>
-          <button className="btn white" onClick={() => document.getElementById("pick")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
-            Switch driver <span className="kbd">F8</span>
+          <button className="btn white hero-switch" onClick={() => document.getElementById("pick")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+            <span className="long">Switch driver</span>
+            <span className="short">Switch</span> <span className="kbd">F8</span>
           </button>
         </div>
 
         <div className="stat-grid">
-          <div className="stat">
-            <div className="label" style={{ color: "#fff", opacity: 0.85 }}>Current lap</div>
+          <div className={`stat${cutLap ? " invalid" : ""}`}>
+            <div className="label" style={{ color: "#fff", opacity: 0.85 }}>{swapped ? "Driver changed" : cutLap ? "Lap invalid" : "Current lap"}</div>
             <span className="mono">{status?.live?.driving ? lapTime(status.live.currentLapMs) : "--:--.---"}</span>
           </div>
           <div className="stat">
@@ -81,6 +89,8 @@ export function Home() {
         )}
       </section>
 
+      <LiveMap />
+
       <DriverPicker drivers={drivers} seatId={status?.seat ?? null} />
 
       <div className="row">
@@ -95,7 +105,7 @@ export function Home() {
                 {challenge.endsAt && <span className="chip plain mono">{countdown(challenge.endsAt)}</span>}
               </div>
               <Podium entries={board} drivers={driverMap} scale={110} helmets={false} />
-              <a href="#/challenges" style={{ fontWeight: 600 }}>See full standings →</a>
+              <a href={`#/challenges/${challenge.id}`} style={{ fontWeight: 600 }}>See full standings →</a>
             </>
           ) : (
             <>
@@ -152,6 +162,7 @@ export function Home() {
 }
 
 export function DriverPicker({ drivers, seatId }: { drivers: Driver[]; seatId: number | null }) {
+  const seat = useSeatSwitcher();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -182,7 +193,7 @@ export function DriverPicker({ drivers, seatId }: { drivers: Driver[]; seatId: n
                 className="driver-btn"
                 aria-pressed={active}
                 style={{ borderColor: active ? d.color : "transparent" }}
-                onClick={() => api.setSeat(active ? null : d.id)}
+                onClick={() => seat.choose(active ? null : d)}
               >
                 <Helmet color={d.color} size={60} />
                 <span className="name">{d.name}</span>
@@ -212,6 +223,7 @@ export function DriverPicker({ drivers, seatId }: { drivers: Driver[]; seatId: n
         <button className="btn" type="submit" disabled={!name.trim()}>Add + drive</button>
       </form>
       {error && <span className="error">{error}</span>}
+      {seat.dialog}
     </section>
   );
 }

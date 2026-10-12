@@ -6,6 +6,7 @@ import { api, type LiveTiming, useAppEvent, useAppState, useCurrentChallenge, us
 import { lapKind, lapTime, trackName } from "../format";
 import { WIDGETS, type WidgetId } from "../overlayLayout";
 import { Crown, Helmet } from "./Helmet";
+import { QrCode } from "./QrCode";
 
 const card = {
   borderRadius: 18,
@@ -26,15 +27,27 @@ export interface OverlayData {
   /** Top 5 on the current track + car, plus the seated driver's row if outside it. */
   comboTop: { position: number; name: string; color: string; timeMs: number; gapMs: number; isSeat: boolean }[];
   timing: LiveTiming | null;
+  /** The running lap clock, for when there's no reference lap to show a delta against. */
+  lapMs: number;
+  /** The game has invalidated the lap in progress (a cut): it won't be timed. */
+  lapInvalid: boolean;
+  /** "driverChange" when the seat changed hands mid-lap. */
+  lapVoidReason: string | null;
   outLap: boolean;
+  /** Address phones on the network can open (null when sharing is off or there is no network). */
+  url: string | null;
 }
 
 /** Everything the widgets show, from live app state. */
 export function useOverlayData(): OverlayData {
-  const { status } = useAppState();
+  const { status, online } = useAppState();
   const drivers = useDriverMap();
   const seat = status?.seat != null ? drivers.get(status.seat) : undefined;
   const session = status?.session ?? null;
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    api.server().then((s) => setUrl(s.urls[0] ?? null)).catch(() => setUrl(null));
+  }, [online]);
   // Only a challenge for exactly this track + car; otherwise challenge widgets hide.
   const { challenge, board } = useCurrentChallenge(true);
   const comboBoard = useFetch(
@@ -66,7 +79,11 @@ export function useOverlayData(): OverlayData {
     comboLabel: session ? `${trackName(session.track, session.layout)}` : null,
     comboTop,
     timing: status?.live?.driving ? status.live.timing : null,
+    lapMs: status?.live?.currentLapMs ?? 0,
+    lapInvalid: !!(status?.live?.driving && !status.live.outLap && !status.live.lapValid),
+    lapVoidReason: status?.live?.voidReason ?? null,
     outLap: !!(status?.live?.driving && status.live.outLap),
+    url,
   };
 }
 
@@ -101,7 +118,11 @@ export const MOCK_DATA: OverlayData = {
       { timeMs: null, deltaMs: null, status: "current" },
     ],
   },
+  lapMs: 71500,
+  lapInvalid: false,
+  lapVoidReason: null,
   outLap: false,
+  url: "http://192.168.0.20:7878",
 };
 
 export const MOCK_TOAST: Toast = { id: 0, tone: "pb", title: "New PB 1:42.318", detail: "Up to P2 in Imola Hot Lap Week" };
@@ -118,6 +139,8 @@ export function hasContent(w: WidgetId, data: OverlayData): boolean {
       return data.comboTop.length > 0;
     case "timing":
       return data.timing !== null || data.outLap;
+    case "qr":
+      return data.url !== null;
     default:
       return true;
   }
@@ -126,10 +149,19 @@ export function hasContent(w: WidgetId, data: OverlayData): boolean {
 /** Extra props per widget element: the layout editor uses this to make each one draggable. */
 export type ItemProps = (w: WidgetId) => HTMLAttributes<HTMLElement>;
 
-function StripStat({ label, value, color, extra }: { label: string; value: string; color?: string; extra?: string }) {
+/** Gold trophy that marks anything belonging to a challenge (same glyph as the app's nav and challenge pages). */
+function Trophy({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="var(--gold)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "none" }}>
+      <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3a3 3 0 0 1-3 4M7 5H4a3 3 0 0 0 3 4" />
+    </svg>
+  );
+}
+
+function StripStat({ label, value, color, extra, icon }: { label: string; value: string; color?: string; extra?: string; icon?: ReactNode }) {
   return (
     <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
-      <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>{label}</span>
+      <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>{icon}{label}</span>
       <span className="mono" style={{ fontSize: 16, color }}>
         {value} {extra && <span style={{ color: "var(--peach)" }}>{extra}</span>}
       </span>
@@ -156,6 +188,7 @@ export function StripCard({ items, data, itemProps }: { items: WidgetId[]; data:
             {w === "challenge" && (
               <StripStat
                 label="CHALLENGE"
+                icon={<Trophy size={12} />}
                 value={data.position ? `P${data.position}` : "—"}
                 extra={data.gapMs ? `+${(data.gapMs / 1000).toFixed(3)}` : undefined}
               />
@@ -170,8 +203,11 @@ export function StripCard({ items, data, itemProps }: { items: WidgetId[]; data:
 export function StandingsCard({ data }: { data: OverlayData }) {
   return (
     <div style={{ ...card, padding: "10px 14px", minWidth: 230, display: "flex", flexDirection: "column", gap: 6 }}>
-      <span style={{ font: "800 13px var(--font-display)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        {data.challengeName ?? "No challenge running"}
+      <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+        <Trophy />
+        <span style={{ font: "800 13px var(--font-display)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {data.challengeName ?? "No challenge running"}
+        </span>
       </span>
       {data.top3.length === 0 && <span className="muted" style={{ fontSize: 13 }}>No laps yet</span>}
       {data.top3.map((r, i) => (
@@ -200,11 +236,28 @@ export function TimingCard({ data }: { data: OverlayData }) {
     ) : null;
   }
   const d = t.deltaMs;
+  const cut = data.lapInvalid;
   return (
-    <div style={{ ...card, padding: "10px 14px", minWidth: 240, display: "flex", flexDirection: "column", gap: 8 }}>
-      <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
-        <span className="mono" style={{ fontSize: 24, color: deltaColour(d) }}>{deltaText(d)}</span>
-        <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>{t.reference ? `VS ${t.reference.toUpperCase()}` : "NO REFERENCE"}</span>
+    <div style={{ ...card, padding: "10px 14px", minWidth: 240, display: "flex", flexDirection: "column", gap: 8, ...(cut ? { border: "1px solid rgba(255,107,138,0.7)", background: "rgba(48,14,28,0.88)" } : {}) }}>
+      {cut && (
+        <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, color: "#FF6B8A" }}>{data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : "LAP INVALID"}</span>
+          <span style={{ fontSize: 11, color: "#FF8BA3", fontWeight: 600 }}>WON'T BE TIMED</span>
+        </span>
+      )}
+      <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, ...(cut ? { opacity: 0.55, textDecoration: "line-through" } : {}) }}>
+        {t.reference ? (
+          <>
+            <span className="mono" style={{ fontSize: 24, color: cut ? "#FF8BA3" : deltaColour(d) }}>{deltaText(d)}</span>
+            <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>VS {t.reference.toUpperCase()}</span>
+          </>
+        ) : (
+          // First lap on this track: nothing to compare against yet, so show the lap clock.
+          <>
+            <span className="mono" style={{ fontSize: 24 }}>{lapTime(data.lapMs)}</span>
+            <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>FIRST LAP · NO REFERENCE</span>
+          </>
+        )}
       </span>
       <span style={{ display: "flex", gap: 4 }}>
         {t.sectors.map((s, i) => (
@@ -229,6 +282,19 @@ function deltaColour(ms: number | null) {
 
 function deltaText(ms: number | null) {
   return ms === null ? "--.---" : `${ms <= 0 ? "-" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
+}
+
+/** Always-visible QR code so anyone in the room can scan it to open TimeTrial on their phone. */
+export function QrCard({ data }: { data: OverlayData }) {
+  return (
+    <div style={{ ...card, padding: 10, display: "flex", alignItems: "center", gap: 12 }}>
+      <QrCode url={data.url} size={104} />
+      <span style={{ display: "flex", flexDirection: "column", gap: 2, maxWidth: 130 }}>
+        <span style={{ font: "800 13px var(--font-display)" }}>Scan to join</span>
+        <span className="mono" style={{ fontSize: 10.5, color: "var(--muted)", overflowWrap: "anywhere" }}>{data.url?.replace("http://", "")}</span>
+      </span>
+    </div>
+  );
 }
 
 /** Top of the leaderboard for what's being driven right now, independent of challenges. */
@@ -392,6 +458,7 @@ export function SectionWidgets({
         if (g === "standings") return wrap(g, <StandingsCard data={data} />);
         if (g === "timing") return wrap(g, <TimingCard data={data} />);
         if (g === "leaderboard") return wrap(g, <LeaderboardCard data={data} />);
+        if (g === "qr") return wrap(g, <QrCard data={data} />);
         const shown = toast ?? (preview ? MOCK_TOAST : null);
         return shown ? wrap(g, <ToastCard toast={shown} animate={!preview} />) : null;
       })}

@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
-import qrcode from "qrcode-generator";
+import { useState } from "react";
 import { api, useAppState, useFetch } from "../api";
 import { OverlayEditor } from "../components/OverlayEditor";
+import { QrCode } from "../components/QrCode";
 
 const GAMES = [
   { key: "acevo", name: "AC EVO", detail: "Laps · shared memory", ready: true },
@@ -16,14 +16,6 @@ export function GamesPage() {
   const server = useFetch(() => api.server(), [online]);
   const [lanSaved, setLanSaved] = useState<boolean | null>(null);
   const url = server?.urls[0];
-
-  const qr = useMemo(() => {
-    if (!url) return null;
-    const q = qrcode(0, "M");
-    q.addData(url);
-    q.make();
-    return q.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
-  }, [url]);
 
   const lanOn = lanSaved ?? server?.lanEnabled ?? true;
 
@@ -71,14 +63,7 @@ export function GamesPage() {
       </section>
 
       <section className="card" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 20 }} aria-label="Network access">
-        <div
-          style={{ width: 120, height: 120, borderRadius: 18, background: "#EEF0FF", padding: 6, flex: "none", display: "grid", placeItems: "center", color: "var(--bg)", fontSize: 12 }}
-          role="img"
-          aria-label={url ? `QR code for ${url}` : "No network address"}
-          dangerouslySetInnerHTML={qr ? { __html: qr } : undefined}
-        >
-          {qr ? undefined : "No address"}
-        </div>
+        <QrCode url={url} />
         <div style={{ flex: "1 1 300px", minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
           <h2 style={{ fontSize: 20 }}>Open it anywhere in the office</h2>
           <span className="muted">Anyone on the network can view leaderboards and pick the next driver from their phone.</span>

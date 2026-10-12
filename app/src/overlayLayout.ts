@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { api, useAppEvent, type AppEvent } from "./api";
 
-export type WidgetId = "driver" | "pb" | "challenge" | "timing" | "standings" | "leaderboard" | "toasts";
+export type WidgetId = "driver" | "pb" | "challenge" | "timing" | "standings" | "leaderboard" | "qr" | "toasts";
 export type Anchor =
   | "top-left"
   | "top-center"
@@ -28,6 +28,7 @@ export const WIDGETS: Record<WidgetId, { label: string; description: string; com
   timing: { label: "Live timing", description: "Delta to PB and a purple / green / yellow bar per sector", compact: false },
   standings: { label: "Challenge top 3", description: "Mini podium for the running challenge", compact: false },
   leaderboard: { label: "Track leaderboard", description: "Top 5 on this track and car, plus where the driver is", compact: false },
+  qr: { label: "Phone QR code", description: "Scan to open TimeTrial on a phone: pick the driver, see the standings", compact: false },
   toasts: { label: "Pop-ups", description: "New PB, record, new leader, cut lap. Shows for 4s", compact: false },
 };
 

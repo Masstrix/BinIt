@@ -1,6 +1,10 @@
 import { useState } from "react";
-import { api, useAppState, type Driver } from "../api";
-import { Helmet, Sparkle } from "../components/Helmet";
+import { api, useAppState, useFetch, type Driver, type DriverRating } from "../api";
+import { TIER_ORDER, tierByKey, tierOf } from "../driverStats";
+import { Helmet } from "../components/Helmet";
+import { Modal } from "../components/Modal";
+import { useSeatSwitcher } from "../components/SeatSwitcher";
+import { DriverProgress } from "./DriverProgress";
 
 export const PALETTE = [
   ["#FF9F6B", "Peach"],
@@ -13,21 +17,63 @@ export const PALETTE = [
   ["#EEF0FF", "White"],
 ] as const;
 
-export function DriversPage() {
+export function DriversPage({ path = "/drivers" }: { path?: string }) {
   const { drivers, status } = useAppState();
+  const [adding, setAdding] = useState(false);
+  // Speed scores change whenever laps do (useFetch refetches then).
+  const ratings = useFetch(() => api.driverRatings(), []) ?? [];
+  const ratingOf = new Map(ratings.map((r) => [r.driverId, r]));
+  // #/drivers/<id>: one driver's progress over time.
+  const open = path.match(/^\/drivers\/(\d+)/);
+  if (open) return <DriverProgress id={Number(open[1])} />;
   return (
     <>
-      <h1>Drivers</h1>
-      <div className="row" style={{ alignItems: "flex-start" }}>
-        <NewDriver />
-        <section className="card" style={{ flex: "1 1 360px" }}>
-          <h2>Everyone ({drivers.length})</h2>
-          {drivers.length === 0 && <div className="empty">Nobody yet. Be the first!</div>}
-          <div className="list">
-            {drivers.map((d) => <DriverRow key={d.id} driver={d} seated={status?.seat === d.id} />)}
-          </div>
-        </section>
+      <div className="head" style={{ alignItems: "center" }}>
+        <h1>Drivers</h1>
+        <button className="btn" onClick={() => setAdding(true)}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          New driver
+        </button>
       </div>
+
+      <section className="card">
+        <h2>Everyone ({drivers.length})</h2>
+        {drivers.length === 0 && (
+          <div className="empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+            Nobody yet. Be the first!
+            <button className="btn big" onClick={() => setAdding(true)}>Add a driver</button>
+          </div>
+        )}
+        {drivers.length > 0 && (
+          <span className="muted" style={{ fontSize: 13 }}>
+            Grouped by speed score: 100 means quickest on every track and car you share with others, and each point below is about 1% slower.
+          </span>
+        )}
+        {TIER_ORDER.map((key) => {
+          const group = drivers
+            .filter((d) => tierOf(ratingOf.get(d.id)?.score).key === key)
+            .sort((a, b) => (ratingOf.get(b.id)?.score ?? -1) - (ratingOf.get(a.id)?.score ?? -1) || a.name.localeCompare(b.name));
+          if (group.length === 0) return null;
+          const tier = tierByKey(key);
+          return (
+            <div key={key} className="tier-group">
+              <div className="tier-head">
+                <span style={{ color: tier.color, fontWeight: 800 }}>{tier.label}</span>
+                <span className="muted" style={{ fontSize: 13 }}>{tier.blurb}</span>
+              </div>
+              <div className="driver-cards">
+                {group.map((d) => <DriverCard key={d.id} driver={d} seated={status?.seat === d.id} rating={ratingOf.get(d.id)} />)}
+              </div>
+            </div>
+          );
+        })}
+      </section>
+
+      {adding && (
+        <Modal title="New driver" narrow onClose={() => setAdding(false)}>
+          <NewDriverForm onDone={() => setAdding(false)} />
+        </Modal>
+      )}
     </>
   );
 }
@@ -49,57 +95,59 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (c: string)
   );
 }
 
-function NewDriver() {
+/** Name and a helmet colour: the whole sign-up. Lives in a dialog so the page stays about the drivers. */
+function NewDriverForm({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState("");
   const [color, setColor] = useState<string>(PALETTE[5][0]);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const submit = async (seat: boolean) => {
+    setBusy(true);
     try {
       await api.addDriver(name, color, seat);
-      setName("");
-      setError(null);
+      onDone();
       if (seat) location.hash = "#/";
     } catch (e) {
       setError((e as Error).message);
+      setBusy(false);
     }
   };
 
   return (
     <form
-      className="card"
-      style={{ flex: "1 1 420px", alignItems: "center", textAlign: "center", gap: 22, position: "relative", overflow: "hidden" }}
+      className="modal-form"
       onSubmit={(e) => {
         e.preventDefault();
         submit(true);
       }}
     >
-      <Sparkle size={26} color="#A9AEFF" style={{ left: 30, top: 30 }} />
-      <Sparkle size={16} color="#FF9F6B" style={{ right: 40, top: 70 }} opacity={0.7} />
-      <Helmet color={color} size={132} />
-      <div>
-        <h2 style={{ fontSize: 28 }}>New driver</h2>
-        <div className="muted" style={{ marginTop: 6 }}>Just a name. That's it.</div>
+      <div className="modal-body" style={{ alignItems: "center", textAlign: "center", gap: 18 }}>
+        <Helmet color={color} size={84} />
+        <input
+          className="input"
+          data-autofocus
+          aria-label="Name"
+          value={name}
+          maxLength={32}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Your name"
+          style={{ minHeight: 56, fontSize: 20, fontWeight: 700, textAlign: "center", width: "100%" }}
+        />
+        <ColorPicker value={color} onChange={setColor} />
+        {error && <span className="error">{error}</span>}
+        <span className="muted" style={{ fontSize: 13 }}>No passwords: anyone can pick any name. Play fair.</span>
       </div>
-      <input
-        className="input"
-        aria-label="Your name"
-        value={name}
-        maxLength={32}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Your name"
-        style={{ minHeight: 64, fontSize: 24, fontWeight: 700, textAlign: "center", borderColor: "var(--violet)" }}
-      />
-      <ColorPicker value={color} onChange={setColor} />
-      {error && <span className="error">{error}</span>}
-      <button className="btn big" type="submit" disabled={!name.trim()} style={{ width: "100%", minHeight: 60 }}>Let's race</button>
-      <button className="btn ghost" type="button" disabled={!name.trim()} onClick={() => submit(false)}>Just add (don't seat)</button>
-      <span className="muted" style={{ fontSize: 13 }}>No passwords: anyone can pick any name. Play fair.</span>
+      <div className="modal-foot">
+        <button className="btn ghost" type="button" disabled={!name.trim() || busy} onClick={() => submit(false)}>Just add</button>
+        <button className="btn big" type="submit" disabled={!name.trim() || busy}>Let's race</button>
+      </div>
     </form>
   );
 }
 
-function DriverRow({ driver, seated }: { driver: Driver; seated: boolean }) {
+function DriverCard({ driver, seated, rating }: { driver: Driver; seated: boolean; rating?: DriverRating }) {
+  const seat = useSeatSwitcher();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(driver.name);
   const [color, setColor] = useState(driver.color);
@@ -107,7 +155,7 @@ function DriverRow({ driver, seated }: { driver: Driver; seated: boolean }) {
 
   if (editing) {
     return (
-      <div className="list-row" style={{ flexDirection: "column", alignItems: "stretch" }}>
+      <div className="driver-card editing">
         <input className="input" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" maxLength={32} />
         <ColorPicker value={color} onChange={setColor} />
         {error && <span className="error">{error}</span>}
@@ -131,15 +179,32 @@ function DriverRow({ driver, seated }: { driver: Driver; seated: boolean }) {
     );
   }
 
+  const fastestOn = rating?.fastestOn ?? 0;
   return (
-    <div className="list-row">
-      <Helmet color={driver.color} size={44} />
-      <span className="grow">
-        <span style={{ fontWeight: 700 }}>{driver.name}</span>
-        {seated && <span style={{ fontSize: 13, color: "var(--peach)" }}>in the seat</span>}
+    <div className="driver-card" data-seated={seated || undefined}>
+      <div className="dc-top">
+        <Helmet color={driver.color} size={52} />
+        <a className="dc-name driver-link" href={`#/drivers/${driver.id}`} title={`See how ${driver.name} has improved`}>
+          <span style={{ fontWeight: 700, fontSize: 17, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{driver.name}</span>
+          <span className="dc-sub">
+            {seated && <span style={{ color: "var(--peach)" }}>in the seat</span>}
+            {seated && fastestOn > 0 && " · "}
+            {fastestOn > 0 && <span className="muted">fastest on {fastestOn}</span>}
+          </span>
+        </a>
+        {rating?.score != null && (
+          <span className="speed-score" title={`Speed score from ${rating.combos} shared ${rating.combos === 1 ? "track and car" : "tracks and cars"}`}>
+            <span className="mono">{rating.score.toFixed(1)}</span>
+            <span className="label">speed</span>
+          </span>
+        )}
+      </div>
+      <span className="driver-actions">
+        <a className="chip plain" href={`#/drivers/${driver.id}`}>Progress</a>
+        {!seated && <button className="chip plain" onClick={() => seat.choose(driver)}>Drive</button>}
+        <button className="chip plain" onClick={() => setEditing(true)}>Edit</button>
       </span>
-      {!seated && <button className="chip plain" style={{ border: "none", minHeight: 36 }} onClick={() => api.setSeat(driver.id)}>Drive</button>}
-      <button className="chip plain" style={{ border: "none", minHeight: 36 }} onClick={() => setEditing(true)}>Edit</button>
+      {seat.dialog}
     </div>
   );
 }

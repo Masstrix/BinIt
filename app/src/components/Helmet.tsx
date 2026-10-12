@@ -27,9 +27,10 @@ export function Crown({ size = 26 }: { size?: number }) {
   );
 }
 
-export function Sparkle({ size = 20, color = "#fff", opacity = 0.6, style }: { size?: number; color?: string; opacity?: number; style?: CSSProperties }) {
+/** A four-point star that twinkles (offset with `delay` seconds so a group does not pulse in sync). */
+export function Sparkle({ size = 20, color = "#fff", opacity = 0.6, style, delay = 0 }: { size?: number; color?: string; opacity?: number; style?: CSSProperties; delay?: number }) {
   return (
-    <svg className="sparkle" width={size} height={size} viewBox="0 0 24 24" style={style} aria-hidden="true">
+    <svg className="sparkle" width={size} height={size} viewBox="0 0 24 24" style={{ ...style, animationDelay: `${delay}s` }} aria-hidden="true">
       <path d="M12 0C13 7 17 11 24 12C17 13 13 17 12 24C11 17 7 13 0 12C7 11 11 7 12 0Z" fill={color} opacity={opacity} />
     </svg>
   );

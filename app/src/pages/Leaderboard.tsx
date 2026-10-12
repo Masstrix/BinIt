@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-import { api, useAppState, useDriverMap, useFetch, type Combo } from "../api";
-import { Dropdown } from "../components/Dropdown";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { api, useAppState, useCatalogue, useDriverMap, useFetch, useTrackMaps, type Combo } from "../api";
+import { CarBadge, carItems, drivenTrackItems, findMap, TrackThumb } from "../catalogueItems";
+import { Picker } from "../components/Picker";
 import { Helmet } from "../components/Helmet";
-import { ago, gameName, gap, lapTime, trackName } from "../format";
+import { TrackHero } from "../components/TrackHero";
+import { useCompactTable } from "../useCompactTable";
+import { usePersistedState } from "../persist";
+import { SECTOR_MINT as MINT, SECTOR_PURPLE as PURPLE, ago, bestSectors as fastestSectors, gameName, gap, gridMinWidth, lapTime, sectorColor } from "../format";
 
 type Period = "today" | "week" | "all";
 
@@ -15,8 +19,6 @@ function periodStart(p: Period): number | null {
 }
 
 const CAR_KEY = "tt.leaderboard.car";
-const PURPLE = "#C38BFF";
-const MINT = "#4BE3A6";
 
 const trackKey = (c: Pick<Combo, "game" | "track" | "layout">) => `${c.game}|${c.track}|${c.layout}`;
 
@@ -31,7 +33,7 @@ export function LeaderboardPage() {
     return [...seen.values()];
   }, [combos]);
 
-  const [track, setTrack] = useState<string | null>(null);
+  const [track, setTrack] = usePersistedState<string | null>("leaderboard.track", null, (v) => typeof v === "string");
   // The car you picked sticks across track changes (and restarts); tracks where nobody
   // has driven it fall back to "Any car" without forgetting the pick.
   const [pickedCar, setPickedCarState] = useState<string | null>(() => {
@@ -50,12 +52,14 @@ export function LeaderboardPage() {
       // Storage unavailable: the pick just isn't remembered.
     }
   };
-  const [period, setPeriod] = useState<Period>("all");
-  const [includeInvalid, setIncludeInvalid] = useState(false);
+  const [period, setPeriod] = usePersistedState<Period>("leaderboard.period", "all", (v) => v === "today" || v === "week" || v === "all");
+  const [includeInvalid, setIncludeInvalid] = usePersistedState("leaderboard.includeInvalid", false, (v) => typeof v === "boolean");
 
   // Default to what's being driven right now, else the first track with laps.
   useEffect(() => {
-    if (track || tracks.length === 0) return;
+    if (tracks.length === 0) return; // still loading: keep what was remembered
+    if (track && tracks.some((x) => trackKey(x) === track)) return; // a remembered track that still has laps
+
     const s = status?.session;
     const pick = (s && tracks.find((t) => trackKey(t) === trackKey(s))) || tracks[0];
     setTrack(trackKey(pick));
@@ -63,8 +67,20 @@ export function LeaderboardPage() {
   }, [tracks, status?.session, track]);
 
   const selected = tracks.find((t) => trackKey(t) === track);
+  const catalogue = useCatalogue(selected?.game ?? null);
+  const maps = useTrackMaps(selected?.game ?? null);
   const carsHere = combos.filter((c) => selected && trackKey(c) === trackKey(selected)).map((c) => c.car);
   const car = pickedCar && carsHere.includes(pickedCar) ? pickedCar : null;
+  const trackPickItems = useMemo(
+    () => drivenTrackItems(combos, catalogue, maps),
+    [combos, catalogue, maps],
+  );
+  const carPickItems = useMemo(() => {
+    const items = carItems(catalogue, { only: new Set(carsHere) });
+    // Cars the catalogue somehow lacks still get listed.
+    const known = new Set(items.map((i) => i.value));
+    return [...items, ...carsHere.filter((c) => !known.has(c)).map((c) => ({ value: c, label: c, visual: <CarBadge name={c} /> }))];
+  }, [catalogue, carsHere.join("|")]);
 
   const board =
     useFetch(
@@ -79,45 +95,49 @@ export function LeaderboardPage() {
               includeInvalid,
             })
         : null,
-      [track, car, period, includeInvalid],
+      // `selected` resolves only once the laps list has loaded, which with a remembered track is after the first render.
+      [track, selected !== undefined, car, period, includeInvalid],
     ) ?? [];
 
+  // Best lap per car on this track (the "Cars" view), under the same period and cut-lap filters as the board.
   const records =
     useFetch(
       selected
         ? () =>
             Promise.all(
-              carsHere.slice(0, 6).map(async (c) => {
-                const top = await api.leaderboard({ game: selected.game, track: selected.track, layout: selected.layout, car: c });
+              carsHere.slice(0, 24).map(async (c) => {
+                const top = await api.leaderboard({ game: selected.game, track: selected.track, layout: selected.layout, car: c, from: periodStart(period), includeInvalid });
                 return { car: c, top: top[0] };
               }),
             )
         : null,
-      [track, carsHere.join("|")],
+      [track, selected !== undefined, carsHere.join("|"), period, includeInvalid],
     ) ?? [];
+  const carRows = records.filter((r) => r.top).sort((a, b) => a.top!.timeMs - b.top!.timeMs);
+  const [view, setView] = usePersistedState<"drivers" | "cars">("leaderboard.view", "drivers", (v) => v === "drivers" || v === "cars");
 
   const seat = status?.seat ?? null;
+  // Someone is driving the selected track right now: show them on its map.
+  const liveHere =
+    selected && status?.session && trackKey(status.session) === trackKey(selected) && status.live?.driving && status.live.position
+      ? { name: (seat != null ? driverMap.get(seat)?.name : undefined) ?? "Guest", position: status.live.position as [number, number] }
+      : null;
 
   // Fastest time for each sector on this board: purple, like a timing screen.
-  const sectorCount = Math.max(0, ...board.map((e) => e.sectorsMs.length));
-  const bestSectors = Array.from({ length: sectorCount }, (_, i) => {
-    const times = board.map((e) => e.sectorsMs[i]).filter((t): t is number => t > 0);
-    return times.length ? Math.min(...times) : null;
-  });
-  const cols = `56px minmax(160px, 1fr) 120px 72px ${bestSectors.map(() => "72px").join(" ")} 56px`;
+  const bestSectors = fastestSectors(board);
+  const sectorCount = bestSectors.length;
+  const cols = `44px minmax(140px, 1fr) 132px 64px ${bestSectors.map(() => "56px").join(" ")} 44px`;
+  const carCols = "44px minmax(150px, 1fr) 132px minmax(140px, 1fr) 76px";
+  // The Cars view only exists where the switch is shown (more than one car has laps here).
+  const cars = view === "cars" && carsHere.length > 1 && carRows.length > 0;
+  const tableCols = cars ? carCols : cols;
+  const { ref: tableRef, compact } = useCompactTable(gridMinWidth(tableCols));
   const idealMs = sectorCount > 0 && bestSectors.every((t) => t !== null) ? bestSectors.reduce((a, t) => a! + t!, 0)! : null;
 
   return (
     <>
       <div className="head" style={{ alignItems: "center" }}>
         <h1>Leaderboard</h1>
-        <div className="segmented" role="group" aria-label="Period">
-          {(["today", "week", "all"] as Period[]).map((p) => (
-            <button key={p} aria-pressed={period === p} onClick={() => setPeriod(p)}>
-              {p === "today" ? "Today" : p === "week" ? "This week" : "All time"}
-            </button>
-          ))}
-        </div>
       </div>
 
       {tracks.length === 0 ? (
@@ -126,21 +146,26 @@ export function LeaderboardPage() {
         <>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             {selected && <span className="filter-pill on">{gameName(selected.game)}</span>}
-            <Dropdown
+            <Picker
               variant="pill"
               label="Track"
               value={track ?? ""}
-              options={tracks.map((t) => ({ value: trackKey(t), label: trackName(t.track, t.layout) }))}
-              onChange={(v) => {
-                setTrack(v);
+              items={trackPickItems}
+              onChange={setTrack}
+              tagLabel="Country"
+              visualOf={(v) => {
+                const t = tracks.find((x) => trackKey(x) === v);
+                return <TrackThumb map={t ? findMap(maps, t.track, t.layout) : undefined} />;
               }}
             />
-            <Dropdown
+            <Picker
               variant="pill"
               label="Car"
               value={car ?? ""}
-              options={[{ value: "", label: "Any car" }, ...carsHere.map((c) => ({ value: c, label: c }))]}
+              anyLabel="Any car"
+              items={carPickItems}
               onChange={(v) => setPickedCar(v || null)}
+              tagLabel="Class"
             />
             <button className="filter-pill" aria-pressed={!includeInvalid} onClick={() => setIncludeInvalid(!includeInvalid)}>
               {!includeInvalid && (
@@ -150,93 +175,158 @@ export function LeaderboardPage() {
             </button>
           </div>
 
-          <div className="row" style={{ alignItems: "flex-start" }}>
-            <section className="card lb" style={{ flex: "999 1 800px", minWidth: 0 }} aria-label="Leaderboard">
-              {board.length === 0 ? (
-                <div className="empty">No laps in this period.</div>
-              ) : (
-                <div className="lb-scroll">
-                  <div className="lb-grid lb-head" style={{ gridTemplateColumns: cols }}>
+          {selected && (
+            <TrackHero
+              game={selected.game}
+              track={selected.track}
+              layout={selected.layout}
+              catalogue={catalogue}
+              maps={maps}
+              car={car}
+              drivers={board.length}
+              laps={board.reduce((n, e) => n + e.lapCount, 0)}
+              idealMs={idealMs}
+              live={liveHere}
+            >
+              <div className="segmented" role="group" aria-label="Period">
+                {(["today", "week", "all"] as Period[]).map((p) => (
+                  <button key={p} aria-pressed={period === p} onClick={() => setPeriod(p)}>
+                    {p === "today" ? "Today" : p === "week" ? "This week" : "All time"}
+                  </button>
+                ))}
+              </div>
+            </TrackHero>
+          )}
+
+            <section className="card lb" aria-label="Leaderboard">
+              {carsHere.length > 1 && (
+                <div className="lb-views segmented" role="group" aria-label="Group by">
+                  <button aria-pressed={!cars} onClick={() => setView("drivers")}>Drivers</button>
+                  <button aria-pressed={cars} onClick={() => setView("cars")}>Cars</button>
+                </div>
+              )}
+              {cars ? (
+                <div className="lb-scroll" style={{ "--lb-min": `${gridMinWidth(carCols)}px` } as CSSProperties} ref={tableRef} data-compact={compact || undefined}>
+                  <div className="lb-grid lb-head" style={{ gridTemplateColumns: carCols }}>
                     <span style={{ textAlign: "center" }}>POS</span>
-                    <span>DRIVER</span>
+                    <span>CAR</span>
                     <span className="r">BEST LAP</span>
-                    <span className="r">GAP</span>
-                    {bestSectors.map((_, i) => (
-                      <span key={i} className="r">S{i + 1}</span>
-                    ))}
-                    <span className="r">LAPS</span>
+                    <span style={{ paddingLeft: 14 }}>DRIVER</span>
+                    <span className="r">SET</span>
                   </div>
-                  {board.map((e, idx) => {
+                  {carRows.map((r, idx) => {
+                    const e = r.top!;
                     const d = e.driverId != null ? driverMap.get(e.driverId) : undefined;
-                    const color = d?.color ?? "#5B6488";
-                    const top = idx === 0;
-                    const podium = idx < 3;
-                    const me = e.driverId != null && e.driverId === seat;
+                    const info = catalogue?.cars.find((c) => c.name === r.car);
                     return (
-                      <div
-                        key={e.lapId}
-                        className={`lb-grid lb-row${top ? " top" : podium ? " lb-podium" : ""}`}
-                        style={{
-                          gridTemplateColumns: cols,
-                          ...(me && !top ? { background: `${color}1F`, borderColor: `${color}73` } : {}),
+                      <button
+                        key={r.car}
+                        type="button"
+                        className={`lb-grid lb-row lb-btn${idx === 0 ? " top" : ""}`}
+                        style={{ gridTemplateColumns: carCols }}
+                        onClick={() => {
+                          setPickedCar(r.car);
+                          setView("drivers");
                         }}
+                        aria-label={`Show the ${r.car} leaderboard`}
                       >
-                        <span className="lb-pos">{e.position}</span>
-                        <span style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
-                          <Helmet color={color} size={top ? 60 : podium ? 52 : 44} />
+                        <span className="lb-pos">{idx + 1}</span>
+                        <span className="lb-c-driver" style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+                          <span style={{ flex: "none", width: 48, height: 40 }}><CarBadge brand={info?.brand} name={r.car} /></span>
                           <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                            <span className="lb-name">{d?.name ?? "Guest"}</span>
-                            <span className="lb-meta" style={{ color: me ? color : "var(--muted)" }}>
-                              {me ? "In the seat · " : ""}
-                              {car ? ago(e.setAt) : `${e.car} · ${ago(e.setAt)}`}
-                            </span>
+                            <span className="lb-name">{r.car}</span>
+                            <span className="lb-meta" style={{ color: "var(--muted)" }}>{[info?.brand, info?.class].filter(Boolean).join(" · ") || " "}</span>
                           </span>
                         </span>
                         <span className="mono r lb-time">{lapTime(e.timeMs)}</span>
-                        <span className="mono r lb-small" style={{ color: "var(--muted)" }}>{top ? "—" : gap(e.gapMs)}</span>
-                        {bestSectors.map((best, i) => {
-                          const t = e.sectorsMs[i];
-                          const own = e.bestSectorsMs[i];
-                          const colour = !(t > 0) ? "var(--muted)" : t === best ? PURPLE : own != null && t <= own ? MINT : "var(--text-2)";
-                          return (
-                            <span key={i} className="mono r lb-small" style={{ color: colour }}>
-                              {t > 0 ? (t / 1000).toFixed(3) : "—"}
-                            </span>
-                          );
-                        })}
-                        <span className="mono r lb-small" style={{ color: "var(--text-2)" }}>{e.lapCount}</span>
-                      </div>
+                        <span className="lb-break" />
+                        <span className="lb-c-stat lb-driver-cell" data-label="DRIVER">
+                          <Helmet color={d?.color ?? "#5B6488"} size={28} />
+                          <span className="lb-name" style={{ fontSize: 14 }}>{d?.name ?? "Guest"}</span>
+                        </span>
+                        <span className="r lb-small lb-c-stat" data-label="SET" style={{ color: "var(--muted)" }}>{ago(e.setAt)}</span>
+                      </button>
                     );
                   })}
                 </div>
+              ) : (
+                <>
+                {board.length === 0 ? (
+                  <div className="empty">No laps in this period.</div>
+                ) : (
+                  <div className="lb-scroll" style={{ "--lb-min": `${gridMinWidth(cols)}px` } as CSSProperties} ref={tableRef} data-compact={compact || undefined}>
+                    <div className="lb-grid lb-head" style={{ gridTemplateColumns: cols }}>
+                      <span style={{ textAlign: "center" }}>POS</span>
+                      <span>DRIVER</span>
+                      <span className="r">BEST LAP</span>
+                      <span className="r">GAP</span>
+                      {bestSectors.map((_, i) => (
+                        <span key={i} className="r">S{i + 1}</span>
+                      ))}
+                      <span className="r">LAPS</span>
+                    </div>
+                    {board.map((e, idx) => {
+                      const d = e.driverId != null ? driverMap.get(e.driverId) : undefined;
+                      const color = d?.color ?? "#5B6488";
+                      const top = idx === 0;
+                      const podium = idx < 3;
+                      const me = e.driverId != null && e.driverId === seat;
+                      return (
+                        <div
+                          key={e.lapId}
+                          className={`lb-grid lb-row${top ? " top" : podium ? " lb-podium" : ""}`}
+                          style={{
+                            gridTemplateColumns: cols,
+                            ...(me && !top ? { background: `${color}1F`, borderColor: `${color}73` } : {}),
+                          }}
+                        >
+                          <span className="lb-pos">{e.position}</span>
+                          <span className="lb-c-driver" style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+                            <Helmet color={color} size={top ? 60 : podium ? 52 : 44} />
+                            <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                              <span className="lb-name">{d?.name ?? "Guest"}</span>
+                              <span className="lb-meta" style={{ color: me ? color : "var(--muted)" }}>
+                                {me ? "In the seat · " : ""}
+                                {car ? ago(e.setAt) : `${e.car} · ${ago(e.setAt)}`}
+                              </span>
+                            </span>
+                          </span>
+                          <span className="mono r lb-time">{lapTime(e.timeMs)}</span>
+                          <span className="lb-break" />
+                  <span className="mono r lb-small lb-c-stat" data-label="GAP" style={{ color: "var(--muted)" }}>{top ? "—" : gap(e.gapMs)}</span>
+                          {bestSectors.map((best, i) => {
+                            const t = e.sectorsMs[i];
+                            return (
+                              <span key={i} className="mono r lb-small lb-c-stat" data-label={`S${i + 1}`} style={{ color: sectorColor(t, best, e.bestSectorsMs[i]) }}>
+                                {t > 0 ? (t / 1000).toFixed(3) : "—"}
+                              </span>
+                            );
+                          })}
+                          <span className="mono r lb-small lb-c-stat" data-label="LAPS" style={{ color: "var(--text-2)" }}>{e.lapCount}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                </>
               )}
               <div className="lb-legend">
-                <span style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-                  <span className="lb-key"><i style={{ background: PURPLE }} />Fastest sector</span>
-                  <span className="lb-key"><i style={{ background: MINT }} />Personal best sector</span>
-                </span>
-                <span>{includeInvalid ? "Cut laps included" : "Valid laps only"} · out and in laps never count</span>
+                {cars ? (
+                  <>
+                    <span>Fastest lap for each car · tap one to see its drivers</span>
+                    <span>{includeInvalid ? "Cut laps included" : "Valid laps only"}</span>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+                      <span className="lb-key"><i style={{ background: PURPLE }} />Fastest sector</span>
+                      <span className="lb-key"><i style={{ background: MINT }} />Personal best sector</span>
+                    </span>
+                    <span>{includeInvalid ? "Cut laps included" : "Valid laps only"} · out and in laps never count</span>
+                  </>
+                )}
               </div>
             </section>
-
-            <aside className="card" style={{ flex: "1 1 260px" }}>
-              <h2 style={{ fontSize: 18 }}>{selected ? trackName(selected.track, selected.layout) : ""} records</h2>
-              {idealMs !== null && (
-                <div className="list-row" style={{ justifyContent: "space-between" }} title="Best sectors on this board added together">
-                  <span style={{ fontSize: 14 }}>Ideal lap (best sectors)</span>
-                  <span className="mono" style={{ fontSize: 14, color: PURPLE }}>{lapTime(idealMs)}</span>
-                </div>
-              )}
-              {records.filter((r) => r.top).map((r) => (
-                <div key={r.car} className="list-row" style={{ justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 14 }}>{r.car}</span>
-                  <span className="mono" style={{ fontSize: 14, color: "var(--gold)" }}>
-                    {lapTime(r.top!.timeMs)} · {r.top!.driverId != null ? driverMap.get(r.top!.driverId)?.name : "Guest"}
-                  </span>
-                </div>
-              ))}
-            </aside>
-          </div>
         </>
       )}
     </>

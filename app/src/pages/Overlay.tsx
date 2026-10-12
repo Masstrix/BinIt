@@ -61,7 +61,11 @@ export function Overlay() {
     ),
   );
 
-  const showWidgets = status?.connected || !isTauri;
+  // Widgets only appear in the phases the player chose: not over the game's menus unless asked to.
+  const phase = status?.live?.phase ?? "menu";
+  const mode = status?.overlayShow ?? "drivingPaused";
+  const phaseOk = mode === "always" || phase === "driving" || (mode === "drivingPaused" && phase === "paused");
+  const showWidgets = (status?.connected || !isTauri) && (phaseOk || !isTauri);
 
   return (
     <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", fontFamily: "var(--font-body)" }}>
