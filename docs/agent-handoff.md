@@ -124,5 +124,6 @@ The owner uses this app while you work, often mid-lap.
 * Lap and sector timing design: [sectors.md](sectors.md).
 * What is stored and for how long (lap rows kept forever, input traces only for timed laps), and the
   three version numbers (app, database format, blob format): `roadmap.md` and `building.md`.
-* Nothing from this long session has been committed yet: `git status` shows many changed and new files.
-  Commit only when the owner asks.
+* Commit only when the owner asks. Group commits by area, in build order: Rust crates, the desktop
+  server (`app/src-tauri`), the UI, then docs and scripts. Run `cargo test --workspace` and
+  `npx tsc --noEmit` first. There is no git remote configured, so nothing is pushed.
