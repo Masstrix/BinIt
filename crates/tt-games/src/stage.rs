@@ -49,9 +49,9 @@ pub struct DetectedStage {
     pub trace: Option<LapTrace>,
 }
 
-/// A run starts with the clock this close to zero and the car this close to the start line.
+/// A run starts with the clock this close to zero. The distance says nothing here: games where the driver
+/// drives up to the start line already count that approach (the line was at 238 m on a recorded stage).
 const START_CLOCK_MS: u32 = 3_000;
-const START_DISTANCE_M: f32 = 60.0;
 /// The clock must hold still this long (with the game still updating) to count as the finish.
 const HOLD_MS: u64 = 700;
 /// ...and the car must be this far along the stage, so a stalled clock at the start is not a finish.
@@ -151,7 +151,7 @@ impl StageTracker {
     fn begin(&mut self, s: &StageSample, clock: u32) {
         self.phase = Phase::Running;
         // Joining a run that is already under way can't be vouched for.
-        self.partial = !(clock <= START_CLOCK_MS && s.distance_m <= START_DISTANCE_M);
+        self.partial = clock > START_CLOCK_MS;
         self.recorder.reset();
         self.last_clock = clock;
         self.last_distance = s.distance_m;

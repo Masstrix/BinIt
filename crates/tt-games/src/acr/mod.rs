@@ -346,6 +346,34 @@ mod tests {
         assert!(tracker.is_finished());
     }
 
+    /// A whole stage from the drive-up to the start line to the finish: the distance already reads 116 m
+    /// while the clock sits at zero, and the start line is at ~238 m. The run must count as a proper timed one.
+    #[test]
+    fn a_real_stage_driven_up_to_the_start_line_is_a_timed_run() {
+        use crate::stage::{StageSample, StageTracker};
+
+        let mut tracker = StageTracker::default();
+        let mut last_packet = None;
+        let mut found = Vec::new();
+        for line in include_str!("fixtures/stage_full.csv").lines().filter(|l| !l.starts_with('#')).skip(1) {
+            let f: Vec<&str> = line.split(',').collect();
+            let packet: i32 = f[1].parse().unwrap();
+            let sample = StageSample {
+                at_ms: f[0].parse().unwrap(),
+                clock_ms: layout::parse_clock(f[2]),
+                distance_m: f[3].parse().unwrap(),
+                length_m: Some(5_600.0),
+                updating: last_packet != Some(packet),
+                inputs: None,
+            };
+            last_packet = Some(packet);
+            found.extend(tracker.update(sample));
+        }
+        assert_eq!(found.len(), 1);
+        assert_eq!((found[0].time_ms, found[0].attempt, found[0].untimed), (215_010, 1, None));
+        assert!(found[0].profile.is_some());
+    }
+
     #[test]
     fn the_catalogue_is_valid_and_lists_the_car_that_was_read_from_the_game() {
         let v: serde_json::Value = serde_json::from_str(CATALOGUE_JSON).unwrap();

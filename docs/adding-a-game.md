@@ -115,9 +115,12 @@ what the game fills in. Details are in the header of `acr/layout.rs`. In short:
   a cut: every finished run counts as valid.
 * After the finish the pages freeze on the results screen (the packet counter stops) and are cleared when
   the player goes back to the menus.
-* The memory clock read 08:40.336 where the game's own display showed 8:40.335: **1 ms more**. One stage is
-  not enough to say whether that is always so (the display truncating where the text rounds), so the time
-  is stored as the memory gives it until more stages have been compared.
+* The memory clock matched the game's displayed final time exactly on the second stage (3:35.010). On the
+  first it read 08:40.336 where the display showed 8:40.335, so that is a rounding difference at most, not
+  an offset; times are stored as the memory gives them.
+* With the game's "drive up to the start" option the distance already counts the approach (116 m while the
+  clock sits at 0; the line was at 238 m). A run starts when the clock starts, so the start is judged by the
+  clock alone, never the distance.
 * The game's stage names (`Wales Afon Biga`) do not match the names in published stage lists
   (`Cwmbiga - Afon Biga`), and several stages can share a reported name, so stages are not pre-populated:
   they appear as they are driven. The bundled cars (`acr/catalogue.json`) come from published lists, except
