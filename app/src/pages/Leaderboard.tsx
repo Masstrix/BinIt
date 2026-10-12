@@ -33,7 +33,19 @@ export function LeaderboardPage() {
     return [...seen.values()];
   }, [combos]);
 
+  // Games that have laps, and the track last picked in each, so switching game returns to where you were in it.
+  const games = useMemo(() => [...new Set(tracks.map((t) => t.game))], [tracks]);
   const [track, setTrack] = usePersistedState<string | null>("leaderboard.track", null, (v) => typeof v === "string");
+  const [lastTrack, setLastTrack] = usePersistedState<Record<string, string>>("leaderboard.trackByGame", {}, (v) => typeof v === "object" && v !== null && !Array.isArray(v));
+  const chooseTrack = (key: string) => {
+    setTrack(key);
+    setLastTrack({ ...lastTrack, [key.split("|")[0]]: key });
+  };
+  const chooseGame = (game: string) => {
+    const remembered = lastTrack[game];
+    const next = remembered && tracks.some((t) => trackKey(t) === remembered) ? remembered : tracks.find((t) => t.game === game) && trackKey(tracks.find((t) => t.game === game)!);
+    if (next) chooseTrack(next);
+  };
   // The car you picked sticks across track changes (and restarts); tracks where nobody
   // has driven it fall back to "Any car" without forgetting the pick.
   const [pickedCar, setPickedCarState] = useState<string | null>(() => {
@@ -71,9 +83,10 @@ export function LeaderboardPage() {
   const maps = useTrackMaps(selected?.game ?? null);
   const carsHere = combos.filter((c) => selected && trackKey(c) === trackKey(selected)).map((c) => c.car);
   const car = pickedCar && carsHere.includes(pickedCar) ? pickedCar : null;
+  // Only the selected game's tracks: another game may have a track with the same name, and the switch above picks the game.
   const trackPickItems = useMemo(
-    () => drivenTrackItems(combos, catalogue, maps),
-    [combos, catalogue, maps],
+    () => drivenTrackItems(combos.filter((c) => c.game === selected?.game), catalogue, maps),
+    [combos, selected?.game, catalogue, maps],
   );
   const carPickItems = useMemo(() => {
     const items = carItems(catalogue, { only: new Set(carsHere) });
@@ -145,13 +158,23 @@ export function LeaderboardPage() {
       ) : (
         <>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-            {selected && <span className="filter-pill on">{gameName(selected.game)}</span>}
+            {games.length > 1 ? (
+              <div className="segmented" role="group" aria-label="Game">
+                {games.map((g) => (
+                  <button key={g} aria-pressed={selected?.game === g} onClick={() => chooseGame(g)}>
+                    {gameName(g)}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              selected && <span className="filter-pill on">{gameName(selected.game)}</span>
+            )}
             <Picker
               variant="pill"
               label="Track"
               value={track ?? ""}
               items={trackPickItems}
-              onChange={setTrack}
+              onChange={chooseTrack}
               tagLabel="Country"
               visualOf={(v) => {
                 const t = tracks.find((x) => trackKey(x) === v);
