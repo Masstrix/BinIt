@@ -80,18 +80,18 @@ impl Physics {
     }
 }
 
-/// The games number gears 0 = reverse, 1 = neutral, 2 = first. TimeTrial uses what drivers call them:
+/// The games number gears 0 = reverse, 1 = neutral, 2 = first. Bin It uses what drivers call them:
 /// -1 = reverse, 0 = neutral, 1 = first.
 pub fn display_gear(raw: i32) -> i16 {
     raw.saturating_sub(1).clamp(i16::MIN as i32, i16::MAX as i32) as i16
 }
 
-/// Pedals, steering and gear from the physics page, in the ranges TimeTrial uses.
+/// Pedals, steering and gear from the physics page, in the ranges Bin It uses.
 pub fn inputs(p: &Physics) -> crate::Inputs {
     crate::Inputs {
         throttle: p.gas.clamp(0.0, 1.0),
         brake: p.brake.clamp(0.0, 1.0),
-        // The games report 1.0 with the pedal released; TimeTrial wants 1.0 for pressed.
+        // The games report 1.0 with the pedal released; Bin It wants 1.0 for pressed.
         clutch: (1.0 - p.clutch).clamp(0.0, 1.0),
         handbrake: 0.0,
         steering: p.steer_angle.clamp(-1.0, 1.0),

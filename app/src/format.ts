@@ -67,7 +67,7 @@ export const LAP_BADGE: Record<Exclude<LapKind, "timed">, { text: string; classN
   cut: { text: "CUT", className: "chip cut", title: "Flagged by the game (track limits)" },
   outLap: { text: "OUT LAP", className: "chip plain", title: "Started from the pits, not timed" },
   inLap: { text: "IN LAP", className: "chip plain", title: "Ended in the pit lane, not timed" },
-  partial: { text: "PARTIAL", className: "chip plain", title: "TimeTrial joined mid-lap, not timed" },
+  partial: { text: "PARTIAL", className: "chip plain", title: "Bin It joined mid-lap, not timed" },
   driverChange: { text: "DRIVER CHANGE", className: "chip plain", title: "The driver changed during this lap, so it was not timed for anyone" },
 };
 

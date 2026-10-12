@@ -1,5 +1,5 @@
 @echo off
-rem Builds TimeTrial and puts the installer, the standalone exe and a README in .\dist
+rem Builds Bin It and puts the installer, the standalone exe and a README in .\dist
 rem Double-click this, or run it from a terminal.  Options:
 rem   build.cmd -SkipInstaller   only the standalone exe (quicker)
 rem   build.cmd -SkipTests       don't run the tests first

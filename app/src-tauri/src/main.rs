@@ -1,6 +1,7 @@
 // Release builds are GUI-only (no console window).
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod migrate;
 mod overlay;
 mod server;
 
@@ -8,7 +9,7 @@ use std::sync::Arc;
 
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
-use tt_core::TimeTrial;
+use tt_core::BinIt;
 use tt_games::{GameId, GameWatcher};
 
 /// A plain error dialog, for failures that happen before there is a window to show anything in.
@@ -56,11 +57,24 @@ fn main() {
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
-            let tt = match TimeTrial::open(&data_dir.join("timetrial.db")) {
+            // Data saved under the old name (TimeTrial) is carried over the first time this runs.
+            if let Some(legacy) = migrate::legacy_dir(&data_dir) {
+                match migrate::import_legacy_data(&legacy, &data_dir) {
+                    Ok(true) => eprintln!("data: copied your laps from {}", legacy.display()),
+                    Ok(false) => {}
+                    Err(e) => {
+                        message_box("Bin It can't bring over your old data", &format!("{e:#}
+
+Old folder: {}", legacy.display()));
+                        return Err(e.into());
+                    }
+                }
+            }
+            let tt = match BinIt::open(&data_dir.join("binit.db")) {
                 Ok(tt) => Arc::new(tt),
                 Err(e) => {
                     // There's no console in a release build, so say why we're closing.
-                    message_box("TimeTrial can't open its data", &format!("{e:#}
+                    message_box("Bin It can't open its data", &format!("{e:#}
 
 Data folder: {}", data_dir.display()));
                     return Err(e.into());
@@ -89,7 +103,7 @@ Data folder: {}", data_dir.display()));
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = server::serve(tt, handle, lan).await {
-                    eprintln!("TimeTrial server stopped: {e:#}");
+                    eprintln!("Bin It server stopped: {e:#}");
                 }
             });
 
@@ -105,11 +119,11 @@ Data folder: {}", data_dir.display()));
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running TimeTrial");
+        .expect("error while running Bin It");
 }
 
 /// Polls the game adapters on one low-priority background thread.
-fn spawn_game_watcher(tt: Arc<TimeTrial>) {
+fn spawn_game_watcher(tt: Arc<BinIt>) {
     std::thread::Builder::new()
         .name("game-watcher".into())
         .spawn(move || {

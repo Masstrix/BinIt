@@ -1,4 +1,4 @@
-// Client for the TimeTrial local server. The desktop window, the overlay and
+// Client for the Bin It local server. The desktop window, the overlay and
 // office browsers all use this; only the base URL differs.
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
@@ -133,7 +133,7 @@ export interface TrackMapData {
   closed: boolean;
 }
 
-/** About TimeTrial: shown in the desktop app. */
+/** About Bin It: shown in the desktop app. */
 export interface About {
   name: string;
   version: string;

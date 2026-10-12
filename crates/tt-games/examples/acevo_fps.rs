@@ -1,10 +1,10 @@
-//! Measures AC EVO's own frame rate (from its shared memory) while the TimeTrial
+//! Measures AC EVO's own frame rate (from its shared memory) while the Bin It
 //! overlay is shown vs hidden, to quantify what the overlay costs.
 //!
 //!   cargo run -p tt-games --example acevo_fps -- [seconds-per-phase] [rounds]
 //!
 //! Keep the game in a steady state (same view, e.g. sitting still on track or paused)
-//! while it runs. TimeTrial must be running (the overlay is toggled through its API).
+//! while it runs. Bin It must be running (the overlay is toggled through its API).
 
 #[cfg(windows)]
 fn main() -> anyhow::Result<()> {

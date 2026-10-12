@@ -72,10 +72,10 @@ lap is stored as "partial".
 The overlay is a transparent, click-through, topmost window over the game's monitor
 (`app/src-tauri/src/overlay.rs`). A game that makes its own window topmost (Assetto Corsa does) can
 end up above it: Windows orders topmost windows by when each was last raised, and showing the overlay
-does not raise one that is already topmost. TimeTrial therefore raises it (without activating it)
+does not raise one that is already topmost. Bin It therefore raises it (without activating it)
 whenever it is shown, whenever a supported game takes the foreground, and once a second while it is
 meant to be drawn. To check on a machine: list windows top to bottom (`EnumWindows` returns z-order) and
-confirm the "TimeTrial overlay" window comes before the game's. A game in true exclusive fullscreen
+confirm the "Bin It overlay" window comes before the game's. A game in true exclusive fullscreen
 can't be drawn over at all; it needs borderless or windowed.
 
 ## Rally games (stages)

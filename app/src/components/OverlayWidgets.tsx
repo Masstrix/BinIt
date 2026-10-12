@@ -289,7 +289,7 @@ function deltaText(ms: number | null) {
   return ms === null ? "--.---" : `${ms <= 0 ? "-" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
 }
 
-/** Always-visible QR code so anyone in the room can scan it to open TimeTrial on their phone. */
+/** Always-visible QR code so anyone in the room can scan it to open Bin It on their phone. */
 export function QrCard({ data }: { data: OverlayData }) {
   return (
     <div style={{ ...card, padding: 10, display: "flex", alignItems: "center", gap: 12 }}>
@@ -406,7 +406,7 @@ export function useLapToasts(pbMs: number | null): Toast | null {
       const kind = lapKind(r.lap);
       if (kind === "outLap") t = { tone: "out", title: `Out lap ${lapTime(r.lap.timeMs)}`, detail: "Timing starts now. Good luck!" };
       else if (kind === "inLap") t = { tone: "in", title: `In lap ${lapTime(r.lap.timeMs)}`, detail: "Not timed" };
-      else if (kind === "partial") t = { tone: "lap", title: `${lapTime(r.lap.timeMs)} not timed`, detail: `TimeTrial joined part-way through the ${words(r.lap.game).lap}` };
+      else if (kind === "partial") t = { tone: "lap", title: `${lapTime(r.lap.timeMs)} not timed`, detail: `Bin It joined part-way through the ${words(r.lap.game).lap}` };
       else if (kind === "cut") t = { tone: "cut", title: `${lapTime(r.lap.timeMs)} not counted`, detail: "Lap was cut (track limits)" };
       else if (r.comboRecord) t = { tone: "record", title: `Track record ${lapTime(r.lap.timeMs)}`, detail: `${name} is the fastest ever here${moved}` };
       else if (s?.position === 1 && s.previousPosition !== 1) t = { tone: "lead", title: `${name} takes the crown`, detail: `${lapTime(r.lap.timeMs)} in ${s.challengeName}` };

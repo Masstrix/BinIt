@@ -1,4 +1,4 @@
-# Building and packaging TimeTrial
+# Building and packaging Bin It
 
 Working on the code day to day (rebuilding, previewing, checking on a phone)? See [agent-handoff.md](agent-handoff.md).
 
@@ -7,7 +7,7 @@ Working on the code day to day (rebuilding, previewing, checking on a phone)? Se
 ```
 cd app
 npm install          # once
-npm run tauri dev    # desktop app with hot reload (UI on :1420, TimeTrial server on :7878)
+npm run tauri dev    # desktop app with hot reload (UI on :1420, Bin It server on :7878)
 ```
 
 Tests: `cargo test --workspace` and, in `app/`, `npx tsc --noEmit`.
@@ -31,9 +31,9 @@ Everything lands in **`dist/`** (git-ignored, emptied on every run):
 
 | File | What it is |
 |---|---|
-| `TimeTrial-<version>-b<build>-setup.exe` | Installer (NSIS): Start menu entry, uninstaller |
-| `TimeTrial-<version>-b<build>-portable.exe` | The app on its own: copy it anywhere and run it |
-| `TimeTrial-<version>-b<build>-portable.zip` | A folder with `TimeTrial.exe` and `README.txt`, zipped, for a USB stick or email |
+| `BinIt-<version>-b<build>-setup.exe` | Installer (NSIS): Start menu entry, uninstaller |
+| `BinIt-<version>-b<build>-portable.exe` | The app on its own: copy it anywhere and run it |
+| `BinIt-<version>-b<build>-portable.zip` | A folder with `BinIt.exe` and `README.txt`, zipped, for a USB stick or email |
 | `README.txt` | What to do on the other PC (install, firewall, data, troubleshooting). Edit `scripts/dist-readme.txt` |
 | `SHA256SUMS.txt` | Checksums to verify a copy |
 
@@ -51,7 +51,7 @@ once ("More info", "Run anyway").
   it starts at 1 on a fresh clone). `app/src-tauri/build.rs` adds one every time the app is compiled
   after a source change (dev rebuilds, `cargo test`, release builds) and bakes it into the exe. It shows
   on the Advanced page ("Version 0.1.0 · build 42") and in the packaged file names
-  (`TimeTrial-0.1.0-b42-portable.exe`), so two copies can be compared. Numbers can skip (a test run and
+  (`BinIt-0.1.0-b42-portable.exe`), so two copies can be compared. Numbers can skip (a test run and
   the release build both count) but never go down. Only compare numbers from the same checkout.
 * **Database format**: `SCHEMA_VERSION` in `crates/tt-core/src/store.rs`. Bump it and add a
   `if version < N { ... }` migration whenever a table or column changes. A database from a newer

@@ -29,7 +29,7 @@ function AboutCard() {
     ["System", `${about.os}${about.webview ? ` · WebView2 ${about.webview}` : ""}`],
   ];
   return (
-    <section className="card" aria-label="About TimeTrial">
+    <section className="card" aria-label="About Bin It">
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <Logo />
         <div>
@@ -99,7 +99,7 @@ export function AdvancedPage() {
     return (
       <>
         <h1>Advanced</h1>
-        <div className="empty">These tools are only available in the TimeTrial app on the PC.</div>
+        <div className="empty">These tools are only available in the Bin It app on the PC.</div>
       </>
     );
   }

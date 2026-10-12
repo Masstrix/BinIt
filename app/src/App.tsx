@@ -79,9 +79,9 @@ function Sidebar({ path }: { path: string }) {
     <aside className="sidebar">
       <a className="brand" href="#/">
         <Logo />
-        <span>timetrial</span>
+        <span>bin it</span>
       </a>
-      <div className="game-pill" title={!online ? "Can't reach the TimeTrial service" : status?.connected ? `${status.gameName} is running` : "No game running"}>
+      <div className="game-pill" title={!online ? "Can't reach the Bin It service" : status?.connected ? `${status.gameName} is running` : "No game running"}>
         <span className={`dot${status?.connected ? " on" : ""}`} />
         <span className="game-name" style={{ flex: 1 }}>{!online ? "Offline" : status?.connected ? status.gameName : "No game running"}</span>
         {status?.connected && <span className="live" style={{ fontSize: 12, color: "var(--mint)" }}>live</span>}

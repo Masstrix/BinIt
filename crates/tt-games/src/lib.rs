@@ -1,4 +1,4 @@
-//! Game adapters for TimeTrial.
+//! Game adapters for Bin It.
 //!
 //! Each adapter reads a game's *official* telemetry channel (shared memory or UDP)
 //! and turns it into a small set of game-agnostic [`GameEvent`]s. Adapters never
@@ -22,7 +22,7 @@ use std::time::Duration;
 
 pub use process::is_process_running;
 
-/// Executables of games TimeTrial supports (or will), mapped to the game key.
+/// Executables of games Bin It supports (or will), mapped to the game key.
 /// Used to tell whether a game is the app the player is currently in.
 pub const GAME_PROCESSES: &[(&str, &str)] = &[
     ("AssettoCorsaEVO.exe", "acevo"),
@@ -102,7 +102,7 @@ pub struct CompletedLap {
     /// Why the lap doesn't count, if it doesn't.
     pub untimed: Option<UntimedReason>,
     /// Sector splits in ms as reported by the game itself. Empty when it doesn't
-    /// (TimeTrial then derives sectors from `profile`).
+    /// (Bin It then derives sectors from `profile`).
     pub sectors_ms: Vec<u32>,
     /// Elapsed time at each 0.5% of the lap, when the lap was fully sampled.
     pub profile: Option<timing::TimingProfile>,
@@ -117,7 +117,7 @@ pub enum UntimedReason {
     OutLap,
     /// Ended in the pit lane: not an attempt.
     InLap,
-    /// Only part of it was seen (TimeTrial started mid-lap): not an attempt.
+    /// Only part of it was seen (Bin It started mid-lap): not an attempt.
     Partial,
     /// The game flagged it (track limits, cutting): a failed attempt.
     Cut,

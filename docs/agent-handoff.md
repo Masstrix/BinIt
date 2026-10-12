@@ -1,4 +1,4 @@
-# Working on TimeTrial: rebuild, preview, and check it on a phone
+# Working on Bin It: rebuild, preview, and check it on a phone
 
 For any agent (or person) picking this project up. It covers how a change you make reaches the
 desktop app, a browser, and the owner's phone, and how to check each one. Packaging an `.exe` is in
@@ -37,7 +37,7 @@ starting your own. The app also allows only one instance at a time.
 | `app/vite.config.ts`, `tauri.conf.json` | Vite restarts by itself for its own config; Tauri config needs a dev restart (ask the owner) | | |
 
 A restart also re-runs database migrations and the catalogue relabelling, so schema mistakes show up
-immediately. While the server is down the UI shows the "Can't reach TimeTrial" screen after 2.5 s
+immediately. While the server is down the UI shows the "Can't reach Bin It" screen after 2.5 s
 and recovers by itself.
 
 ### Why the phone uses port 7878, not 1420
@@ -105,7 +105,7 @@ curl -s -w " [%{http_code}]\n" http://192.168.0.79:7878/api/admin/about         
 
 The owner uses this app while you work, often mid-lap.
 
-* The database is `%APPDATA%\app.timetrial.desktop\timetrial.db` (plus `-wal` and `-shm`). To look at
+* The database is `%APPDATA%\app.binit.desktop\binit.db` (plus `-wal` and `-shm`). Under the old name TimeTrial it was `app.timetrial.desktop\timetrial.db`; the first start of Bin It copies that over (`migrate.rs`) and leaves the old folder as a backup. To look at
   it, copy **all three** files to a temp folder and open the copy (the live data is mostly in the
   `-wal` file while the app is running). Never write to the live file; use the API.
 * **Do not change the seat or the overlay layout** to test something. Switching driver mid-lap voids

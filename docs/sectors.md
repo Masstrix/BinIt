@@ -1,6 +1,6 @@
 # Sectors & live timing
 
-How TimeTrial records sector times for every kind of game, and drives live timing
+How Bin It records sector times for every kind of game, and drives live timing
 (delta to best, sector indicators) in the overlay.
 
 ## The problem

@@ -5,7 +5,7 @@ import { useAppState } from "../api";
 const GRACE_MS = 2500;
 
 /**
- * Full-screen "can't reach TimeTrial" screen for phones (and anything else) that have lost the
+ * Full-screen "can't reach Bin It" screen for phones (and anything else) that have lost the
  * connection to the PC. The app keeps reconnecting by itself; the page comes back as soon as it does.
  */
 export function ConnectionGate() {
@@ -43,10 +43,10 @@ export function ConnectionGate() {
           <circle cx="12" cy="19.5" r="1" fill="var(--peri-1)" />
           <path d="M3 3l18 18" stroke="var(--peach)" />
         </svg>
-        <h1 id="gate-title" style={{ fontSize: 26 }}>{deviceOnline ? "Can't reach TimeTrial" : "You're offline"}</h1>
+        <h1 id="gate-title" style={{ fontSize: 26 }}>{deviceOnline ? "Can't reach Bin It" : "You're offline"}</h1>
         <p id="gate-text" className="muted" style={{ margin: 0 }}>
           {deviceOnline
-            ? "The gaming PC isn't answering. Check that it's on, TimeTrial is open, and you're on the office wifi."
+            ? "The gaming PC isn't answering. Check that it's on, Bin It is open, and you're on the office wifi."
             : "This device has no connection. Turn on wifi and join the office network."}
         </p>
         <span className="chip plain mono" style={{ alignSelf: "center" }}>{location.host}</span>

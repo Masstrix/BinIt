@@ -1,5 +1,5 @@
 [package]
-name = "timetrial"
+name = "binit"
 description = "Lap timing and office leaderboards for a shared sim-racing rig"
 edition.workspace = true
 version.workspace = true

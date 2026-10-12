@@ -118,7 +118,7 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
       {racers.length === 0 ? (
         <div className="empty">These laps were set before timing traces were saved, so they can't be replayed. The next lap each driver sets can.</div>
       ) : !map ? (
-        <div className="empty">TimeTrial hasn't learned this {words(challenge.game).track}'s map yet. Finish one clean {words(challenge.game).lap} on it and the replay appears here.</div>
+        <div className="empty">Bin It hasn't learned this {words(challenge.game).track}'s map yet. Finish one clean {words(challenge.game).lap} on it and the replay appears here.</div>
       ) : (
         <>
           <div className="livemap-frame">

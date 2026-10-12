@@ -366,7 +366,7 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
   if (catalogue && trackPickItems.length === 0) {
     return (
       <div className="modal-body">
-        <div className="empty">TimeTrial doesn't know any {words(game).tracks} for this game yet. {words(game).rally ? "Drive a stage" : "Get on track"} for a moment and it will learn {words(game).rally ? "it" : "them"}.</div>
+        <div className="empty">Bin It doesn't know any {words(game).tracks} for this game yet. {words(game).rally ? "Drive a stage" : "Get on track"} for a moment and it will learn {words(game).rally ? "it" : "them"}.</div>
       </div>
     );
   }

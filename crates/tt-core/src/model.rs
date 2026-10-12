@@ -181,7 +181,7 @@ pub struct AboutCounts {
     pub traced_laps: u32,
     pub challenges: u32,
     pub schema_version: i32,
-    /// The TimeTrial version that first created this database.
+    /// The Bin It version that first created this database.
     pub created_with: Option<String>,
     /// The version that had this database open before this run (`None` the first time).
     pub previous_version: Option<String>,

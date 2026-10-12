@@ -10,7 +10,7 @@ const GAMES = [
   { key: "acr", name: "Assetto Corsa Rally", detail: "Stages · shared memory", ready: true },
 ];
 
-/** Which games TimeTrial can follow, and which one is running right now. */
+/** Which games Bin It can follow, and which one is running right now. */
 function SupportedGames({ running }: { running: string | null }) {
   return (
     <section className="card" aria-label="Supported games" style={{ gap: 10, padding: "16px 20px" }}>
@@ -59,7 +59,7 @@ export function GamesPage() {
             Graphics) to get fullscreen performance back.
           </span>
           <span className="muted" style={{ fontSize: 14 }}>
-            In exclusive fullscreen the overlay can't be seen, but F8 still works: press F8, then a number (or type a new name and press Enter). TimeTrial
+            In exclusive fullscreen the overlay can't be seen, but F8 still works: press F8, then a number (or type a new name and press Enter). Bin It
             says who's driving out loud.
           </span>
         </div>
@@ -77,7 +77,7 @@ export function GamesPage() {
           <h2 style={{ fontSize: 20 }}>Open it anywhere in the office</h2>
           <span className="muted">Anyone on the network can view leaderboards and pick the next driver from their phone.</span>
           {server?.urls.map((u) => <span key={u} className="mono" style={{ fontSize: 18, color: "var(--peri-1)" }}>{u}</span>)}
-          {lanSaved !== null && lanSaved !== server?.lanEnabled && <span style={{ color: "var(--peach)", fontSize: 14 }}>Restart TimeTrial to apply.</span>}
+          {lanSaved !== null && lanSaved !== server?.lanEnabled && <span style={{ color: "var(--peach)", fontSize: 14 }}>Restart Bin It to apply.</span>}
         </div>
         <label style={{ display: "flex", alignItems: "center", gap: 10, fontWeight: 600 }}>
           Share on network

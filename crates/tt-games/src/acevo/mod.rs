@@ -60,7 +60,7 @@ pub fn player_position(g: &Graphics) -> Option<[f32; 2]> {
 }
 
 /// The game reports gears like Assetto Corsa always has: 0 = reverse, 1 = neutral, 2 = first gear.
-/// TimeTrial uses what drivers call them: -1 = reverse, 0 = neutral, 1 = first.
+/// Bin It uses what drivers call them: -1 = reverse, 0 = neutral, 1 = first.
 pub fn display_gear(raw: i16) -> i16 {
     raw.saturating_sub(1)
 }

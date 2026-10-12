@@ -1,6 +1,6 @@
 {
-  "name": "TimeTrial",
-  "short_name": "TimeTrial",
+  "name": "Bin It",
+  "short_name": "Bin It",
   "description": "Office sim-racing lap timer: leaderboards, challenges and live timing.",
   "start_url": "/",
   "scope": "/",

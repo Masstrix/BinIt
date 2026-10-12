@@ -24,7 +24,7 @@ fn untimed_lap(time_ms: u32, reason: UntimedReason) -> CompletedLap {
 
 #[test]
 fn out_and_in_laps_are_never_ranked_or_counted_as_attempts() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     tt.add_and_seat("Sam", None).unwrap();
     let out = tt.record_lap(&untimed_lap(95_000, UntimedReason::OutLap)).unwrap();
     assert_eq!(out.lap.untimed_reason.as_deref(), Some("outLap"));
@@ -47,7 +47,7 @@ fn imola_board() -> LeaderboardQuery {
 
 #[test]
 fn adding_an_existing_name_returns_that_driver() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     let a = tt.add_driver("Sam", None).unwrap();
     let b = tt.add_driver("  sam ", None).unwrap();
     assert_eq!(a.id, b.id);
@@ -56,7 +56,7 @@ fn adding_an_existing_name_returns_that_driver() {
 
 #[test]
 fn laps_go_to_whoever_is_in_the_seat() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     let sam = tt.add_and_seat("Sam", None).unwrap();
     let r = tt.record_lap(&lap(102_318, true)).unwrap();
     assert_eq!(r.lap.driver_id, Some(sam.id));
@@ -77,7 +77,7 @@ fn laps_go_to_whoever_is_in_the_seat() {
 
 #[test]
 fn leaderboard_ranks_best_valid_lap_per_driver() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     let sam = tt.add_and_seat("Sam", None).unwrap();
     tt.record_lap(&lap(103_000, true)).unwrap();
     tt.record_lap(&lap(99_000, false)).unwrap(); // cut: doesn't count
@@ -97,7 +97,7 @@ fn leaderboard_ranks_best_valid_lap_per_driver() {
 
 #[test]
 fn challenge_tracks_position_changes_and_attempt_limit() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     let challenge = tt
         .create_challenge(&NewChallenge {
             name: "Imola Hot Lap Week".into(),
@@ -138,7 +138,7 @@ fn challenge_tracks_position_changes_and_attempt_limit() {
 
 #[test]
 fn game_events_drive_session_and_laps() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     let mut rx = tt.subscribe();
     tt.handle_game_event(GameEvent::Connected { game: GameId::AssettoCorsaEvo, game_version: "0.5".into() }).unwrap();
     tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
@@ -160,11 +160,11 @@ fn database_survives_reopen() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("tt.db");
     {
-        let tt = TimeTrial::open(&path).unwrap();
+        let tt = BinIt::open(&path).unwrap();
         tt.add_and_seat("Sam", Some("#ff9f6b")).unwrap();
         tt.record_lap(&lap(102_318, true)).unwrap();
     }
-    let tt = TimeTrial::open(&path).unwrap();
+    let tt = BinIt::open(&path).unwrap();
     assert_eq!(tt.drivers().unwrap()[0].color, "#FF9F6B");
     assert!(tt.seat().unwrap().is_some());
     assert_eq!(tt.recent_laps(10).unwrap().len(), 1);
@@ -182,7 +182,7 @@ fn profiled_lap(time_ms: u32) -> CompletedLap {
 
 #[test]
 fn laps_are_split_into_sectors_with_timing_colours() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
     assert_eq!(tt.status().unwrap().session.unwrap().sector_count, 3);
 
@@ -205,7 +205,7 @@ fn laps_are_split_into_sectors_with_timing_colours() {
 
 #[test]
 fn live_timing_compares_against_the_seated_drivers_pb() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
     tt.add_and_seat("Sam", None).unwrap();
     tt.record_lap(&profiled_lap(100_000)).unwrap();
@@ -232,9 +232,9 @@ fn live_timing_compares_against_the_seated_drivers_pb() {
 
 #[test]
 fn a_clean_lap_teaches_the_track_map_once_and_flags_the_catalogue() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
-    let drive = |tt: &TimeTrial, radius: f32| {
+    let drive = |tt: &BinIt, radius: f32| {
         for i in 0..800 {
             let p = i as f32 / 800.0;
             let a = p * std::f32::consts::TAU;
@@ -279,7 +279,7 @@ fn a_clean_lap_teaches_the_track_map_once_and_flags_the_catalogue() {
 /// timing widget would show at a few moments of each lap: (label, out_lap, timing?, delta?, sector times).
 fn simulate_widget(laps_after_out: u32, counted_out_lap: bool) -> Vec<(String, bool, bool, Option<i32>, usize)> {
     use tt_games::acevo::{LapTracker, Sample};
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     tt.add_and_seat("Sam", None).unwrap();
     tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
     let mut rx = tt.subscribe();
@@ -290,7 +290,7 @@ fn simulate_widget(laps_after_out: u32, counted_out_lap: bool) -> Vec<(String, b
     let lap_ms = 100_000i32;
     // (start progress, in pit lane at start) for the out lap, then full laps.
     let mut step = 0u32;
-    let mut run = |tt: &TimeTrial, tr: &mut LapTracker, start: f32, lap_label: String, lap_count: &mut i32, last_lap: &mut i32, counted: bool, from_pits: bool, out: &mut Vec<(String, bool, bool, Option<i32>, usize)>| {
+    let mut run = |tt: &BinIt, tr: &mut LapTracker, start: f32, lap_label: String, lap_count: &mut i32, last_lap: &mut i32, counted: bool, from_pits: bool, out: &mut Vec<(String, bool, bool, Option<i32>, usize)>| {
         let len = (((1.0 - start) * lap_ms as f32) / 50.0) as u32;
         for i in 0..=len {
             let p = (start + (i as f32 / len as f32) * (1.0 - start)).min(0.9999);
@@ -340,7 +340,7 @@ fn timing_widget_is_live_from_the_first_flying_lap_but_the_delta_needs_a_referen
 
 #[test]
 fn map_orientation_is_saved_and_validated() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
     tt.store().set_track_map("acevo", "Imola", "", &[[0.0, 0.0], [1.0, 1.0]], true, 1).unwrap();
     assert!(tt.set_map_view("acevo", "Imola", "", 45, false).is_err());
@@ -351,7 +351,7 @@ fn map_orientation_is_saved_and_validated() {
 
 #[test]
 fn spellings_converge_and_old_data_is_migrated_to_catalogue_names() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     // Laps recorded before the catalogue knew the names: the game's spelling, plus a bathurst alias.
     let mut old = lap(100_000, true);
     old.session.track = "Bathurst".into();
@@ -386,7 +386,7 @@ fn spellings_converge_and_old_data_is_migrated_to_catalogue_names() {
 
 #[test]
 fn the_reference_is_only_called_pb_when_it_is_the_pb() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
     tt.add_and_seat("Sam", None).unwrap();
     // The fastest lap has no profile (the game's clock glitched); a slower one does.
@@ -419,7 +419,7 @@ fn the_reference_is_only_called_pb_when_it_is_the_pb() {
 
 #[test]
 fn laps_can_be_deleted_by_track_layout_and_car() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     tt.add_and_seat("Sam", None).unwrap();
     let mut lap_at = |track: &str, layout: &str, car: &str, ms: u32| {
         let mut l = lap(ms, true);
@@ -449,7 +449,7 @@ fn laps_can_be_deleted_by_track_layout_and_car() {
 #[test]
 fn a_laps_input_trace_is_stored_with_it() {
     use tt_games::timing::{LapTrace, TracePoint};
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     tt.add_and_seat("Sam", None).unwrap();
     let points = (0..120)
         .map(|i| TracePoint { progress: i as f32 / 120.0, elapsed_ms: i * 800, speed_kmh: 150.0, throttle: 1.0, brake: 0.0, clutch: 0.0, steering: 0.25, gear: 4 })
@@ -465,7 +465,7 @@ fn a_laps_input_trace_is_stored_with_it() {
 
 #[test]
 fn challenge_replay_gives_each_drivers_best_lap_with_its_profile() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     let c = tt
         .create_challenge(&NewChallenge {
             name: "Hot lap".into(),
@@ -495,7 +495,7 @@ fn challenge_replay_gives_each_drivers_best_lap_with_its_profile() {
 #[test]
 fn the_overlay_knows_whether_the_game_is_driving_paused_or_in_a_menu() {
     use tt_games::GamePhase;
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     assert_eq!(tt.overlay_show().unwrap(), "drivingPaused");
     assert!(tt.set_overlay_show("whenever").is_err());
     tt.set_overlay_show("driving").unwrap();
@@ -524,7 +524,7 @@ fn the_overlay_knows_whether_the_game_is_driving_paused_or_in_a_menu() {
 
 #[test]
 fn a_drivers_laps_come_back_oldest_first_and_only_theirs() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     let jess = tt.add_and_seat("Jess", None).unwrap();
     tt.record_lap_at(&lap(101_000, true), 1_000).unwrap();
     tt.add_and_seat("Sam", None).unwrap();
@@ -537,8 +537,8 @@ fn a_drivers_laps_come_back_oldest_first_and_only_theirs() {
 
 #[test]
 fn speed_scores_compare_drivers_only_on_what_they_share() {
-    let tt = TimeTrial::in_memory().unwrap();
-    let lap_on = |tt: &TimeTrial, track: &str, ms: u32| {
+    let tt = BinIt::in_memory().unwrap();
+    let lap_on = |tt: &BinIt, track: &str, ms: u32| {
         let mut l = lap(ms, true);
         l.session.track = track.into();
         tt.record_lap(&l).unwrap();
@@ -577,7 +577,7 @@ fn driving(p: f32) -> GameEvent {
 
 #[test]
 fn swapping_drivers_mid_lap_voids_that_lap_for_everyone() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     let jess = tt.add_and_seat("Jess", None).unwrap();
     let sam = tt.add_driver("Sam", None).unwrap();
     tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
@@ -612,7 +612,7 @@ fn swapping_drivers_mid_lap_voids_that_lap_for_everyone() {
 
 #[test]
 fn switching_back_does_not_undo_the_void_and_switching_off_track_costs_nothing() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     let jess = tt.add_and_seat("Jess", None).unwrap();
     let sam = tt.add_driver("Sam", None).unwrap();
 
@@ -653,7 +653,7 @@ fn out_lap_at(p: f32) -> GameEvent {
 
 #[test]
 fn a_handover_in_the_pits_does_not_spoil_the_first_flying_lap() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     tt.add_and_seat("Jess", None).unwrap();
     let sam = tt.add_driver("Sam", None).unwrap();
     tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
@@ -673,7 +673,7 @@ fn a_handover_in_the_pits_does_not_spoil_the_first_flying_lap() {
 
 #[test]
 fn a_swap_mid_lap_still_voids_the_lap_when_its_result_arrives_after_the_line() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     tt.add_and_seat("Jess", None).unwrap();
     let sam = tt.add_driver("Sam", None).unwrap();
     tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
@@ -691,7 +691,7 @@ fn a_swap_mid_lap_still_voids_the_lap_when_its_result_arrives_after_the_line() {
 
 #[test]
 fn about_counts_describe_the_database() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     assert_eq!(tt.about_counts().unwrap().laps, 0);
     tt.add_and_seat("Sam", None).unwrap();
     tt.record_lap(&lap(90_000, true)).unwrap();
@@ -706,16 +706,16 @@ fn a_newer_database_is_refused_not_downgraded() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("tt.db");
     {
-        let tt = TimeTrial::open(&path).unwrap();
+        let tt = BinIt::open(&path).unwrap();
         tt.add_and_seat("Sam", None).unwrap();
     }
-    // Pretend a future TimeTrial has moved the data on to a format this version doesn't know.
+    // Pretend a future Bin It has moved the data on to a format this version doesn't know.
     {
         let conn = rusqlite::Connection::open(&path).unwrap();
         conn.pragma_update(None, "user_version", 99).unwrap();
     }
-    let err = TimeTrial::open(&path).err().expect("must refuse").to_string();
-    assert!(err.contains("newer version of TimeTrial") && err.contains("99"), "{err}");
+    let err = BinIt::open(&path).err().expect("must refuse").to_string();
+    assert!(err.contains("newer version of Bin It") && err.contains("99"), "{err}");
     // And it was left exactly as the newer version wrote it.
     let conn = rusqlite::Connection::open(&path).unwrap();
     let v: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0)).unwrap();
@@ -726,7 +726,7 @@ fn a_newer_database_is_refused_not_downgraded() {
 fn the_database_remembers_which_version_made_it() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("tt.db");
-    let first = TimeTrial::open(&path).unwrap();
+    let first = BinIt::open(&path).unwrap();
     let c = first.about_counts().unwrap();
     assert_eq!((c.created_with.as_deref(), c.previous_version.as_deref()), (Some(env!("CARGO_PKG_VERSION")), None));
     drop(first);
@@ -736,7 +736,7 @@ fn the_database_remembers_which_version_made_it() {
         conn.execute("UPDATE settings SET value = '0.0.9' WHERE key = 'last_opened_with'", []).unwrap();
         conn.execute("UPDATE settings SET value = '0.0.1' WHERE key = 'created_with'", []).unwrap();
     }
-    let again = TimeTrial::open(&path).unwrap();
+    let again = BinIt::open(&path).unwrap();
     let c = again.about_counts().unwrap();
     assert_eq!((c.created_with.as_deref(), c.previous_version.as_deref()), (Some("0.0.1"), Some("0.0.9")));
 }
@@ -745,7 +745,7 @@ fn the_database_remembers_which_version_made_it() {
 /// track and car, all flagged as not driven yet.
 #[test]
 fn fresh_install_lists_the_bundled_catalogue() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     let cat = tt.catalogue("acevo").unwrap();
     assert!(cat.tracks.len() >= 10 && cat.cars.len() >= 40, "{} tracks, {} cars", cat.tracks.len(), cat.cars.len());
     assert!(cat.tracks.iter().all(|t| !t.seen) && cat.cars.iter().all(|c| !c.seen));
@@ -755,7 +755,7 @@ fn fresh_install_lists_the_bundled_catalogue() {
 /// laps, leaderboards, ratings, learned maps, sector layouts, renames, deletes and the catalogue.
 #[test]
 fn games_with_identical_names_never_mix() {
-    let tt = TimeTrial::in_memory().unwrap();
+    let tt = BinIt::in_memory().unwrap();
     let ann = tt.add_driver("Ann", None).unwrap();
     let bob = tt.add_driver("Bob", None).unwrap();
     let lap_in = |game: &str, track: &str, who: DriverId, ms: u32| Lap {

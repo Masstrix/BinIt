@@ -1,4 +1,4 @@
-TimeTrial {{VERSION}}
+Bin It {{VERSION}}
 =====================
 Lap times, leaderboards and challenges for a shared sim-racing rig.
 Built {{DATE}}.
@@ -17,10 +17,10 @@ WHAT YOU NEED
 TWO WAYS TO RUN IT
 ------------------
 1. Installer:   {{INSTALLER}}
-   Double-click it and follow the steps. TimeTrial appears in the Start menu.
+   Double-click it and follow the steps. Bin It appears in the Start menu.
    Uninstall from Windows "Installed apps" when you no longer want it.
 
-2. Portable:   TimeTrial-{{VERSION}}-portable.exe   (or TimeTrial.exe inside the zip)
+2. Portable:   BinIt-{{VERSION}}-portable.exe   (or BinIt.exe inside the zip)
    No install. Copy it anywhere and double-click it. Delete it to remove it.
 
 Windows may say "Windows protected your PC" the first time, because the app isn't code-signed.
@@ -29,7 +29,7 @@ Choose "More info", then "Run anyway".
 
 FIRST RUN
 ---------
-1. Start TimeTrial, then start the game. TimeTrial notices the game on its own.
+1. Start Bin It, then start the game. Bin It notices the game on its own.
 2. Type your name on the Home page and press Enter. That's your driver; laps go to whoever
    is picked. There are no passwords.
 3. Drive. Lap times, sectors and a live map appear as you go.
@@ -44,10 +44,10 @@ Change the layout under "Games & overlay".
 
 USING IT FROM A PHONE OR OTHER PC
 ---------------------------------
-Anyone on the same network can open TimeTrial in a browser: the address is shown at the bottom of
+Anyone on the same network can open Bin It in a browser: the address is shown at the bottom of
 the sidebar, and as a QR code under "Games & overlay". It looks like  http://192.168.x.x:7878
 
-The first time, Windows Firewall asks whether to allow TimeTrial on the network. Choose "Allow" for
+The first time, Windows Firewall asks whether to allow Bin It on the network. Choose "Allow" for
 the network you are on (private, or public if that is how your work network is set up).
 Without that, the app still works on the PC itself but phones can't reach it.
 
@@ -57,15 +57,18 @@ works in the desktop app on this PC.
 
 YOUR DATA
 ---------
-Saved in:   %APPDATA%\app.timetrial.desktop
+Saved in:   %APPDATA%\app.binit.desktop
 (paste that into the Windows Explorer address bar)
 
-To move your laps to another PC: close TimeTrial on both, then copy the whole folder's
-timetrial.db files (timetrial.db, and timetrial.db-wal / timetrial.db-shm if they exist) into the
-same place on the other PC. Make sure it has the same TimeTrial version or a newer one:
-TimeTrial refuses to open data saved by a newer version rather than risk damaging it.
+To move your laps to another PC: close Bin It on both, then copy the whole folder's
+binit.db files (binit.db, and binit.db-wal / binit.db-shm if they exist) into the
+same place on the other PC. Make sure it has the same Bin It version or a newer one:
+Bin It refuses to open data saved by a newer version rather than risk damaging it.
 
-To keep a backup, copy that folder while TimeTrial is closed.
+If you used this app under its old name, TimeTrial, the first start copies your laps over from
+%APPDATA%pp.timetrial.desktop. That folder is left as it was, so it doubles as a backup.
+
+To keep a backup, copy that folder while Bin It is closed.
 
 "Advanced" in the sidebar (desktop app only) shows the version, the data folder, how much is
 stored, and has tools to clean up lap times.
@@ -74,16 +77,16 @@ stored, and has tools to clean up lap times.
 IF SOMETHING GOES WRONG
 -----------------------
 * Nothing happens when I start it: only one copy runs at a time. Check the system tray, or end
-  "timetrial.exe" in Task Manager and try again.
-* "TimeTrial can't open its data": the data came from a newer version. Install the newer version.
+  "binit.exe" in Task Manager and try again.
+* "Bin It can't open its data": the data came from a newer version. Install the newer version.
 * Phones can't connect: check the Firewall prompt above, and that the phone is on the same network
   (some guest wifi networks block devices from reaching each other).
-* Laps aren't being recorded: TimeTrial must be running before you start driving; it ignores laps
+* Laps aren't being recorded: Bin It must be running before you start driving; it ignores laps
   that were already in progress when it started.
 
 
 CHECKING A COPY
 ---------------
 SHA256SUMS.txt lists a checksum for each file. After copying, run in PowerShell:
-  Get-FileHash .\TimeTrial-{{VERSION}}-portable.exe -Algorithm SHA256
+  Get-FileHash .\BinIt-{{VERSION}}-portable.exe -Algorithm SHA256
 and compare it with the line in SHA256SUMS.txt.

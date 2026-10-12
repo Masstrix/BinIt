@@ -32,11 +32,11 @@ impl Store {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
-        // Never touch data made by a newer TimeTrial: opening it here would reset its format number
+        // Never touch data made by a newer Bin It: opening it here would reset its format number
         // and the next upgrade would then try to add columns that already exist.
         if version > SCHEMA_VERSION {
             bail!(
-                "This data was saved by a newer version of TimeTrial (database format {version}; this version understands up to {SCHEMA_VERSION}). Update TimeTrial, or open it with the newer version."
+                "This data was saved by a newer version of Bin It (database format {version}; this version understands up to {SCHEMA_VERSION}). Update Bin It, or open it with the newer version."
             );
         }
         if version < 1 {

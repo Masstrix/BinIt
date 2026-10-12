@@ -1,6 +1,6 @@
 [package]
 name = "tt-core"
-description = "TimeTrial domain: drivers, the seat, laps, challenges and leaderboards"
+description = "Bin It domain: drivers, the seat, laps, challenges and leaderboards"
 edition.workspace = true
 version.workspace = true
 license.workspace = true

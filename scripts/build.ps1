@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Builds TimeTrial and gathers everything you would want to copy to another PC into ./dist.
+  Builds Bin It and gathers everything you would want to copy to another PC into ./dist.
 
 .DESCRIPTION
   1. runs the tests,
@@ -43,7 +43,7 @@ foreach ($tool in 'node', 'npm', 'cargo') {
 
 # The version comes from one place: [workspace.package] in Cargo.toml.
 $version = (Select-String -Path (Join-Path $root 'Cargo.toml') -Pattern '^version\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
-Write-Host "Packaging TimeTrial $version" -ForegroundColor Green
+Write-Host "Packaging Bin It $version" -ForegroundColor Green
 
 $app = Join-Path $root 'app'
 if (-not (Test-Path (Join-Path $app 'node_modules'))) {
@@ -78,11 +78,11 @@ New-Item -ItemType Directory -Force $dist | Out-Null
 # Start clean so old versions don't pile up next to the new one.
 Get-ChildItem $dist -Force | Remove-Item -Recurse -Force
 
-$exe = Join-Path $root 'target\release\timetrial.exe'
+$exe = Join-Path $root 'target\release\binit.exe'
 if (-not (Test-Path $exe)) { throw "The build didn't produce $exe" }
 if ((Get-Item $exe).LastWriteTime -lt $started) { throw "$exe wasn't rebuilt, so it isn't from this run." }
 
-$portable = Join-Path $dist "TimeTrial-$tag-portable.exe"
+$portable = Join-Path $dist "BinIt-$tag-portable.exe"
 Copy-Item $exe $portable
 
 $installer = $null
@@ -90,7 +90,7 @@ if (-not $SkipInstaller) {
     $found = Get-ChildItem (Join-Path $root 'target\release\bundle\nsis') -Filter '*-setup.exe' -ErrorAction SilentlyContinue |
         Where-Object { $_.LastWriteTime -ge $started } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if (-not $found) { throw "The build didn't produce an installer. Re-run with -SkipInstaller to get just the standalone exe." }
-    $installer = Join-Path $dist "TimeTrial-$tag-setup.exe"
+    $installer = Join-Path $dist "BinIt-$tag-setup.exe"
     Copy-Item $found.FullName $installer
 }
 
@@ -98,15 +98,15 @@ if (-not $SkipInstaller) {
 $readme = (Get-Content (Join-Path $PSScriptRoot 'dist-readme.txt') -Raw -Encoding UTF8).
     Replace('{{VERSION}}', $tag).
     Replace('{{DATE}}', (Get-Date -Format 'd MMMM yyyy')).
-    Replace('{{INSTALLER}}', $(if ($installer) { "TimeTrial-$tag-setup.exe" } else { '(not built this time)' }))
+    Replace('{{INSTALLER}}', $(if ($installer) { "BinIt-$tag-setup.exe" } else { '(not built this time)' }))
 Set-Content -Path (Join-Path $dist 'README.txt') -Value $readme -Encoding UTF8
 
 # One folder with the exe and the README, zipped: the easiest thing to carry on a USB stick or send.
-$stage = Join-Path $dist "TimeTrial-$tag"
+$stage = Join-Path $dist "BinIt-$tag"
 New-Item -ItemType Directory -Force $stage | Out-Null
-Copy-Item $exe (Join-Path $stage 'TimeTrial.exe')
+Copy-Item $exe (Join-Path $stage 'BinIt.exe')
 Copy-Item (Join-Path $dist 'README.txt') (Join-Path $stage 'README.txt')
-Compress-Archive -Path $stage -DestinationPath (Join-Path $dist "TimeTrial-$tag-portable.zip") -Force
+Compress-Archive -Path $stage -DestinationPath (Join-Path $dist "BinIt-$tag-portable.zip") -Force
 Remove-Item $stage -Recurse -Force
 
 # Checksums, so a copy can be verified at the other end.

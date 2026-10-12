@@ -1,4 +1,4 @@
-//! TimeTrial core: who's in the seat, recording laps against them, challenges and
+//! Bin It core: who's in the seat, recording laps against them, challenges and
 //! leaderboards. UI-agnostic; the desktop app and the LAN web server both sit on top.
 
 pub mod catalogue;
@@ -152,7 +152,7 @@ pub struct CataloguePaths {
     pub custom: Option<PathBuf>,
 }
 
-pub struct TimeTrial {
+pub struct BinIt {
     previous_version: Mutex<Option<String>>,
     catalogue_paths: Mutex<CataloguePaths>,
     store: Mutex<Store>,
@@ -173,7 +173,7 @@ fn combo_of(s: &SessionInfo) -> Combo {
     }
 }
 
-impl TimeTrial {
+impl BinIt {
     pub fn open(db_path: &Path) -> Result<Self> {
         let store = Store::open(db_path)?;
         // Note which version made this data and which one had it last, for the About page and for
@@ -802,7 +802,7 @@ impl TimeTrial {
     }
 }
 
-impl TimeTrial {
+impl BinIt {
     /// The path driven so far on the current lap or stage, for drawing a map while it is learned.
     pub fn learning_path(&self) -> Vec<[f32; 2]> {
         self.runtime.lock().expect("runtime mutex poisoned").map.partial()

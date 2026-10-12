@@ -1,4 +1,4 @@
-//! The catalogue: every track, layout and car TimeTrial knows about for a game, so
+//! The catalogue: every track, layout and car Bin It knows about for a game, so
 //! pickers can offer things nobody has driven yet.
 //!
 //! Sources, merged by normalised name (never by reading game binaries):

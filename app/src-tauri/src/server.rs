@@ -1,7 +1,7 @@
 //! Local HTTP + WebSocket server.
 //!
 //! The desktop window, the overlay and any browser on the office network all talk to
-//! TimeTrial through this one API, so there's a single code path for the UI.
+//! Bin It through this one API, so there's a single code path for the UI.
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
@@ -15,14 +15,14 @@ use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 use tower_http::cors::CorsLayer;
-use tt_core::{ChallengeId, DriverId, LapFilter, LapId, LeaderboardQuery, NewChallenge, TimeTrial};
+use tt_core::{ChallengeId, DriverId, LapFilter, LapId, LeaderboardQuery, NewChallenge, BinIt};
 
 pub const PORT: u16 = 7878;
 pub const LAN_SETTING: &str = "lan_enabled";
 
 #[derive(Clone)]
 struct Ctx {
-    tt: Arc<TimeTrial>,
+    tt: Arc<BinIt>,
     app: AppHandle,
     lan: bool,
 }
@@ -44,7 +44,7 @@ impl<E: Into<anyhow::Error>> From<E> for ApiError {
 
 type ApiResult<T> = Result<Json<T>, ApiError>;
 
-pub async fn serve(tt: Arc<TimeTrial>, app: AppHandle, lan: bool) -> anyhow::Result<()> {
+pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<()> {
     let ctx = Ctx { tt, app, lan };
     let api = Router::new()
         .route("/status", get(status))
@@ -176,7 +176,7 @@ struct SetLan {
     enabled: bool,
 }
 
-/// Takes effect the next time TimeTrial starts.
+/// Takes effect the next time Bin It starts.
 async fn set_lan(State(c): State<Ctx>, Json(body): Json<SetLan>) -> ApiResult<bool> {
     c.tt.set_setting(LAN_SETTING, Some(if body.enabled { "1" } else { "0" }))?;
     Ok(Json(body.enabled))
@@ -371,13 +371,13 @@ async fn set_map_view(State(c): State<Ctx>, Json(b): Json<MapView>) -> ApiResult
     Ok(Json(()))
 }
 
-/// Destructive maintenance is only for the PC TimeTrial runs on: the server is also open to the
+/// Destructive maintenance is only for the PC Bin It runs on: the server is also open to the
 /// office network, and a phone must not be able to wipe data even by calling these URLs directly.
 fn local_only(addr: SocketAddr) -> Result<(), Response> {
     if addr.ip().is_loopback() {
         Ok(())
     } else {
-        Err((StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "this is only available in the TimeTrial app on the PC" }))).into_response())
+        Err((StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": "this is only available in the Bin It app on the PC" }))).into_response())
     }
 }
 
@@ -410,11 +410,11 @@ async fn admin_about(ConnectInfo(addr): ConnectInfo<SocketAddr>, State(c): State
     let data_dir = c.app.path().app_data_dir().ok();
     // The database is spread over the main file and its write-ahead log until SQLite folds them together.
     let db_bytes = data_dir.as_ref().map(|d| {
-        ["timetrial.db", "timetrial.db-wal"].iter().filter_map(|f| std::fs::metadata(d.join(f)).ok()).map(|m| m.len()).sum()
+        ["binit.db", "binit.db-wal"].iter().filter_map(|f| std::fs::metadata(d.join(f)).ok()).map(|m| m.len()).sum()
     });
     let counts = c.tt.about_counts().map_err(bad_request)?;
     Ok(Json(About {
-        name: "TimeTrial",
+        name: "Bin It",
         version: env!("CARGO_PKG_VERSION"),
         build_number: env!("TT_BUILD_NUMBER").parse().unwrap_or(0),
         build: if cfg!(debug_assertions) { "development" } else { "release" },
@@ -478,7 +478,7 @@ async fn events(State(c): State<Ctx>, ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(move |socket| forward_events(socket, c.tt))
 }
 
-async fn forward_events(mut socket: WebSocket, tt: Arc<TimeTrial>) {
+async fn forward_events(mut socket: WebSocket, tt: Arc<BinIt>) {
     let mut rx = tt.subscribe();
     loop {
         tokio::select! {
@@ -568,5 +568,5 @@ async fn dev_proxy(uri: &Uri) -> Response {
 
 #[cfg(not(debug_assertions))]
 async fn dev_proxy(_uri: &Uri) -> Response {
-    (StatusCode::NOT_FOUND, "TimeTrial UI not bundled in this build").into_response()
+    (StatusCode::NOT_FOUND, "Bin It UI not bundled in this build").into_response()
 }

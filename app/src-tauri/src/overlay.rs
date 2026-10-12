@@ -23,7 +23,7 @@ static KEYS_LOCK: Mutex<()> = Mutex::new(());
 
 pub fn create(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("index.html#/overlay".into()))
-        .title("TimeTrial overlay")
+        .title("Bin It overlay")
         .transparent(true)
         .decorations(false)
         .shadow(false)
@@ -262,7 +262,7 @@ pub fn apply_settings(app: &AppHandle, enabled: bool, focus_only: bool) {
 /// Ctrl+Shift+H: flip the saved on/off setting, so the app's toggle stays in sync.
 pub fn toggle_enabled(app: &AppHandle) {
     let enabled = !is_enabled();
-    if let Some(tt) = app.try_state::<std::sync::Arc<tt_core::TimeTrial>>() {
+    if let Some(tt) = app.try_state::<std::sync::Arc<tt_core::BinIt>>() {
         let _ = tt.set_overlay_enabled(enabled);
     }
     ENABLED.store(enabled, Ordering::SeqCst);
