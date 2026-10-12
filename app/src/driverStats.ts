@@ -1,7 +1,7 @@
 // Turns a driver's laps into the numbers and series behind their progress page.
 
 import type { Lap } from "./api";
-import { trackName } from "./format";
+import { carName, trackName } from "./format";
 
 /** A proper timed lap: valid, and not an out, in or partial lap. These are the ones that count as progress. */
 export const isTimed = (l: Lap) => l.valid && l.untimedReason === null;
@@ -212,7 +212,7 @@ export function summarize(combos: ComboLaps[], rating: { score: number | null; c
   }
 
   if (top) {
-    points.push(`Most improved: ${trackName(top.c.track, top.c.layout)} in the ${top.c.car}, ${(top.p.gained / 1000).toFixed(3)}s quicker than their first lap (${top.p.gainedPct.toFixed(1)}%).`);
+    points.push(`Most improved: ${trackName(top.c.track, top.c.layout)} in the ${carName(top.c.car)}, ${(top.p.gained / 1000).toFixed(3)}s quicker than their first lap (${top.p.gainedPct.toFixed(1)}%).`);
   }
 
   // Consistency on the track they've driven most: how many of the last few laps were close to their best.

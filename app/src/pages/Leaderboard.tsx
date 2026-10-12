@@ -6,7 +6,7 @@ import { Helmet } from "../components/Helmet";
 import { TrackHero } from "../components/TrackHero";
 import { useCompactTable } from "../useCompactTable";
 import { usePersistedState } from "../persist";
-import { SECTOR_MINT as MINT, SECTOR_PURPLE as PURPLE, ago, bestSectors as fastestSectors, gameName, gap, gridMinWidth, lapTime, sectorColor } from "../format";
+import { ago, bestSectors as fastestSectors, carName, gameName, gap, gridMinWidth, lapTime, SECTOR_MINT as MINT, SECTOR_PURPLE as PURPLE, sectorColor } from "../format";
 
 type Period = "today" | "week" | "all";
 
@@ -79,7 +79,7 @@ export function LeaderboardPage() {
     const items = carItems(catalogue, { only: new Set(carsHere) });
     // Cars the catalogue somehow lacks still get listed.
     const known = new Set(items.map((i) => i.value));
-    return [...items, ...carsHere.filter((c) => !known.has(c)).map((c) => ({ value: c, label: c, visual: <CarBadge name={c} /> }))];
+    return [...items, ...carsHere.filter((c) => !known.has(c)).map((c) => ({ value: c, label: carName(c), visual: <CarBadge name={carName(c)} /> }))];
   }, [catalogue, carsHere.join("|")]);
 
   const board =
@@ -228,13 +228,13 @@ export function LeaderboardPage() {
                           setPickedCar(r.car);
                           setView("drivers");
                         }}
-                        aria-label={`Show the ${r.car} leaderboard`}
+                        aria-label={`Show the ${carName(r.car)} leaderboard`}
                       >
                         <span className="lb-pos">{idx + 1}</span>
                         <span className="lb-c-driver" style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
                           <span style={{ flex: "none", width: 48, height: 40 }}><CarBadge brand={info?.brand} name={r.car} /></span>
                           <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                            <span className="lb-name">{r.car}</span>
+                            <span className="lb-name">{carName(r.car)}</span>
                             <span className="lb-meta" style={{ color: "var(--muted)" }}>{[info?.brand, info?.class].filter(Boolean).join(" · ") || " "}</span>
                           </span>
                         </span>
@@ -287,7 +287,7 @@ export function LeaderboardPage() {
                               <span className="lb-name">{d?.name ?? "Guest"}</span>
                               <span className="lb-meta" style={{ color: me ? color : "var(--muted)" }}>
                                 {me ? "In the seat · " : ""}
-                                {car ? ago(e.setAt) : `${e.car} · ${ago(e.setAt)}`}
+                                {car ? ago(e.setAt) : `${carName(e.car)} · ${ago(e.setAt)}`}
                               </span>
                             </span>
                           </span>

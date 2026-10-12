@@ -3,7 +3,7 @@ import { api, useAppState, useFetch, type Lap } from "../api";
 import { Helmet } from "../components/Helmet";
 import { Picker, type PickerItem } from "../components/Picker";
 import { byDay, groupCombos, progressOf, runningBest, sectorProgress, summarize, tierOf, type ComboLaps } from "../driverStats";
-import { lapTime, trackName } from "../format";
+import { carName, lapTime, trackName } from "../format";
 
 const secs = (ms: number) => (ms / 1000).toFixed(3);
 const dayLabel = (ms: number) => new Date(ms).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
@@ -32,7 +32,7 @@ export function DriverProgress({ id }: { id: number }) {
   const items: PickerItem[] = combos.map((c) => ({
     value: c.key,
     label: trackName(c.track, c.layout),
-    sub: `${c.car} · ${c.laps.length} ${c.laps.length === 1 ? "lap" : "laps"} · best ${lapTime(c.best)}`,
+    sub: `${carName(c.car)} · ${c.laps.length} ${c.laps.length === 1 ? "lap" : "laps"} · best ${lapTime(c.best)}`,
     search: c.car,
   }));
 
@@ -133,7 +133,7 @@ function ComboProgress({ combo }: { combo: ComboLaps }) {
   return (
     <>
       <div className="muted" style={{ fontSize: 14 }}>
-        {trackName(combo.track, combo.layout)} · {combo.car} · {laps.length} timed {laps.length === 1 ? "lap" : "laps"}
+        {trackName(combo.track, combo.layout)} · {carName(combo.car)} · {laps.length} timed {laps.length === 1 ? "lap" : "laps"}
         {cut > 0 ? ` · ${cut} cut` : ""}
       </div>
 

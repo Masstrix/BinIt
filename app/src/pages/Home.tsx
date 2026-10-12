@@ -4,7 +4,7 @@ import { Helmet, Sparkle } from "../components/Helmet";
 import { LiveMap } from "../components/LiveMap";
 import { useSeatSwitcher } from "../components/SeatSwitcher";
 import { Podium } from "../components/Podium";
-import { LAP_BADGE, ago, countdown, gap, lapKind, lapTime, trackName } from "../format";
+import { ago, carName, countdown, gap, LAP_BADGE, lapKind, lapTime, trackName } from "../format";
 
 export function Home() {
   const { status, drivers, recentLaps } = useAppState();
@@ -32,7 +32,7 @@ export function Home() {
       <div className="head" style={{ alignItems: "flex-end" }}>
         <h1>Who's in the seat?</h1>
         <span className="muted">
-          {session ? `${trackName(session.track, session.layout)} · ${session.car}` : status?.connected ? "Waiting for you to get on track" : "Start a game to begin timing"}
+          {session ? `${trackName(session.track, session.layout)} · ${carName(session.car)}` : status?.connected ? "Waiting for you to get on track" : "Start a game to begin timing"}
         </span>
       </div>
 

@@ -9,7 +9,7 @@ import { DateTimePicker } from "../components/DateTimePicker";
 import { Modal } from "../components/Modal";
 import { Picker } from "../components/Picker";
 import { Podium } from "../components/Podium";
-import { SECTOR_MINT, SECTOR_PURPLE, ago, bestSectors, countdown, gameName, gap, gridMinWidth, lapTime, ordinal, sectorColor, trackName, whenLabel } from "../format";
+import { ago, bestSectors, carName, countdown, gameName, gap, gridMinWidth, lapTime, ordinal, SECTOR_MINT, SECTOR_PURPLE, sectorColor, trackName, whenLabel } from "../format";
 
 type EndPreset = "lunch" | "five" | "friday" | "custom" | "never";
 
@@ -170,7 +170,7 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
           <div className="ch-rules">
             <span className="chip plain">{gameName(c.game)}</span>
             <span className="chip plain">{trackName(c.track, c.layout)}</span>
-            <span className="chip plain">{c.car ?? "Any car"}</span>
+            <span className="chip plain">{c.car ? carName(c.car) : "Any car"}</span>
             {c.validOnly && <span className="chip plain">Valid laps only</span>}
             {c.maxLaps && <span className="chip plain">{c.maxLaps} laps each</span>}
           </div>
@@ -236,7 +236,7 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
                     <span className="lb-name">{d?.name ?? "Guest"}</span>
                     <span className="lb-meta" style={{ color: me ? color : "var(--muted)" }}>
                       {me ? "In the seat · " : ""}
-                      {c.car ? ago(e.setAt) : `${e.car} · ${ago(e.setAt)}`}
+                      {c.car ? ago(e.setAt) : `${carName(e.car)} · ${ago(e.setAt)}`}
                     </span>
                   </span>
                 </span>

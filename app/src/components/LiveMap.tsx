@@ -1,6 +1,6 @@
 import { api, useAppState, useDriverMap, useTrackMaps } from "../api";
 import { findMap } from "../catalogueItems";
-import { lapTime, trackName } from "../format";
+import { carName, lapTime, trackName } from "../format";
 import type { SectorStatus } from "../api";
 import { Helmet } from "./Helmet";
 import { TrackMap } from "./TrackMap";
@@ -90,7 +90,7 @@ export function LiveMap() {
           </span>
         </div>
       )}
-      <span className="muted" style={{ fontSize: 14 }}>{trackName(session.track, session.layout)} · {session.car}</span>
+      <span className="muted" style={{ fontSize: 14 }}>{trackName(session.track, session.layout)} · {carName(session.car)}</span>
     </section>
   );
 }

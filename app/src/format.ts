@@ -38,10 +38,16 @@ export function trackName(track: string, layout?: string): string {
   return layout ? `${pretty} · ${prettify(layout)}` : pretty;
 }
 
+/** A car's name for display: Assetto Corsa reports folder ids ("ks_porsche_911_gt3_r_2016"), other games real names. */
+export function carName(car: string): string {
+  return prettify(car);
+}
+
 export function prettify(id: string): string {
   if (!id.includes("_") && /[A-Z ]/.test(id)) return id;
   return id
     .replace(/^ks_/, "")
+    .replace(/^layout_/, "")
     .split("_")
     .map((w) => (w.length <= 3 ? w.toUpperCase() : w[0].toUpperCase() + w.slice(1)))
     .join(" ");

@@ -5,7 +5,7 @@ import { QrCode } from "../components/QrCode";
 
 const GAMES = [
   { key: "acevo", name: "AC EVO", detail: "Laps · shared memory", ready: true },
-  { key: "ac", name: "Assetto Corsa", detail: "Laps · shared memory", ready: false },
+  { key: "ac", name: "Assetto Corsa", detail: "Laps · shared memory", ready: true },
   { key: "acc", name: "ACC", detail: "Laps · shared memory", ready: false },
   { key: "dr2", name: "DiRT Rally 2.0", detail: "Stages · UDP telemetry", ready: false },
   { key: "wrc", name: "EA WRC", detail: "Stages · UDP telemetry", ready: false },

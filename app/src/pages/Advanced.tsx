@@ -4,7 +4,7 @@ import { CarBadge } from "../catalogueItems";
 import { Logo } from "../components/Helmet";
 import { Modal } from "../components/Modal";
 import { Picker, type PickerItem } from "../components/Picker";
-import { gameName, trackName } from "../format";
+import { carName, gameName, trackName } from "../format";
 
 /** Value for a track (+ optionally one layout) in the picker. */
 const scopeValue = (game: string, track: string, layout: string | null) => JSON.stringify([game, track, layout]);
@@ -162,7 +162,7 @@ export function AdvancedPage() {
                   title="Choose a car"
                   value={carChoice}
                   anyLabel="All cars"
-                  items={carsHere.map((c) => ({ value: c, label: c, visual: <CarBadge name={c} /> }))}
+                  items={carsHere.map((c) => ({ value: c, label: carName(c), visual: <CarBadge name={carName(c)} /> }))}
                   onChange={setCar}
                 />
               </div>

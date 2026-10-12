@@ -3,7 +3,7 @@ import { api, useFetch, type Catalogue, type TrackMapData } from "../api";
 import { countryName, findMap, TrackThumb } from "../catalogueItems";
 import { fold } from "./Picker";
 import { TrackMap } from "./TrackMap";
-import { SECTOR_PURPLE, gameName, lapTime, prettify } from "../format";
+import { carName, gameName, lapTime, prettify, SECTOR_PURPLE } from "../format";
 
 /** One colour per sector, in lap order, so the map and its legend agree. */
 const SECTOR_HUES = ["#4FC3FF", "#FF9F6B", "#FF7AC6", "#4BE3A6", "#FFC93C", "#B18CFF"];
@@ -57,7 +57,7 @@ export function TrackHero({
         <h2 className="th-name">{prettify(track)}</h2>
         <div className="th-layout">{layout ? prettify(layout) : "Default layout"}</div>
         <div className="th-chips">
-          <span className="chip plain">{car ?? "Any car"}</span>
+          <span className="chip plain">{car ? carName(car) : "Any car"}</span>
           {carInfo?.class && <span className="chip plain">{carInfo.class}</span>}
           <span className="chip plain">{drivers} {drivers === 1 ? "driver" : "drivers"}</span>
           <span className="chip plain">{laps} {laps === 1 ? "lap" : "laps"}</span>

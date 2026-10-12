@@ -4,7 +4,7 @@ import type { CatTrack, Catalogue, Combo, TrackMapData } from "./api";
 import { TrackMap } from "./components/TrackMap";
 import type { PickerItem } from "./components/Picker";
 import { fold } from "./components/Picker";
-import { trackName } from "./format";
+import { carName, trackName } from "./format";
 
 export const trackValue = (track: string, layout: string) => `${track}|${layout}`;
 
@@ -101,12 +101,12 @@ export function carItems(cat: Catalogue | null, opts: { only?: Set<string> } = {
     .filter((c) => !opts.only || opts.only.has(c.name))
     .map((c) => ({
       value: c.name,
-      label: c.name,
+      label: carName(c.name),
       sub: [c.brand, c.class].filter(Boolean).join(" · ") || undefined,
       note: c.seen ? undefined : "Not driven yet",
-      search: [...c.aliases, c.brand, c.class].filter(Boolean).join(" "),
+      search: [c.name, ...c.aliases, c.brand, c.class].filter(Boolean).join(" "),
       tag: c.class ?? undefined,
       group: c.brand ?? undefined,
-      visual: <CarBadge brand={c.brand} name={c.name} />,
+      visual: <CarBadge brand={c.brand} name={carName(c.name)} />,
     }));
 }
