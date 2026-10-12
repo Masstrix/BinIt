@@ -750,3 +750,80 @@ fn fresh_install_lists_the_bundled_catalogue() {
     assert!(cat.tracks.len() >= 10 && cat.cars.len() >= 40, "{} tracks, {} cars", cat.tracks.len(), cat.cars.len());
     assert!(cat.tracks.iter().all(|t| !t.seen) && cat.cars.iter().all(|c| !c.seen));
 }
+
+/// Two games that happen to use identical track, layout and car names must stay completely apart:
+/// laps, leaderboards, ratings, learned maps, sector layouts, renames, deletes and the catalogue.
+#[test]
+fn games_with_identical_names_never_mix() {
+    let tt = TimeTrial::in_memory().unwrap();
+    let ann = tt.add_driver("Ann", None).unwrap();
+    let bob = tt.add_driver("Bob", None).unwrap();
+    let lap_in = |game: &str, track: &str, who: DriverId, ms: u32| Lap {
+        id: 0,
+        driver_id: Some(who),
+        combo: Combo { game: game.into(), track: track.into(), layout: "GP".into(), car: "Same Car".into() },
+        session_kind: "Hot Stint".into(),
+        lap_number: 1,
+        time_ms: ms,
+        valid: true,
+        untimed_reason: None,
+        sectors_ms: vec![],
+        recorded_at: 1_000,
+    };
+    {
+        let store = tt.store();
+        // acevo: Ann and Bob both drive Imola. dr2: only Ann does, faster, plus a track only dr2 has seen.
+        for lap in [
+            lap_in("acevo", "Imola", ann.id, 100_000),
+            lap_in("acevo", "Imola", bob.id, 101_000),
+            lap_in("dr2", "Imola", ann.id, 90_000),
+            lap_in("dr2", "Zzz Test Track", ann.id, 80_000),
+        ] {
+            store.insert_lap(&lap, None, None).unwrap();
+        }
+        store.set_track_map("acevo", "Imola", "GP", &[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]], 1).unwrap();
+        store.set_sector_layout("acevo", "Imola", "GP", &[0.0, 0.5, 1.0], "even").unwrap();
+    }
+    let board = |game: &str| {
+        tt.leaderboard(&LeaderboardQuery { game: game.into(), track: "Imola".into(), layout: "GP".into(), ..Default::default() })
+            .unwrap()
+            .iter()
+            .map(|e| e.time_ms)
+            .collect::<Vec<_>>()
+    };
+    // Leaderboards and combos.
+    assert_eq!(board("acevo"), vec![100_000, 101_000]);
+    assert_eq!(board("dr2"), vec![90_000]);
+    assert!(board("acc").is_empty(), "a game with no laps has an empty board");
+    assert!(tt.combos(Some("acevo")).unwrap().iter().all(|c| c.game == "acevo"));
+    assert_eq!(tt.combos(None).unwrap().len(), 3);
+
+    // Ratings only compare like with like: Ann's dr2 lap (no one to race there) doesn't count.
+    let ratings = tt.driver_ratings().unwrap();
+    let ann_rating = ratings.iter().find(|r| r.driver_id == ann.id).unwrap();
+    assert_eq!((ann_rating.combos, ann_rating.fastest_on), (1, 1));
+
+    // Learned maps and sector layouts belong to one game.
+    assert_eq!(tt.track_maps("acevo").unwrap().len(), 1);
+    assert!(tt.track_maps("dr2").unwrap().is_empty());
+    assert!(tt.sector_boundaries("acevo", "Imola", "GP").unwrap().is_some());
+    assert!(tt.sector_boundaries("dr2", "Imola", "GP").unwrap().is_none());
+
+    // The catalogue lists what was driven in that game only.
+    let has = |game: &str, track: &str| tt.catalogue(game).unwrap().tracks.iter().any(|t| t.name == track && t.seen);
+    assert!(has("dr2", "Zzz Test Track"));
+    assert!(!has("acevo", "Zzz Test Track"));
+
+    // Renaming a track or deleting laps in one game leaves the other alone.
+    tt.store().rename_track("acevo", "Imola", "Autodromo Imola").unwrap();
+    assert_eq!(board("dr2"), vec![90_000]);
+    let removed = tt
+        .delete_laps(&LapFilter { game: "dr2".into(), track: "Imola".into(), layout: None, car: None, forget_map: true })
+        .unwrap();
+    assert_eq!(removed, 1);
+    assert_eq!(tt.track_maps("acevo").unwrap().len(), 1, "forgetting a dr2 track must not drop an acevo map");
+    assert_eq!(
+        tt.leaderboard(&LeaderboardQuery { game: "acevo".into(), track: "Autodromo Imola".into(), layout: "GP".into(), ..Default::default() }).unwrap().len(),
+        2
+    );
+}
