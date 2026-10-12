@@ -122,6 +122,8 @@ The owner uses this app while you work, often mid-lap.
 * Why telemetry values are corrected (gear offset, lap clock overrun, mirrored map axes):
   `roadmap.md`, and the comments in `crates/tt-games/src/acevo/mod.rs` and `timing.rs`.
 * Lap and sector timing design: [sectors.md](sectors.md).
+* Adding or changing a game's integration (module layout, where to register it, how to check it against
+  the real game): [adding-a-game.md](adding-a-game.md).
 * What is stored and for how long (lap rows kept forever, input traces only for timed laps), and the
   three version numbers (app, database format, blob format): `roadmap.md` and `building.md`.
 * Commit only when the owner asks. Group commits by area, in build order: Rust crates, the desktop
