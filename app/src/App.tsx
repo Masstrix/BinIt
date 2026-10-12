@@ -3,6 +3,7 @@ import { api, isTauri, useAppState, useFetch } from "./api";
 import { Logo } from "./components/Helmet";
 import { readStored, writeStored } from "./persist";
 import { OverlayToggle } from "./components/OverlayToggle";
+import { UpdateButton } from "./components/Update";
 import { Home } from "./pages/Home";
 import { ConnectionGate } from "./components/ConnectionGate";
 import { LeaderboardPage } from "./pages/Leaderboard";
@@ -89,6 +90,7 @@ function Sidebar({ path }: { path: string }) {
         {status?.connected && <span className="live" style={{ fontSize: 12, color: "var(--mint)" }}>live</span>}
       </div>
       <OverlayToggle compact />
+      <UpdateButton />
       <nav className="nav" aria-label="Main">
         {ROUTES.map((r) => {
           const current = r.path === "/" ? path === "/" : path.startsWith(r.path);

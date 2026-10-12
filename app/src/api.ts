@@ -148,10 +148,28 @@ export interface About {
   port: number;
   lanEnabled: boolean;
   counts: { drivers: number; laps: number; timedLaps: number; tracedLaps: number; challenges: number; schemaVersion: number; createdWith: string | null; previousVersion: string | null };
-  /** Put here by the installer, so it updates itself when it starts. False for the portable exe. */
-  installed: boolean;
-  /** A newer release, when this run's update check found one. */
-  update: { version: string; notes: string | null } | null;
+}
+
+/** Where an update is up to, as the small update window shows it. */
+export type UpdateStage =
+  | { stage: "checking" }
+  | { stage: "downloading"; version: string; downloaded: number; total: number | null }
+  | { stage: "installing"; version: string }
+  | { stage: "failed"; message: string }
+  | { stage: "starting" };
+
+/** Whether there's a newer Bin It, and how an update is going (kept by the desktop app). */
+export interface UpdateStatus {
+  current: string;
+  /** "installed" updates itself; "portable" can only link to the download; "development" never updates. */
+  kind: "installed" | "portable" | "development";
+  latest: { version: string; notes: string | null } | null;
+  checking: boolean;
+  /** When a check last worked (ms since the epoch). */
+  lastChecked: number | null;
+  error: string | null;
+  /** Set while an update is being installed. */
+  stage: UpdateStage | null;
 }
 
 /** Which laps a cleanup touches (desktop app only). */
@@ -271,6 +289,7 @@ export type AppEvent =
   | { type: "live"; live: LiveView }
   | { type: "overlayLayoutChanged"; game: string }
   | { type: "overlaySettings"; enabled: boolean; focusOnly: boolean; show: OverlayShow }
+  | { type: "updateChanged"; update: UpdateStatus }
   | { type: "resync" };
 
 // ---- transport ----------------------------------------------------------------
@@ -337,6 +356,10 @@ export const api = {
   setOverlayShow: (mode: OverlayShow) => request<string>("PUT", "/overlay/show", { mode }),
   setOverlayFocusOnly: (enabled: boolean) => request<boolean>("PUT", "/overlay/focus-only", { enabled }),
   resetOverlayLayout: (game: string) => request<null>("DELETE", `/overlay/layout/${game}`),
+  update: () => request<UpdateStatus>("GET", "/update"),
+  checkForUpdate: () => request<UpdateStatus>("POST", "/update/check"),
+  /** Bin It on the PC closes, updates and starts again. */
+  installUpdate: () => request<UpdateStatus>("POST", "/update/install"),
 };
 
 // ---- live store -------------------------------------------------------------------
@@ -350,6 +373,8 @@ export interface AppState {
   /** Bumped whenever lap data changes, so leaderboards know to refetch. */
   lapsVersion: number;
   lastResult: LapResult | null;
+  /** Whether the desktop app has found a newer version (null until known). */
+  update: UpdateStatus | null;
 }
 
 type Listener = () => void;
@@ -364,6 +389,7 @@ class Store {
     challenges: [],
     lapsVersion: 0,
     lastResult: null,
+    update: null,
   };
   private listeners = new Set<Listener>();
   private eventListeners = new Set<EventListener>();
@@ -403,12 +429,18 @@ class Store {
     this.set({ status, drivers, recentLaps, challenges, lapsVersion: this.state.lapsVersion + 1 });
   }
 
+  /** Takes the status a check or install request answered with (the event may come later). */
+  setUpdate(update: UpdateStatus) {
+    this.set({ update });
+  }
+
   private connect() {
     const wsBase = BASE ? BASE.replace(/^http/, "ws") : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
     const ws = new WebSocket(`${wsBase}/api/events`);
     ws.onopen = () => {
       this.set({ online: true });
       this.refreshAll().catch(() => {});
+      api.update().then((update) => this.set({ update }), () => {});
     };
     ws.onmessage = (msg) => this.handle(JSON.parse(msg.data) as AppEvent);
     ws.onclose = () => {
@@ -452,8 +484,12 @@ class Store {
       case "mapsChanged":
         this.set({ lapsVersion: this.state.lapsVersion + 1 });
         break;
+      case "updateChanged":
+        this.set({ update: e.update });
+        break;
       case "resync":
         this.refreshAll().catch(() => {});
+        api.update().then((update) => this.set({ update }), () => {});
         break;
     }
     this.eventListeners.forEach((l) => l(e));

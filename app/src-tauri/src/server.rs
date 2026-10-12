@@ -77,6 +77,9 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/overlay/enabled", put(set_overlay_enabled))
         .route("/overlay/focus-only", put(set_overlay_focus_only))
         .route("/overlay/show", put(set_overlay_show))
+        .route("/update", get(update_status))
+        .route("/update/check", post(update_check))
+        .route("/update/install", post(update_install))
         .route("/overlay/layout/{game}", get(overlay_layout).put(set_overlay_layout).delete(reset_overlay_layout))
         .route("/events", get(events));
 
@@ -401,10 +404,6 @@ struct About {
     port: u16,
     lan_enabled: bool,
     counts: tt_core::AboutCounts,
-    /// Put here by the installer, so it updates itself; false for the portable exe.
-    installed: bool,
-    /// A newer release, when this run's update check found one.
-    update: Option<crate::updater::Available>,
 }
 
 /// Version, where the data lives and what's in it. Local only: it names folders on this PC.
@@ -429,9 +428,24 @@ async fn admin_about(ConnectInfo(addr): ConnectInfo<SocketAddr>, State(c): State
         port: PORT,
         lan_enabled: c.lan,
         counts,
-        installed: crate::updater::is_installed(),
-        update: crate::updater::available(),
     }))
+}
+
+/// Whether there's a newer Bin It, and how an update is going. Phones can see it too.
+async fn update_status() -> Json<crate::updater::Status> {
+    Json(crate::updater::status())
+}
+
+/// Looks for a newer release now.
+async fn update_check(State(c): State<Ctx>) -> Json<crate::updater::Status> {
+    Json(crate::updater::check_now(&c.app).await)
+}
+
+/// Installs the newer release now: Bin It on the PC closes and starts again. Phones may ask for
+/// this too (it only ever installs a release signed with Bin It's own key).
+async fn update_install(State(c): State<Ctx>) -> Result<Json<crate::updater::Status>, Response> {
+    crate::updater::install_now(&c.app).map_err(|e| (StatusCode::CONFLICT, Json(serde_json::json!({ "error": e }))).into_response())?;
+    Ok(Json(crate::updater::status()))
 }
 
 async fn admin_count_laps(ConnectInfo(addr): ConnectInfo<SocketAddr>, State(c): State<Ctx>, Json(f): Json<LapFilter>) -> Result<Json<u32>, Response> {

@@ -815,3 +815,36 @@ h2 { font-size: 22px; }
 .get-latest.has-update { background: color-mix(in srgb, var(--violet) 22%, var(--panel)); border-color: var(--violet); }
 .get-latest-links { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .get-latest-links .chip { border: none; }
+
+/* ---- updates: the menu button and the card at the top of Advanced ---------------------------- */
+.update-pill {
+  display: flex; align-items: center; gap: 10px; min-height: 46px; padding: 0 14px; border-radius: 14px;
+  border: none; background: var(--violet); color: #fff; font-weight: 700; font-size: 14px; text-align: left;
+  box-shadow: 0 0 0 0 rgba(106, 88, 245, 0.55); animation: update-pulse 2.4s ease-out infinite;
+}
+.update-pill:hover:not(:disabled) { background: color-mix(in srgb, var(--violet) 85%, #fff); }
+.update-pill:disabled { cursor: default; }
+.update-pill.busy { background: var(--panel-2); color: var(--text); border: 1px solid var(--violet); animation: none; }
+.update-pill.busy svg { animation: update-bob 1.1s ease-in-out infinite; }
+.update-pill svg { flex: none; }
+.update-pill-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@keyframes update-pulse { 0% { box-shadow: 0 0 0 0 rgba(106, 88, 245, 0.55); } 70%, 100% { box-shadow: 0 0 0 10px rgba(106, 88, 245, 0); } }
+@keyframes update-bob { 0%, 100% { transform: translateY(-1px); } 50% { transform: translateY(2px); } }
+@media (prefers-reduced-motion: reduce) { .update-pill, .update-pill.busy svg { animation: none; } }
+/* Narrow windows: an icon in the rail. */
+@media (max-width: 1100px) { .update-pill { width: 48px; padding: 0; justify-content: center; } .update-pill-label { display: none; } }
+/* Phones: an icon at the end of the top bar (whose edges would clip the pulse). */
+@media (max-width: 640px) { .update-pill { flex: none; order: 1; width: 44px; min-height: 44px; animation: none; } }
+
+.update-card { --tone: var(--mint); }
+.update-card.new { --tone: var(--violet); border-color: var(--violet); background: color-mix(in srgb, var(--violet) 14%, var(--panel)); }
+.update-card.busy { --tone: var(--peri-1); }
+.update-card.warn { --tone: var(--peach); }
+.update-head { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 18px; }
+.update-dot { align-self: flex-start; margin-top: 9px; width: 14px; height: 14px; border-radius: 50%; flex: none; background: var(--tone); box-shadow: 0 0 0 5px color-mix(in srgb, var(--tone) 22%, transparent); }
+.update-text { flex: 1 1 260px; display: grid; gap: 4px; min-width: 0; }
+.update-text .muted { font-size: 14px; }
+.update-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.update-notes { margin: 0; padding-left: 20px; display: grid; gap: 4px; color: var(--text-2); font-size: 14px; }
+.update-error { color: var(--peach); font-size: 14px; }
+@media (max-width: 640px) { .update-actions, .update-actions .btn { width: 100%; } }

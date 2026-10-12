@@ -52,6 +52,9 @@ pub enum AppEvent {
     OverlayLayoutChanged { game: String },
     #[serde(rename_all = "camelCase")]
     OverlaySettings { enabled: bool, focus_only: bool, show: String },
+    /// The app's update status changed (found a new version, checking, installing): the desktop
+    /// app keeps it, this only carries it to every screen.
+    UpdateChanged { update: serde_json::Value },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -200,6 +203,11 @@ impl BinIt {
 
     pub fn subscribe(&self) -> broadcast::Receiver<AppEvent> {
         self.events.subscribe()
+    }
+
+    /// Tells every screen the update status changed (see `AppEvent::UpdateChanged`).
+    pub fn update_changed(&self, update: serde_json::Value) {
+        self.emit(AppEvent::UpdateChanged { update });
     }
 
     fn emit(&self, event: AppEvent) {
