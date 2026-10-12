@@ -25,9 +25,8 @@ pub const GAME_PROCESSES: &[(&str, &str)] = &[
     ("AssettoCorsaEVO.exe", "acevo"),
     ("acs.exe", "ac"),
     ("acs_x86.exe", "ac"),
-    ("AC2-Win64-Shipping.exe", "acc"),
     ("dirtrally2.exe", "dr2"),
-    ("WRC.exe", "wrc"),
+    // Assetto Corsa Rally ("acr") joins this list with its adapter, once its executable name is known.
 ];
 
 /// The game key for an executable name (case-insensitive), if it's a supported game.

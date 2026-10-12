@@ -761,3 +761,13 @@ h2 { font-size: 22px; }
 .dc-sub { font-size: 13px; }
 .driver-card .driver-actions { margin-left: 0; }
 @media (max-width: 640px) { .driver-cards { grid-template-columns: 1fr; } }
+
+/* ---- supported games: a slim tile per game ---------------------------------------------------- */
+
+.games-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.game-tile { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0 10px; padding: 8px 12px; border-radius: 14px; background: var(--panel-2); }
+.game-tile[data-running] { background: var(--violet); }
+.game-tile[data-soon] { opacity: 0.7; }
+.game-tile-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.game-tile-detail { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+.game-tile[data-running] .game-tile-detail { color: rgba(238, 240, 255, 0.85); }

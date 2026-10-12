@@ -142,9 +142,8 @@ export const GAME_PROFILES: GameProfile[] = [
     defaults: standard,
   },
   { key: "ac", name: "Assetto Corsa", hud: [], defaults: standard },
-  { key: "acc", name: "ACC", hud: [], defaults: standard },
   { key: "dr2", name: "DiRT Rally 2.0", hud: [], defaults: { ...standard, sections: { "top-center": ["driver", "pb", "challenge"], "middle-left": ["toasts"] } } },
-  { key: "wrc", name: "EA WRC", hud: [], defaults: { ...standard, sections: { "top-center": ["driver", "pb", "challenge"], "middle-left": ["toasts"] } } },
+  { key: "acr", name: "Assetto Corsa Rally", hud: [], defaults: { ...standard, sections: { "top-center": ["driver", "pb", "challenge"], "middle-left": ["toasts"] } } },
 ];
 
 export function profileFor(game: string | null | undefined): GameProfile {

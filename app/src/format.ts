@@ -71,7 +71,7 @@ export const LAP_BADGE: Record<Exclude<LapKind, "timed">, { text: string; classN
   driverChange: { text: "DRIVER CHANGE", className: "chip plain", title: "The driver changed during this lap, so it was not timed for anyone" },
 };
 
-const GAME_NAMES: Record<string, string> = { acevo: "AC EVO", ac: "Assetto Corsa", acc: "ACC", dr2: "DiRT Rally 2.0", wrc: "EA WRC" };
+const GAME_NAMES: Record<string, string> = { acevo: "AC EVO", ac: "Assetto Corsa", dr2: "DiRT Rally 2.0", acr: "Assetto Corsa Rally" };
 
 export function gameName(key: string): string {
   return GAME_NAMES[key] ?? key;

@@ -6,10 +6,33 @@ import { QrCode } from "../components/QrCode";
 const GAMES = [
   { key: "acevo", name: "AC EVO", detail: "Laps · shared memory", ready: true },
   { key: "ac", name: "Assetto Corsa", detail: "Laps · shared memory", ready: true },
-  { key: "acc", name: "ACC", detail: "Laps · shared memory", ready: false },
   { key: "dr2", name: "DiRT Rally 2.0", detail: "Stages · UDP telemetry", ready: false },
-  { key: "wrc", name: "EA WRC", detail: "Stages · UDP telemetry", ready: false },
+  { key: "acr", name: "Assetto Corsa Rally", detail: "Stages", ready: false },
 ];
+
+/** Which games TimeTrial can follow, and which one is running right now. */
+function SupportedGames({ running }: { running: string | null }) {
+  return (
+    <section className="card" aria-label="Supported games" style={{ gap: 10, padding: "16px 20px" }}>
+      <h2 style={{ fontSize: 17 }}>Supported games</h2>
+      <div className="games-list">
+        {GAMES.map((g) => {
+          const on = running === g.key;
+          return (
+            <div key={g.key} className="game-tile" data-running={on || undefined} data-soon={!g.ready || undefined}>
+              <span className="game-tile-name">{g.name}</span>
+              <span className={`chip ${on ? "" : "plain"}`} style={on ? { background: "rgba(13,18,36,0.3)" } : undefined}>
+                {on && <span className="dot on" style={{ width: 8, height: 8 }} />}
+                {on ? "Running" : g.ready ? "Supported" : "Coming soon"}
+              </span>
+              <span className="game-tile-detail">{g.detail}</span>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
 
 export function GamesPage() {
   const { status, online } = useAppState();
@@ -23,23 +46,9 @@ export function GamesPage() {
     <>
       <h1>Games &amp; overlay</h1>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 12 }}>
-        {GAMES.map((g) => {
-          const running = status?.connected && status.game === g.key;
-          return (
-            <div key={g.key} className="card" style={{ padding: 18, gap: 6, borderRadius: 22, ...(running ? { background: "var(--violet)", borderColor: "var(--violet)" } : {}) }}>
-              <span className={`chip ${running ? "" : "plain"}`} style={{ alignSelf: "flex-start", ...(running ? { background: "rgba(13,18,36,0.3)" } : {}) }}>
-                {running && <span className="dot on" style={{ width: 8, height: 8 }} />}
-                {running ? "Running" : g.ready ? "Supported" : "Coming soon"}
-              </span>
-              <span style={{ font: "800 18px var(--font-display)", marginTop: 6 }}>{g.name}</span>
-              <span style={{ fontSize: 14, opacity: 0.85 }}>{g.detail}</span>
-            </div>
-          );
-        })}
-      </div>
-
       <OverlayEditor />
+
+      <SupportedGames running={status?.connected ? status.game : null} />
 
       <section className="card" style={{ flexDirection: "row", flexWrap: "wrap", gap: 28 }} aria-label="In-game controls">
         <div style={{ flex: "999 1 420px", minWidth: 0, display: "flex", flexDirection: "column", gap: 8 }}>

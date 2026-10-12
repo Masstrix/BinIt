@@ -794,7 +794,7 @@ fn games_with_identical_names_never_mix() {
     // Leaderboards and combos.
     assert_eq!(board("acevo"), vec![100_000, 101_000]);
     assert_eq!(board("dr2"), vec![90_000]);
-    assert!(board("acc").is_empty(), "a game with no laps has an empty board");
+    assert!(board("acr").is_empty(), "a game with no laps has an empty board");
     assert!(tt.combos(Some("acevo")).unwrap().iter().all(|c| c.game == "acevo"));
     assert_eq!(tt.combos(None).unwrap().len(), 3);
 
