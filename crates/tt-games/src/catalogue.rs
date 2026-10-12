@@ -25,6 +25,7 @@ pub fn seed_json(game: &str) -> Option<&'static str> {
     match game {
         "acevo" => Some(crate::acevo::CATALOGUE_JSON),
         "ac" => Some(crate::ac::CATALOGUE_JSON),
+        "acr" => Some(crate::acr::CATALOGUE_JSON),
         "dr2" => Some(crate::dr2::CATALOGUE_JSON),
         _ => None,
     }

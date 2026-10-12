@@ -1,0 +1,21 @@
+{
+ "tracks": [],
+ "cars": [
+  { "name": "Peugeot 206 WRC", "brand": "Peugeot", "class": "WRC" },
+  { "name": "Citroën Xsara WRC", "brand": "Citroën", "class": "WRC", "aliases": ["Citroen Xsara WRC"] },
+  { "name": "Hyundai i20 N Rally2", "brand": "Hyundai", "class": "Rally2", "aliases": ["Hyundai i20N Rally2"] },
+  { "name": "Škoda Fabia RS Rally2", "brand": "Škoda", "class": "Rally2", "aliases": ["Skoda Fabia RS Rally2"] },
+  { "name": "Peugeot 208 Rally4", "brand": "Peugeot", "class": "Rally4" },
+  { "name": "Peugeot 306 Maxi", "brand": "Peugeot", "class": "Kit Car", "aliases": ["Peugeot 306 Maxi Kit Car"] },
+  { "name": "Lancia Rally 037 EVO 2", "brand": "Lancia", "class": "Group B", "aliases": ["Lancia 037"] },
+  { "name": "Lancia Delta HF Integrale EVO", "brand": "Lancia", "class": "Group A", "aliases": ["Lancia Delta Integrale"] },
+  { "name": "Lancia Stratos", "brand": "Lancia" },
+  { "name": "Lancia Fulvia Coupé 1.6 HF", "brand": "Lancia", "class": "Group 4", "aliases": ["Lancia Fulvia"] },
+  { "name": "Subaru Impreza S3", "brand": "Subaru", "class": "Group A", "aliases": ["Subaru Impreza 555"] },
+  { "name": "Alpine A110", "brand": "Alpine", "class": "Group 4" },
+  { "name": "Alfa Romeo GTA 1300 Junior", "brand": "Alfa Romeo" },
+  { "name": "Fiat 131 Abarth", "brand": "Fiat" },
+  { "name": "Fiat 124 Sport Abarth", "brand": "Fiat", "aliases": ["Fiat 124 Abarth"] },
+  { "name": "Mini Cooper S", "brand": "Mini", "class": "Group 2" }
+ ]
+}

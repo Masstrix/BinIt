@@ -16,7 +16,7 @@ pub mod layout;
 use std::time::{Duration, Instant};
 
 use crate::tracker::{LapTracker, STATUS_LIVE, STATUS_OFF, STATUS_PAUSE, STATUS_REPLAY, Sample};
-use crate::{CompletedLap, GameAdapter, GameEvent, GameId, GamePhase, Inputs, LiveState, SessionInfo, TimingKind};
+use crate::{CompletedLap, GameAdapter, GameEvent, GameId, GamePhase, LiveState, SessionInfo, TimingKind};
 use layout::{Graphics, Physics, Static};
 
 /// The bundled list of stock cars and tracks (the rest comes from the player's own files).
@@ -24,9 +24,7 @@ pub const CATALOGUE_JSON: &str = include_str!("catalogue.json");
 
 /// The game's executables: 64-bit, then the 32-bit build some installs still use.
 pub const PROCESS_NAMES: [&str; 2] = ["acs.exe", "acs_x86.exe"];
-pub const PHYSICS_PAGE: &str = "Local\\acpmf_physics";
-pub const GRAPHICS_PAGE: &str = "Local\\acpmf_graphics";
-pub const STATIC_PAGE: &str = "Local\\acpmf_static";
+pub use crate::acpmf::{GRAPHICS_PAGE, PHYSICS_PAGE, STATIC_PAGE};
 
 const CONNECTED_POLL: Duration = Duration::from_millis(50);
 const DISCONNECTED_POLL: Duration = Duration::from_secs(2);
@@ -73,25 +71,7 @@ pub fn player_position(g: &Graphics) -> Option<[f32; 2]> {
     (x.is_finite() && z.is_finite() && (x != 0.0 || z != 0.0)).then_some([x, z])
 }
 
-/// The game numbers gears 0 = reverse, 1 = neutral, 2 = first. TimeTrial uses what drivers call them:
-/// -1 = reverse, 0 = neutral, 1 = first.
-pub fn display_gear(raw: i32) -> i16 {
-    raw.saturating_sub(1).clamp(i16::MIN as i32, i16::MAX as i32) as i16
-}
-
-pub fn inputs(p: &Physics) -> Inputs {
-    Inputs {
-        throttle: p.gas.clamp(0.0, 1.0),
-        brake: p.brake.clamp(0.0, 1.0),
-        // The game reports 1.0 with the pedal released; TimeTrial wants 1.0 for pressed.
-        clutch: (1.0 - p.clutch).clamp(0.0, 1.0),
-        handbrake: 0.0,
-        steering: p.steer_angle.clamp(-1.0, 1.0),
-        gear: display_gear(p.gear),
-        speed_kmh: p.speed_kmh.max(0.0),
-        rpm: p.rpm.clamp(0, u16::MAX as i32) as u16,
-    }
-}
+pub use crate::acpmf::{display_gear, inputs};
 
 pub fn sample(g: &Graphics, p: &Physics) -> Sample {
     Sample {
@@ -114,14 +94,11 @@ mod connection {
     use anyhow::{Result, bail};
 
     use super::layout::{Graphics, Physics, Static, graphics, physics, statics};
-    use super::{GRAPHICS_PAGE, PHYSICS_PAGE, STATIC_PAGE};
-    use crate::shm::SharedMemory;
+    use crate::acpmf::Pages;
 
     /// Open handles to the three pages.
     pub struct Connection {
-        physics: SharedMemory,
-        graphics: SharedMemory,
-        statics: SharedMemory,
+        pages: Pages,
     }
 
     impl Connection {
@@ -136,53 +113,39 @@ mod connection {
 
         /// Opens the pages without checking that the game has filled them in (diagnostics).
         pub fn open_unchecked() -> Result<Self> {
-            let physics = SharedMemory::open(PHYSICS_PAGE)?;
-            let graphics = SharedMemory::open(GRAPHICS_PAGE)?;
-            let statics = SharedMemory::open(STATIC_PAGE)?;
-            if graphics.region_size() < graphics::NEEDED || statics.region_size() < statics::MINIMUM || physics.region_size() < physics::GAS + 4 {
-                bail!(
-                    "shared memory pages are smaller than expected (physics {}, graphics {} of at least {}, static {} of at least {}): another app may have created them first, or the game's layout changed",
-                    physics.region_size(),
-                    graphics.region_size(),
-                    graphics::NEEDED,
-                    statics.region_size(),
-                    statics::MINIMUM
-                );
-            }
-            Ok(Self { physics, graphics, statics })
+            Ok(Self { pages: Pages::open(graphics::NEEDED, statics::MINIMUM)? })
         }
 
         /// Reads the graphics page, retrying if the game was mid-write.
         pub fn read_graphics(&self) -> Graphics {
-            let mut g = Graphics::parse(&self.graphics.bytes(graphics::NEEDED));
+            let mut g = Graphics::parse(&self.pages.graphics(graphics::NEEDED));
             for _ in 0..3 {
-                let after = i32::from_le_bytes(self.graphics.bytes(4).try_into().unwrap_or([0; 4]));
-                if after == g.packet_id {
+                if self.pages.graphics_packet() == g.packet_id {
                     break;
                 }
-                g = Graphics::parse(&self.graphics.bytes(graphics::NEEDED));
+                g = Graphics::parse(&self.pages.graphics(graphics::NEEDED));
             }
             g
         }
 
         pub fn read_physics(&self) -> Physics {
-            Physics::parse(&self.physics.bytes(physics::NEEDED))
+            Physics::parse(&self.pages.physics(physics::NEEDED))
         }
 
         pub fn read_static(&self) -> Static {
-            Static::parse(&self.statics.bytes(statics::NEEDED))
+            Static::parse(&self.pages.statics(statics::NEEDED))
         }
 
         pub fn physics_bytes(&self) -> Vec<u8> {
-            self.physics.bytes(self.physics.region_size())
+            self.pages.physics_all()
         }
 
         pub fn graphics_bytes(&self) -> Vec<u8> {
-            self.graphics.bytes(self.graphics.region_size())
+            self.pages.graphics_all()
         }
 
         pub fn static_bytes(&self) -> Vec<u8> {
-            self.statics.bytes(self.statics.region_size())
+            self.pages.statics_all()
         }
     }
 }

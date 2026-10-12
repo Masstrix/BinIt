@@ -1,4 +1,5 @@
-//! Memory layout of Assetto Corsa's shared-memory pages.
+//! Memory layout of Assetto Corsa's shared-memory pages (the page family, the page reader and the physics
+//! page are shared with the other Assetto Corsa games: see `acpmf`).
 //!
 //! The three pages (`Local\acpmf_physics`, `Local\acpmf_graphics`, `Local\acpmf_static`) are the
 //! `SPageFilePhysics`, `SPageFileGraphic` and `SPageFileStatic` structs from Kunos' published shared
@@ -10,22 +11,7 @@
 //! the later fields unset instead of failing. The offsets were checked against a running game with
 //! `cargo run -p tt-games --example ac_probe`.
 
-/// Fields of the `physics` page.
-pub mod physics {
-    pub const PACKET_ID: usize = 0;
-    pub const GAS: usize = 4;
-    pub const BRAKE: usize = 8;
-    pub const GEAR: usize = 16;
-    pub const RPM: usize = 20;
-    pub const STEER_ANGLE: usize = 24;
-    pub const SPEED_KMH: usize = 28;
-    /// How many tyres are outside the track limits right now (0 to 4).
-    pub const TYRES_OUT: usize = 244;
-    /// 1.0 with the pedal released, 0.0 pressed.
-    pub const CLUTCH: usize = 364;
-    /// Bytes to copy: up to and including `CLUTCH`.
-    pub const NEEDED: usize = CLUTCH + 4;
-}
+pub use crate::acpmf::{Page, Physics, physics};
 
 /// Fields of the `graphics` page.
 pub mod graphics {
@@ -70,56 +56,6 @@ pub const SESSION_HOTLAP: i32 = 3;
 pub const SESSION_TIME_ATTACK: i32 = 4;
 pub const SESSION_DRIFT: i32 = 5;
 pub const SESSION_DRAG: i32 = 6;
-
-/// A copy of one page, read at byte offsets. Reads past the end give `None` / an empty string.
-pub struct Page<'a>(pub &'a [u8]);
-
-impl Page<'_> {
-    pub fn i32(&self, at: usize) -> Option<i32> {
-        self.0.get(at..at + 4).map(|b| i32::from_le_bytes(b.try_into().expect("4 bytes")))
-    }
-
-    pub fn f32(&self, at: usize) -> Option<f32> {
-        self.0.get(at..at + 4).map(|b| f32::from_le_bytes(b.try_into().expect("4 bytes")))
-    }
-
-    /// A UTF-16 string of at most `chars` characters, up to the first NUL.
-    pub fn text(&self, at: usize, chars: usize) -> String {
-        let Some(bytes) = self.0.get(at..(at + chars * 2).min(self.0.len())) else { return String::new() };
-        let units: Vec<u16> = bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect();
-        String::from_utf16_lossy(&units)
-    }
-}
-
-/// What the `physics` page tells us.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
-pub struct Physics {
-    pub gas: f32,
-    pub brake: f32,
-    pub clutch: f32,
-    /// As the game numbers them: 0 = reverse, 1 = neutral, 2 = first.
-    pub gear: i32,
-    pub rpm: i32,
-    pub steer_angle: f32,
-    pub speed_kmh: f32,
-    pub tyres_out: i32,
-}
-
-impl Physics {
-    pub fn parse(bytes: &[u8]) -> Self {
-        let p = Page(bytes);
-        Self {
-            gas: p.f32(physics::GAS).unwrap_or(0.0),
-            brake: p.f32(physics::BRAKE).unwrap_or(0.0),
-            clutch: p.f32(physics::CLUTCH).unwrap_or(0.0),
-            gear: p.i32(physics::GEAR).unwrap_or(1),
-            rpm: p.i32(physics::RPM).unwrap_or(0),
-            steer_angle: p.f32(physics::STEER_ANGLE).unwrap_or(0.0),
-            speed_kmh: p.f32(physics::SPEED_KMH).unwrap_or(0.0),
-            tyres_out: p.i32(physics::TYRES_OUT).unwrap_or(0),
-        }
-    }
-}
 
 /// What the `graphics` page tells us.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]

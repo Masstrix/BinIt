@@ -7,7 +7,7 @@ const GAMES = [
   { key: "acevo", name: "AC EVO", detail: "Laps · shared memory", ready: true },
   { key: "ac", name: "Assetto Corsa", detail: "Laps · shared memory", ready: true },
   { key: "dr2", name: "DiRT Rally 2.0", detail: "Stages · UDP telemetry", ready: false },
-  { key: "acr", name: "Assetto Corsa Rally", detail: "Stages", ready: false },
+  { key: "acr", name: "Assetto Corsa Rally", detail: "Stages · shared memory", ready: true },
 ];
 
 /** Which games TimeTrial can follow, and which one is running right now. */

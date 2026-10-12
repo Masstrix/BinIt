@@ -796,6 +796,11 @@ impl TimeTrial {
         let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
         let points = rt.map.finish();
         drop(rt);
+        // Outlines are closed loops (the recorder joins the end back to the start). A rally stage runs from
+        // one place to another, so that would draw a false line across it: no outline for stages yet.
+        if lap.session.timing == TimingKind::RallyStage {
+            return Ok(());
+        }
         let (true, Some(points)) = (lap.valid && lap.untimed.is_none(), points) else { return Ok(()) };
         let c = combo_of(&lap.session);
         let store = self.store();

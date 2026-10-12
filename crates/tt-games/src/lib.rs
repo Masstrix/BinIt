@@ -7,8 +7,11 @@
 
 pub mod ac;
 pub mod acevo;
+pub mod acpmf;
+pub mod acr;
 pub mod catalogue;
 pub mod dr2;
+pub mod stage;
 pub mod timing;
 mod process;
 pub mod tracker;
@@ -25,8 +28,8 @@ pub const GAME_PROCESSES: &[(&str, &str)] = &[
     ("AssettoCorsaEVO.exe", "acevo"),
     ("acs.exe", "ac"),
     ("acs_x86.exe", "ac"),
+    ("acr.exe", "acr"),
     ("dirtrally2.exe", "dr2"),
-    // Assetto Corsa Rally ("acr") joins this list with its adapter, once its executable name is known.
 ];
 
 /// The game key for an executable name (case-insensitive), if it's a supported game.
@@ -39,17 +42,19 @@ pub fn game_for_process(exe_name: &str) -> Option<&'static str> {
 pub enum GameId {
     AssettoCorsaEvo,
     AssettoCorsa,
+    AssettoCorsaRally,
 }
 
 impl GameId {
     /// Every game that has an adapter.
-    pub const ALL: [GameId; 2] = [GameId::AssettoCorsaEvo, GameId::AssettoCorsa];
+    pub const ALL: [GameId; 3] = [GameId::AssettoCorsaEvo, GameId::AssettoCorsa, GameId::AssettoCorsaRally];
 
     /// The id stored with laps, challenges and maps. Never change one once data exists under it.
     pub fn key(self) -> &'static str {
         match self {
             GameId::AssettoCorsaEvo => "acevo",
             GameId::AssettoCorsa => "ac",
+            GameId::AssettoCorsaRally => "acr",
         }
     }
 
@@ -57,6 +62,7 @@ impl GameId {
         match self {
             GameId::AssettoCorsaEvo => "Assetto Corsa EVO",
             GameId::AssettoCorsa => "Assetto Corsa",
+            GameId::AssettoCorsaRally => "Assetto Corsa Rally",
         }
     }
 }
@@ -223,7 +229,7 @@ pub trait GameAdapter: Send {
 
 /// One adapter per supported game. This is the single place a new game is registered.
 pub fn adapters() -> Vec<Box<dyn GameAdapter>> {
-    vec![Box::new(acevo::AcEvoAdapter::new()), Box::new(ac::AcAdapter::new())]
+    vec![Box::new(acevo::AcEvoAdapter::new()), Box::new(ac::AcAdapter::new()), Box::new(acr::AcrAdapter::new())]
 }
 
 /// Runs every game's adapter, one game at a time.
@@ -359,7 +365,7 @@ mod watcher_tests {
     #[test]
     fn every_game_has_a_distinct_key_and_an_adapter() {
         let keys: Vec<_> = GameId::ALL.iter().map(|g| g.key()).collect();
-        assert_eq!(keys, vec!["acevo", "ac"]);
+        assert_eq!(keys, vec!["acevo", "ac", "acr"]);
         let adapter_games: Vec<_> = adapters().iter().map(|a| a.game()).collect();
         assert_eq!(adapter_games, GameId::ALL.to_vec());
         for game in GameId::ALL {
