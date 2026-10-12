@@ -297,7 +297,7 @@ checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "binit"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -4777,7 +4777,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tt-core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "rusqlite",
@@ -4790,7 +4790,7 @@ dependencies = [
 
 [[package]]
 name = "tt-games"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "serde_json",
