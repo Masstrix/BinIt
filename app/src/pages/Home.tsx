@@ -4,6 +4,7 @@ import { Helmet, Sparkle } from "../components/Helmet";
 import { LiveMap } from "../components/LiveMap";
 import { useSeatSwitcher } from "../components/SeatSwitcher";
 import { Podium } from "../components/Podium";
+import { cap, words } from "../vocab";
 import { ago, carName, countdown, gap, LAP_BADGE, lapKind, lapTime, trackName } from "../format";
 
 export function Home() {
@@ -11,6 +12,7 @@ export function Home() {
   const driverMap = useDriverMap();
   const seat = status?.seat != null ? driverMap.get(status.seat) : undefined;
   const session = status?.session ?? null;
+  const w = words(session?.game ?? status?.game);
   // Cut / off the track: the game has invalidated this lap (not just an out lap from the pits).
   const cutLap = !!(status?.live?.driving && !status.live.outLap && !status.live.lapValid);
   const swapped = cutLap && status?.live?.voidReason === "driverChange";
@@ -32,7 +34,7 @@ export function Home() {
       <div className="head" style={{ alignItems: "flex-end" }}>
         <h1>Who's in the seat?</h1>
         <span className="muted">
-          {session ? `${trackName(session.track, session.layout)} · ${carName(session.car)}` : status?.connected ? "Waiting for you to get on track" : "Start a game to begin timing"}
+          {session ? `${trackName(session.track, session.layout)} · ${carName(session.car)}` : status?.connected ? `Waiting for you to ${w.rally ? "start a stage" : "get on track"}` : "Start a game to begin timing"}
         </span>
       </div>
 
@@ -49,7 +51,7 @@ export function Home() {
             <div className="hero-kicker">{seat ? "Driving now" : "Nobody picked"}</div>
             <div className="hero-name">{seat?.name ?? "Guest"}</div>
             <div className="hero-sub">
-              {seat ? `Every lap is saved to ${seat.name}` : "Laps are saved as guest laps and can be claimed later"}
+              {seat ? `Every ${w.lap} is saved to ${seat.name}` : `${cap(w.laps)} are saved as guest ${w.laps} and can be claimed later`}
             </div>
           </div>
           <button className="btn white hero-switch" onClick={() => document.getElementById("pick")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
@@ -60,11 +62,11 @@ export function Home() {
 
         <div className="stat-grid">
           <div className={`stat${cutLap ? " invalid" : ""}`}>
-            <div className="label" style={{ color: "#fff", opacity: 0.85 }}>{swapped ? "Driver changed" : cutLap ? "Lap invalid" : "Current lap"}</div>
+            <div className="label" style={{ color: "#fff", opacity: 0.85 }}>{swapped ? "Driver changed" : cutLap ? `${cap(w.lap)} invalid` : `Current ${w.lap}`}</div>
             <span className="mono">{status?.live?.driving ? lapTime(status.live.currentLapMs) : "--:--.---"}</span>
           </div>
           <div className="stat">
-            <div className="label" style={{ color: "#fff", opacity: 0.85 }}>Last lap</div>
+            <div className="label" style={{ color: "#fff", opacity: 0.85 }}>Last {w.lap}</div>
             <span className="mono" style={seatLast && !seatLast.valid ? { textDecoration: "line-through", opacity: 0.7 } : undefined}>
               {lapTime(seatLast?.timeMs)}
             </span>
@@ -80,7 +82,7 @@ export function Home() {
             <span className="badge">{standing ? `#${standing.position}` : "?"}</span>
             <span>
               {!standing
-                ? `Set a lap to get on the board in ${challenge.name}.`
+                ? `Set a ${w.lap === "run" ? "time" : "lap"} to get on the board in ${challenge.name}.`
                 : standing.position === 1
                   ? `${seat.name} holds the crown in ${challenge.name}. Defend it!`
                   : `Just ${(standing.gapMs / 1000).toFixed(3)}s off the crown. ${leaderName} holds P1 in ${challenge.name}.`}
@@ -110,15 +112,15 @@ export function Home() {
           ) : (
             <>
               <h2>No challenge running</h2>
-              <p className="muted" style={{ margin: 0 }}>Set a track and a deadline and let the office fight it out.</p>
+              <p className="muted" style={{ margin: 0 }}>Set a {w.track} and a deadline and let the office fight it out.</p>
               <a className="btn" href="#/challenges" style={{ alignSelf: "flex-start" }}>Start a challenge</a>
             </>
           )}
         </section>
 
-        <section className="card" aria-label="Recent laps">
-          <h2>Recent laps</h2>
-          {recentLaps.length === 0 && <div className="empty">No laps yet. Get out there!</div>}
+        <section className="card" aria-label={`Recent ${w.laps}`}>
+          <h2>Recent {w.laps}</h2>
+          {recentLaps.length === 0 && <div className="empty">No {w.laps} yet. Get out there!</div>}
           <div className="list">
             {recentLaps.slice(0, 6).map((l) => {
               const d = l.driverId != null ? driverMap.get(l.driverId) : undefined;
@@ -128,7 +130,7 @@ export function Home() {
                 <div className="list-row" key={l.id}>
                   <span className="grow">
                     <span>
-                      {d?.name ?? "Guest"} <span className="muted" style={{ fontSize: 14 }}>· lap {l.lapNumber} · {ago(l.recordedAt)}</span>
+                      {d?.name ?? "Guest"} <span className="muted" style={{ fontSize: 14 }}>· {words(l.game).lap} {l.lapNumber} · {ago(l.recordedAt)}</span>
                     </span>
                   </span>
                   {badge && <span className={badge.className} title={badge.title}>{badge.text}</span>}
@@ -181,7 +183,7 @@ export function DriverPicker({ drivers, seatId }: { drivers: Driver[]; seatId: n
     <section id="pick" className="card" aria-label="Pick a driver">
       <div className="head">
         <h2>Tap your helmet</h2>
-        <span className="muted" style={{ fontSize: 14 }}>Laps go to whoever is picked. No passwords, play fair.</span>
+        <span className="muted" style={{ fontSize: 14 }}>Times go to whoever is picked. No passwords, play fair.</span>
       </div>
       {drivers.length > 0 && (
         <div className="driver-grid">

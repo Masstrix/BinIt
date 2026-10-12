@@ -98,8 +98,14 @@ driven, stage length, whether the game's data is still changing) and reports fin
   Recorded profiles and live progress use the same measure, so deltas stay consistent.
 * **Restarts and menus:** the clock or the distance jumping back before the finish abandons the run (no
   result); no clock at all means the menus; joining a run part-way is stored as "partial", as for laps.
-* **Not done yet:** learned track outlines are skipped for stages (the recorder closes the loop from the
-  end back to the start, which would draw a false line across a point-to-point stage).
+* **The stage map** is an open path, not a loop: `MapRecorder::finish_open` keeps the bins of the stretch
+  between the start and the finish (the clock running), repeats the end points over the bins outside it so
+  progress still finds its place, and the stored map has `closed = false`, which the UI draws without joining
+  the end to the start and with a finish marker. Positions are only recorded while the stage clock is above
+  zero (not on the drive-up) and the recorder is reset when the clock jumps back (a restart).
+* **Wording:** `app/src/vocab.ts` says what a game's things are called (`words(game)`): a rally game has
+  stages and runs, not tracks and laps. Add a rally game's key to `RALLY_GAMES` there; pages that know their
+  game use `words(...)`.
 
 ## Assetto Corsa Rally: what was found, and what was not checked
 

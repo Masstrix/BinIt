@@ -1,3 +1,4 @@
+import { words } from "../vocab";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePersistedState } from "../persist";
 import { api, useDriverMap, useFetch, useTrackMaps, type Challenge, type ReplayEntry } from "../api";
@@ -109,7 +110,7 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
       <div className="head" style={{ alignItems: "center" }}>
         <div>
           <h2>Race replay</h2>
-          <span className="muted" style={{ fontSize: 14 }}>Everyone's best lap, side by side from the start line</span>
+          <span className="muted" style={{ fontSize: 14 }}>Everyone's best {words(challenge.game).lap}, side by side from the start line</span>
         </div>
         <span className="chip plain mono">{lapTime(Math.floor(Math.min(t, raceLength)))} / {lapTime(raceLength)}</span>
       </div>
@@ -117,7 +118,7 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
       {racers.length === 0 ? (
         <div className="empty">These laps were set before timing traces were saved, so they can't be replayed. The next lap each driver sets can.</div>
       ) : !map ? (
-        <div className="empty">TimeTrial hasn't learned this track's map yet. Finish one clean lap on it and the replay appears here.</div>
+        <div className="empty">TimeTrial hasn't learned this {words(challenge.game).track}'s map yet. Finish one clean {words(challenge.game).lap} on it and the replay appears here.</div>
       ) : (
         <>
           <div className="livemap-frame">
@@ -125,6 +126,7 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
               points={map.points}
               rotate={map.rotate}
               mirror={map.mirror}
+              closed={map.closed}
               stroke={4}
               label="Race replay"
               // Back of the pack first so the leader is drawn on top.

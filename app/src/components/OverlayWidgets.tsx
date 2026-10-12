@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState, type HTMLAttributes, type ReactNode } from "react";
 import { api, type LiveTiming, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
 import { lapKind, lapTime, trackName } from "../format";
+import { words } from "../vocab";
 import { WIDGETS, type WidgetId } from "../overlayLayout";
 import { Crown, Helmet } from "./Helmet";
 import { QrCode } from "./QrCode";
@@ -24,6 +25,8 @@ export interface OverlayData {
   top3: { name: string; color: string; timeMs: number }[];
   /** "Mount Panorama · GP" style label for the track leaderboard. */
   comboLabel: string | null;
+  /** The game being played, so the wording can follow it (laps or stages). */
+  game: string | null;
   /** Top 5 on the current track + car, plus the seated driver's row if outside it. */
   comboTop: { position: number; name: string; color: string; timeMs: number; gapMs: number; isSeat: boolean }[];
   timing: LiveTiming | null;
@@ -77,6 +80,7 @@ export function useOverlayData(): OverlayData {
     gapMs: standing?.gapMs ?? null,
     top3: board.slice(0, 3).map(named),
     comboLabel: session ? `${trackName(session.track, session.layout)}` : null,
+    game: session?.game ?? null,
     comboTop,
     timing: status?.live?.driving ? status.live.timing : null,
     lapMs: status?.live?.currentLapMs ?? 0,
@@ -101,6 +105,7 @@ export const MOCK_DATA: OverlayData = {
     { name: "Priya", color: "#FF7AC6", timeMs: 102870 },
   ],
   comboLabel: "Imola · GP",
+  game: "acevo",
   comboTop: [
     { position: 1, name: "Jess", color: "#4FC3FF", timeMs: 102114, gapMs: 0, isSeat: false },
     { position: 2, name: "Sam", color: "#FF9F6B", timeMs: 102318, gapMs: 204, isSeat: true },
@@ -209,7 +214,7 @@ export function StandingsCard({ data }: { data: OverlayData }) {
           {data.challengeName ?? "No challenge running"}
         </span>
       </span>
-      {data.top3.length === 0 && <span className="muted" style={{ fontSize: 13 }}>No laps yet</span>}
+      {data.top3.length === 0 && <span className="muted" style={{ fontSize: 13 }}>No {words(data.game).laps} yet</span>}
       {data.top3.map((r, i) => (
         <span key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
           <span style={{ width: 16, fontWeight: 800, color: i === 0 ? "var(--gold)" : "var(--text-2)" }}>{i + 1}</span>
@@ -241,7 +246,7 @@ export function TimingCard({ data }: { data: OverlayData }) {
     <div style={{ ...card, padding: "10px 14px", minWidth: 240, display: "flex", flexDirection: "column", gap: 8, ...(cut ? { border: "1px solid rgba(255,107,138,0.7)", background: "rgba(48,14,28,0.88)" } : {}) }}>
       {cut && (
         <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, color: "#FF6B8A" }}>{data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : "LAP INVALID"}</span>
+          <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, color: "#FF6B8A" }}>{data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : `${words(data.game).lap.toUpperCase()} INVALID`}</span>
           <span style={{ fontSize: 11, color: "#FF8BA3", fontWeight: 600 }}>WON'T BE TIMED</span>
         </span>
       )}
@@ -255,7 +260,7 @@ export function TimingCard({ data }: { data: OverlayData }) {
           // First lap on this track: nothing to compare against yet, so show the lap clock.
           <>
             <span className="mono" style={{ fontSize: 24 }}>{lapTime(data.lapMs)}</span>
-            <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>FIRST LAP · NO REFERENCE</span>
+            <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>FIRST {words(data.game).lap.toUpperCase()} · NO REFERENCE</span>
           </>
         )}
       </span>
@@ -307,7 +312,7 @@ export function LeaderboardCard({ data }: { data: OverlayData }) {
         </span>
         <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>THIS CAR</span>
       </span>
-      {data.comboTop.length === 0 && <span className="muted" style={{ fontSize: 13 }}>{data.comboLabel ? "No laps yet. Set the first!" : "Waiting for a session"}</span>}
+      {data.comboTop.length === 0 && <span className="muted" style={{ fontSize: 13 }}>{data.comboLabel ? `No ${words(data.game).laps} yet. Set the first!` : "Waiting for a session"}</span>}
       {data.comboTop.map((r, i) => (
         <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
           {i === 5 && <span style={{ height: 1, background: "var(--line)", margin: "2px 0" }} />}
@@ -401,7 +406,7 @@ export function useLapToasts(pbMs: number | null): Toast | null {
       const kind = lapKind(r.lap);
       if (kind === "outLap") t = { tone: "out", title: `Out lap ${lapTime(r.lap.timeMs)}`, detail: "Timing starts now. Good luck!" };
       else if (kind === "inLap") t = { tone: "in", title: `In lap ${lapTime(r.lap.timeMs)}`, detail: "Not timed" };
-      else if (kind === "partial") t = { tone: "lap", title: `${lapTime(r.lap.timeMs)} not timed`, detail: "TimeTrial joined part-way through the lap" };
+      else if (kind === "partial") t = { tone: "lap", title: `${lapTime(r.lap.timeMs)} not timed`, detail: `TimeTrial joined part-way through the ${words(r.lap.game).lap}` };
       else if (kind === "cut") t = { tone: "cut", title: `${lapTime(r.lap.timeMs)} not counted`, detail: "Lap was cut (track limits)" };
       else if (r.comboRecord) t = { tone: "record", title: `Track record ${lapTime(r.lap.timeMs)}`, detail: `${name} is the fastest ever here${moved}` };
       else if (s?.position === 1 && s.previousPosition !== 1) t = { tone: "lead", title: `${name} takes the crown`, detail: `${lapTime(r.lap.timeMs)} in ${s.challengeName}` };

@@ -3,6 +3,7 @@ import { findMap } from "../catalogueItems";
 import { carName, lapTime, trackName } from "../format";
 import type { SectorStatus } from "../api";
 import { Helmet } from "./Helmet";
+import { words } from "../vocab";
 import { TrackMap } from "./TrackMap";
 
 /**
@@ -25,6 +26,7 @@ export function LiveMap() {
   const drivers = useDriverMap();
   const session = status?.session ?? null;
   const live = status?.live ?? null;
+  const w = words(session?.game);
   const maps = useTrackMaps(session?.game ?? null);
   if (!session || !live?.driving) return null;
 
@@ -42,21 +44,21 @@ export function LiveMap() {
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
           <Helmet color={driver?.color ?? "#9AA3C7"} size={40} />
           <div style={{ minWidth: 0 }}>
-            <div className="label" style={{ color: "var(--peach)" }}>Live on track</div>
+            <div className="label" style={{ color: "var(--peach)" }}>{w.rally ? "Live on the stage" : "Live on track"}</div>
             <h2 style={{ marginTop: 2, overflowWrap: "anywhere" }}>{driver?.name ?? "Guest"}</h2>
           </div>
         </div>
         <span className="chip plain mono" style={{ fontSize: 16, ...(!live.outLap && !live.lapValid ? { background: "rgba(255,107,138,0.18)", color: "#FF8BA3" } : {}) }}>
-          {live.outLap ? "Out lap" : !live.lapValid ? <><s style={{ opacity: 0.7 }}>{lapTime(live.currentLapMs)}</s>&nbsp;{live.voidReason === "driverChange" ? "Driver changed" : "Invalid"}</> : lapTime(live.currentLapMs)}
+          {live.outLap ? `Out ${w.lap}` : !live.lapValid ? <><s style={{ opacity: 0.7 }}>{lapTime(live.currentLapMs)}</s>&nbsp;{live.voidReason === "driverChange" ? "Driver changed" : "Invalid"}</> : lapTime(live.currentLapMs)}
         </span>
       </div>
       <div className="livemap-frame">
         {map ? (
-          <TrackMap points={map.points} position={live.position} rotate={map.rotate} mirror={map.mirror} stroke={5}
+          <TrackMap points={map.points} position={live.position} rotate={map.rotate} mirror={map.mirror} closed={map.closed} stroke={5}
             sectors={session.boundaries.length > 2 ? { boundaries: session.boundaries, colors: sectorColours, active: timing?.currentSector } : undefined} label={`${trackName(session.track, session.layout)} live map`} />
         ) : (
           <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 10, width: "min(320px, 100%)" }}>
-            <span className="muted">Learning this track. Finish one clean lap and its map appears here.</span>
+            <span className="muted">Learning this {w.track}. Finish one clean {w.lap} and its map appears here.</span>
             <div style={{ height: 10, borderRadius: 5, background: "var(--panel-3)", overflow: "hidden" }}>
               <div style={{ width: `${Math.round(live.lapProgress * 100)}%`, height: "100%", background: "var(--violet)" }} />
             </div>
@@ -84,7 +86,7 @@ export function LiveMap() {
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button type="button" className="filter-pill" onClick={() => setView({ rotate: (map.rotate + 90) % 360 })}>Rotate</button>
           <button type="button" className="filter-pill" onClick={() => setView({ mirror: !map.mirror })}>Flip</button>
-          <span className="muted" style={{ fontSize: 13 }}>Turn the map to how you expect it. Saved for this track.</span>
+          <span className="muted" style={{ fontSize: 13 }}>Turn the map to how you expect it. Saved for this {w.track}.</span>
           <span className="muted" style={{ fontSize: 13, marginLeft: "auto" }}>
             <span style={{ color: SECTOR_COLOURS.purple }}>■</span> fastest <span style={{ color: SECTOR_COLOURS.green }}>■</span> their best <span style={{ color: SECTOR_COLOURS.yellow }}>■</span> slower
           </span>

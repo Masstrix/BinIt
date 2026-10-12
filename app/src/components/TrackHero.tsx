@@ -1,3 +1,4 @@
+import { words } from "../vocab";
 import type { ReactNode } from "react";
 import { api, useFetch, type Catalogue, type TrackMapData } from "../api";
 import { countryName, findMap, TrackThumb } from "../catalogueItems";
@@ -41,6 +42,7 @@ export function TrackHero({
   live?: { name: string; position: [number, number] } | null;
   children?: ReactNode;
 }) {
+  const w = words(game);
   const map = findMap(maps, track, layout);
   const boundaries = useFetch(() => api.sectorBoundaries(game, track, layout), [game, track, layout]);
   const sectorCount = boundaries && boundaries.length > 2 ? boundaries.length - 1 : 0;
@@ -51,7 +53,7 @@ export function TrackHero({
   const carInfo = car && catalogue?.game === game ? catalogue.cars.find((c) => c.name === car) : undefined;
 
   return (
-    <section className="card track-hero" aria-label="Selected track">
+    <section className="card track-hero" aria-label={`Selected ${w.track}`}>
       <div className="th-info">
         <div className="label">{[gameName(game), country].filter(Boolean).join(" · ")}</div>
         <h2 className="th-name">{prettify(track)}</h2>
@@ -60,11 +62,11 @@ export function TrackHero({
           <span className="chip plain">{car ? carName(car) : "Any car"}</span>
           {carInfo?.class && <span className="chip plain">{carInfo.class}</span>}
           <span className="chip plain">{drivers} {drivers === 1 ? "driver" : "drivers"}</span>
-          <span className="chip plain">{laps} {laps === 1 ? "lap" : "laps"}</span>
+          <span className="chip plain">{laps} {laps === 1 ? w.lap : w.laps}</span>
         </div>
         {idealMs !== null && (
           <div className="th-stat" title="Every sector's fastest time on this board added together">
-            <span className="label">Ideal lap</span>
+            <span className="label">{w.rally ? "Ideal time" : "Ideal lap"}</span>
             <span className="mono th-stat-value" style={{ color: SECTOR_PURPLE }}>{lapTime(idealMs)}</span>
             <span className="th-stat-note">best sectors, combined</span>
           </div>
@@ -79,6 +81,7 @@ export function TrackHero({
               points={map.points}
               rotate={map.rotate}
               mirror={map.mirror}
+              closed={map.closed}
               stroke={6}
               position={live?.position ?? null}
               sectors={sectorCount ? { boundaries: boundaries!, colors } : undefined}
@@ -87,7 +90,7 @@ export function TrackHero({
           ) : (
             <div className="th-nomap">
               <div style={{ width: 120, height: 80 }}><TrackThumb kind={cat?.kind} /></div>
-              <span className="muted">The map appears after one clean lap here.</span>
+              <span className="muted">The map appears after one clean {w.lap} here.</span>
             </div>
           )}
         </div>
@@ -97,7 +100,7 @@ export function TrackHero({
               <span key={i} className="lb-key"><i style={{ background: c, width: 14, height: 4, borderRadius: 2 }} />Sector {i + 1}</span>
             ))}
             <span className="lb-key"><i style={{ background: "var(--mint)", borderRadius: "50%" }} />Start / finish</span>
-            {live && <span className="lb-key"><i style={{ background: "var(--peach)", borderRadius: "50%" }} />{live.name} on track now</span>}
+            {live && <span className="lb-key"><i style={{ background: "var(--peach)", borderRadius: "50%" }} />{live.name} {w.rally ? "on the stage now" : "on track now"}</span>}
           </div>
         )}
       </div>

@@ -1,3 +1,4 @@
+import { cap, words } from "../vocab";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { api, challengeMatches, isActive, useAppState, useCatalogue, useDriverMap, useFetch, useTrackMaps, type Challenge, type Prize } from "../api";
 import { carItems, findMap, splitTrackValue, TrackThumb, trackItems } from "../catalogueItems";
@@ -171,8 +172,8 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
             <span className="chip plain">{gameName(c.game)}</span>
             <span className="chip plain">{trackName(c.track, c.layout)}</span>
             <span className="chip plain">{c.car ? carName(c.car) : "Any car"}</span>
-            {c.validOnly && <span className="chip plain">Valid laps only</span>}
-            {c.maxLaps && <span className="chip plain">{c.maxLaps} laps each</span>}
+            {c.validOnly && <span className="chip plain">Valid {words(c.game).laps} only</span>}
+            {c.maxLaps && <span className="chip plain">{c.maxLaps} {words(c.game).laps} each</span>}
           </div>
         </div>
         <div className="ch-clock">
@@ -203,14 +204,14 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
       />
 
       {board.length === 0 ? (
-        <div className="empty">No laps yet. First one to set a time takes the crown.</div>
+        <div className="empty">No {words(c.game).laps} yet. First one to set a time takes the crown.</div>
       ) : (
         <div className="lb-scroll" style={{ "--lb-min": `${gridMinWidth(cols)}px` } as CSSProperties} ref={tableRef} data-compact={compact || undefined}>
           <div className="lb-grid lb-head" style={{ gridTemplateColumns: cols }}>
             <span style={{ textAlign: "center" }}>POS</span>
             <span>DRIVER</span>
             {hasPrizes && <span>PRIZE</span>}
-            <span className="r">BEST LAP</span>
+            <span className="r">{words(c.game).rally ? "BEST TIME" : "BEST LAP"}</span>
             <span className="r">GAP</span>
             {sectors.map((_, i) => (
               <span key={i} className="r">S{i + 1}</span>
@@ -252,7 +253,7 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
                     </span>
                   );
                 })}
-                <span className="mono r lb-small lb-c-stat" data-label="LAPS" style={{ color: "var(--text-2)" }}>
+                <span className="mono r lb-small lb-c-stat" data-label={words(c.game).rally ? "RUNS" : "LAPS"} style={{ color: "var(--text-2)" }}>
                   {e.lapCount}
                   {c.maxLaps ? `/${c.maxLaps}` : ""}
                 </span>
@@ -267,7 +268,7 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
             <span className="lb-key"><i style={{ background: SECTOR_PURPLE }} />Fastest sector</span>
             <span className="lb-key"><i style={{ background: SECTOR_MINT }} />Personal best sector</span>
           </span>
-          <span>Sectors are from each driver's best lap</span>
+          <span>Sectors are from each driver's best {words(c.game).lap}</span>
         </div>
       )}
     </section>
@@ -365,7 +366,7 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
   if (catalogue && trackPickItems.length === 0) {
     return (
       <div className="modal-body">
-        <div className="empty">TimeTrial doesn't know any tracks for this game yet. Get on track for a moment and it will learn them.</div>
+        <div className="empty">TimeTrial doesn't know any {words(game).tracks} for this game yet. {words(game).rally ? "Drive a stage" : "Get on track"} for a moment and it will learn {words(game).rally ? "it" : "them"}.</div>
       </div>
     );
   }
@@ -400,8 +401,8 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
           )}
           <div style={{ flex: "1 1 220px", minWidth: 0 }}>
             <Picker
-              label="Track"
-              title="Choose a track"
+              label={cap(words(game).track)}
+              title={`Choose a ${words(game).track}`}
               value={track}
               items={trackPickItems}
               onChange={setTrack}
@@ -438,14 +439,14 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
           <h3 id="house-rules">House rules</h3>
           <label className="rules-row">
             <input type="checkbox" checked={validOnly} onChange={(e) => setValidOnly(e.target.checked)} />
-            Valid laps only (no cutting)
+            Valid {words(game).laps} only (no cutting)
           </label>
           <div className="rules-row">
-            <input type="checkbox" aria-label="Limit laps per driver" checked={limit !== null} onChange={(e) => setLimit(e.target.checked ? 10 : null)} />
+            <input type="checkbox" aria-label={`Limit ${words(game).laps} per driver`} checked={limit !== null} onChange={(e) => setLimit(e.target.checked ? 10 : null)} />
             <label className="rules-limit">
               Max
               <input type="number" min={1} value={limit ?? 10} disabled={limit === null} onChange={(e) => setLimit(Math.max(1, Number(e.target.value) || 1))} className="input" />
-              laps per driver
+              {words(game).laps} per driver
             </label>
           </div>
         </div>

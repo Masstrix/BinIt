@@ -32,7 +32,7 @@ export function countryName(code: string | null): string | undefined {
 }
 
 export function TrackThumb({ map, kind }: { map?: TrackMapData; kind?: string }) {
-  if (map) return <TrackMap points={map.points} rotate={map.rotate} mirror={map.mirror} stroke={2.5} label={`${trackName(map.track, map.layout)} map`} />;
+  if (map) return <TrackMap points={map.points} rotate={map.rotate} mirror={map.mirror} closed={map.closed} stroke={2.5} label={`${trackName(map.track, map.layout)} map`} />;
   return (
     <svg viewBox="0 0 48 36" width="100%" height="100%" aria-hidden="true" style={{ opacity: 0.45 }}>
       {kind === "rally" ? (

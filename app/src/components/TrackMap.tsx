@@ -20,6 +20,7 @@ export function TrackMap({
   position: rawPosition,
   rotate = 0,
   mirror = false,
+  closed = true,
   stroke = 3,
   label,
   sectors,
@@ -28,6 +29,8 @@ export function TrackMap({
   points: [number, number][];
   rotate?: number;
   mirror?: boolean;
+  /** A circuit comes back to its start. A rally stage does not: drawn open, with a finish marker. */
+  closed?: boolean;
   /** Car position in the same world coordinates. */
   position?: [number, number] | null;
   /** Outline thickness in CSS pixels. */
@@ -53,10 +56,11 @@ export function TrackMap({
     return {
       unit: span / 100,
       box: `${minX - pad} ${minZ - pad} ${maxX - minX + pad * 2} ${maxZ - minZ + pad * 2}`,
-      d: points.map(([x, z], i) => `${i ? "L" : "M"}${x} ${z}`).join("") + "Z",
+      d: points.map(([x, z], i) => `${i ? "L" : "M"}${x} ${z}`).join("") + (closed ? "Z" : ""),
       start: points[0],
+      end: points[points.length - 1],
     };
-  }, [points]);
+  }, [points, closed]);
 
   // One path per sector, cut from the outline at the boundaries (the map has one point per 1/N of the lap).
   const segments = useMemo(() => {
@@ -65,10 +69,10 @@ export function TrackMap({
     return sectors.boundaries.slice(0, -1).map((from, i) => {
       const a = Math.round(from * n);
       const b = Math.max(a + 1, Math.round(sectors.boundaries[i + 1] * n));
-      const pts = Array.from({ length: b - a + 1 }, (_, k) => points[(a + k) % n]);
+      const pts = Array.from({ length: b - a + 1 }, (_, k) => points[closed ? (a + k) % n : Math.min(a + k, n - 1)]);
       return pts.map(([x, z], k) => `${k ? "L" : "M"}${x} ${z}`).join("");
     });
-  }, [sectors, points]);
+  }, [sectors, points, closed]);
 
   return (
     <svg viewBox={geo.box} width="100%" height="100%" role="img" aria-label={label ?? "Track map"} preserveAspectRatio="xMidYMid meet" style={{ display: "block" }}>
@@ -91,10 +95,11 @@ export function TrackMap({
       )}
       {segments &&
         sectors!.boundaries.slice(1, -1).map((b, i) => {
-          const p = points[Math.round(b * points.length) % points.length];
+          const p = points[closed ? Math.round(b * points.length) % points.length : Math.min(Math.round(b * points.length), points.length - 1)];
           return <circle key={i} cx={p[0]} cy={p[1]} r={geo.unit * 1.3} fill="#EEF0FF" />;
         })}
       <circle cx={geo.start[0]} cy={geo.start[1]} r={geo.unit * 1.8} fill="var(--mint)" />
+      {!closed && <circle cx={geo.end[0]} cy={geo.end[1]} r={geo.unit * 1.8} fill="var(--peach)" />}
       {markers?.map((m, i) => {
         const [mx, mz] = orient(m.position, rotate, mirror);
         return (

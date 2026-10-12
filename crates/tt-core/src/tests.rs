@@ -342,7 +342,7 @@ fn timing_widget_is_live_from_the_first_flying_lap_but_the_delta_needs_a_referen
 fn map_orientation_is_saved_and_validated() {
     let tt = TimeTrial::in_memory().unwrap();
     tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
-    tt.store().set_track_map("acevo", "Imola", "", &[[0.0, 0.0], [1.0, 1.0]], 1).unwrap();
+    tt.store().set_track_map("acevo", "Imola", "", &[[0.0, 0.0], [1.0, 1.0]], true, 1).unwrap();
     assert!(tt.set_map_view("acevo", "Imola", "", 45, false).is_err());
     tt.set_map_view("acevo", "Imola", "", 90, true).unwrap();
     let m = &tt.track_maps("acevo").unwrap()[0];
@@ -781,7 +781,7 @@ fn games_with_identical_names_never_mix() {
         ] {
             store.insert_lap(&lap, None, None).unwrap();
         }
-        store.set_track_map("acevo", "Imola", "GP", &[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]], 1).unwrap();
+        store.set_track_map("acevo", "Imola", "GP", &[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]], true, 1).unwrap();
         store.set_sector_layout("acevo", "Imola", "GP", &[0.0, 0.5, 1.0], "even").unwrap();
     }
     let board = |game: &str| {

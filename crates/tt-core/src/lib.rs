@@ -138,6 +138,8 @@ struct Runtime {
     wrap_waiting: bool,
     last_progress: f32,
     last_out_lap: bool,
+    /// The stage clock at the previous live reading, to notice a restart.
+    last_clock_ms: u32,
 }
 
 /// Where the catalogue looks for extra names. Set by the host app.
@@ -763,7 +765,15 @@ impl TimeTrial {
                 } else {
                     None
                 };
-                if let (true, false, true, Some(pos)) = (driving, out_lap, rt.session_info.is_some(), position) {
+                let stage = rt.session_info.as_ref().is_some_and(|s| s.timing == TimingKind::RallyStage);
+                if stage && current_lap_ms + 1_000 < rt.last_clock_ms {
+                    // The stage was restarted: the path so far belongs to the abandoned run.
+                    rt.map.reset();
+                }
+                rt.last_clock_ms = current_lap_ms;
+                // On a stage the path starts when the clock does, not at the drive-up to the line.
+                let on_course = !stage || current_lap_ms > 0;
+                if let (true, false, true, true, Some(pos)) = (driving, out_lap, rt.session_info.is_some(), on_course, position) {
                     rt.map.record(lap_progress, pos);
                 }
                 // Crossing the line starts a new lap. A swap during an out lap (a handover in the pits) is
@@ -794,20 +804,18 @@ impl TimeTrial {
     /// Keeps the outline of a clean lap as the track's map, if the track has none yet.
     fn learn_map(&self, lap: &CompletedLap) -> Result<()> {
         let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
-        let points = rt.map.finish();
+        // A circuit's outline is a closed loop; a rally stage runs from one place to another and is kept
+        // as an open path, or the end would be joined back to the start across the countryside.
+        let closed = lap.session.timing != TimingKind::RallyStage;
+        let points = if closed { rt.map.finish() } else { rt.map.finish_open() };
         drop(rt);
-        // Outlines are closed loops (the recorder joins the end back to the start). A rally stage runs from
-        // one place to another, so that would draw a false line across it: no outline for stages yet.
-        if lap.session.timing == TimingKind::RallyStage {
-            return Ok(());
-        }
         let (true, Some(points)) = (lap.valid && lap.untimed.is_none(), points) else { return Ok(()) };
         let c = combo_of(&lap.session);
         let store = self.store();
         if store.track_map(&c.game, &c.track, &c.layout)?.is_some() {
             return Ok(());
         }
-        store.set_track_map(&c.game, &c.track, &c.layout, &points, now_ms())?;
+        store.set_track_map(&c.game, &c.track, &c.layout, &points, closed, now_ms())?;
         drop(store);
         self.emit(AppEvent::MapsChanged);
         Ok(())

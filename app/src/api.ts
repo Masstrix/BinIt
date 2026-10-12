@@ -129,6 +129,8 @@ export interface TrackMapData {
   /** Display orientation: degrees clockwise (0/90/180/270), after mirroring left/right. */
   rotate: number;
   mirror: boolean;
+  /** False for a rally stage: a path from the start to a different finish. */
+  closed: boolean;
 }
 
 /** About TimeTrial: shown in the desktop app. */

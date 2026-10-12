@@ -1,3 +1,4 @@
+import { cap, words } from "../vocab";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { api, useAppState, useCatalogue, useDriverMap, useFetch, useTrackMaps, type Combo } from "../api";
 import { CarBadge, carItems, drivenTrackItems, findMap, TrackThumb } from "../catalogueItems";
@@ -80,6 +81,7 @@ export function LeaderboardPage() {
   }, [tracks, status?.session, track]);
 
   const selected = tracks.find((t) => trackKey(t) === track);
+  const w = words(selected?.game);
   const catalogue = useCatalogue(selected?.game ?? null);
   const maps = useTrackMaps(selected?.game ?? null);
   const carsHere = combos.filter((c) => selected && trackKey(c) === trackKey(selected)).map((c) => c.car);
@@ -155,7 +157,7 @@ export function LeaderboardPage() {
       </div>
 
       {tracks.length === 0 ? (
-        <div className="empty">No laps recorded yet. Once someone finishes a lap it'll show up here.</div>
+        <div className="empty">Nothing recorded yet. Once someone finishes a lap or a stage it'll show up here.</div>
       ) : (
         <>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
@@ -166,7 +168,7 @@ export function LeaderboardPage() {
             )}
             <Picker
               variant="pill"
-              label="Track"
+              label={cap(w.track)}
               value={track ?? ""}
               items={trackPickItems}
               onChange={chooseTrack}
@@ -189,7 +191,7 @@ export function LeaderboardPage() {
               {!includeInvalid && (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10" /></svg>
               )}
-              Valid laps only
+              {w.rally ? "Valid runs only" : "Valid laps only"}
             </button>
           </div>
 
@@ -228,7 +230,7 @@ export function LeaderboardPage() {
                   <div className="lb-grid lb-head" style={{ gridTemplateColumns: carCols }}>
                     <span style={{ textAlign: "center" }}>POS</span>
                     <span>CAR</span>
-                    <span className="r">BEST LAP</span>
+                    <span className="r">{w.rally ? "BEST TIME" : "BEST LAP"}</span>
                     <span style={{ paddingLeft: 14 }}>DRIVER</span>
                     <span className="r">SET</span>
                   </div>
@@ -270,18 +272,18 @@ export function LeaderboardPage() {
               ) : (
                 <>
                 {board.length === 0 ? (
-                  <div className="empty">No laps in this period.</div>
+                  <div className="empty">No {w.laps} in this period.</div>
                 ) : (
                   <div className="lb-scroll" style={{ "--lb-min": `${gridMinWidth(cols)}px` } as CSSProperties} ref={tableRef} data-compact={compact || undefined}>
                     <div className="lb-grid lb-head" style={{ gridTemplateColumns: cols }}>
                       <span style={{ textAlign: "center" }}>POS</span>
                       <span>DRIVER</span>
-                      <span className="r">BEST LAP</span>
+                      <span className="r">{w.rally ? "BEST TIME" : "BEST LAP"}</span>
                       <span className="r">GAP</span>
                       {bestSectors.map((_, i) => (
                         <span key={i} className="r">S{i + 1}</span>
                       ))}
-                      <span className="r">LAPS</span>
+                      <span className="r">{w.rally ? "RUNS" : "LAPS"}</span>
                     </div>
                     {board.map((e, idx) => {
                       const d = e.driverId != null ? driverMap.get(e.driverId) : undefined;
@@ -320,7 +322,7 @@ export function LeaderboardPage() {
                               </span>
                             );
                           })}
-                          <span className="mono r lb-small lb-c-stat" data-label="LAPS" style={{ color: "var(--text-2)" }}>{e.lapCount}</span>
+                          <span className="mono r lb-small lb-c-stat" data-label={w.rally ? "RUNS" : "LAPS"} style={{ color: "var(--text-2)" }}>{e.lapCount}</span>
                         </div>
                       );
                     })}
@@ -331,8 +333,8 @@ export function LeaderboardPage() {
               <div className="lb-legend">
                 {cars ? (
                   <>
-                    <span>Fastest lap for each car · tap one to see its drivers</span>
-                    <span>{includeInvalid ? "Cut laps included" : "Valid laps only"}</span>
+                    <span>Fastest {w.lap} for each car · tap one to see its drivers</span>
+                    <span>{includeInvalid ? `Cut ${w.laps} included` : `Valid ${w.laps} only`}</span>
                   </>
                 ) : (
                   <>
@@ -340,7 +342,7 @@ export function LeaderboardPage() {
                       <span className="lb-key"><i style={{ background: PURPLE }} />Fastest sector</span>
                       <span className="lb-key"><i style={{ background: MINT }} />Personal best sector</span>
                     </span>
-                    <span>{includeInvalid ? "Cut laps included" : "Valid laps only"} · out and in laps never count</span>
+                    <span>{includeInvalid ? `Cut ${w.laps} included` : `Valid ${w.laps} only`} · out and in {w.laps} never count</span>
                   </>
                 )}
               </div>

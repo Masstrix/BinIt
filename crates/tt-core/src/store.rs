@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 5;
+const SCHEMA_VERSION: i32 = 6;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -123,6 +123,10 @@ impl Store {
         if version < 5 {
             // Driver inputs through each lap (throttle, brake, steering, gear): see LapTrace.
             conn.execute_batch("ALTER TABLE laps ADD COLUMN trace BLOB;")?;
+        }
+        if version < 6 {
+            // A rally stage's path is open (start and finish are different places); circuits stay closed.
+            conn.execute_batch("ALTER TABLE track_maps ADD COLUMN closed INTEGER NOT NULL DEFAULT 1;")?;
         }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         Ok(Self { conn })
@@ -375,22 +379,22 @@ impl Store {
     }
 
     pub fn track_maps(&self, game: &str) -> Result<Vec<TrackMap>> {
-        let mut stmt = self.conn.prepare("SELECT track, layout, points FROM track_maps WHERE game = ?1 ORDER BY track, layout")?;
-        let rows = stmt.query_map([game], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)))?;
+        let mut stmt = self.conn.prepare("SELECT track, layout, points, closed FROM track_maps WHERE game = ?1 ORDER BY track, layout")?;
+        let rows = stmt.query_map([game], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, bool>(3)?)))?;
         let mut out = Vec::new();
         for row in rows {
-            let (track, layout, raw) = row?;
+            let (track, layout, raw, closed) = row?;
             if let Ok(points) = serde_json::from_str(&raw) {
-                out.push(TrackMap { game: game.to_string(), track, layout, points, rotate: 0, mirror: false });
+                out.push(TrackMap { game: game.to_string(), track, layout, points, rotate: 0, mirror: false, closed });
             }
         }
         Ok(out)
     }
 
-    pub fn set_track_map(&self, game: &str, track: &str, layout: &str, points: &[[f32; 2]], now: Timestamp) -> Result<()> {
+    pub fn set_track_map(&self, game: &str, track: &str, layout: &str, points: &[[f32; 2]], closed: bool, now: Timestamp) -> Result<()> {
         self.conn.execute(
-            "INSERT OR REPLACE INTO track_maps (game, track, layout, points, recorded_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![game, track, layout, serde_json::to_string(points)?, now],
+            "INSERT OR REPLACE INTO track_maps (game, track, layout, points, closed, recorded_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![game, track, layout, serde_json::to_string(points)?, closed, now],
         )?;
         Ok(())
     }
