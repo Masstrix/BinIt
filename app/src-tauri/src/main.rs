@@ -4,6 +4,7 @@
 mod migrate;
 mod overlay;
 mod server;
+mod updater;
 
 use std::sync::Arc;
 
@@ -32,11 +33,15 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            if let Some(main) = app.get_webview_window("main") {
-                let _ = main.unminimize();
-                let _ = main.set_focus();
+            // While an update is being checked or installed, that window is the one to bring forward.
+            let window = app.get_webview_window(updater::LABEL).or_else(|| app.get_webview_window("main"));
+            if let Some(window) = window {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
             }
         }))
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_shortcuts([switch_driver, hide_overlay])
@@ -53,7 +58,7 @@ fn main() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![overlay::close_switcher])
+        .invoke_handler(tauri::generate_handler![overlay::close_switcher, updater::updater_stage, updater::open_download])
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -110,6 +115,8 @@ Data folder: {}", data_dir.display()));
             overlay::create(app.handle())?;
             overlay::apply_settings(app.handle(), overlay_on, overlay_focus_only);
             overlay::spawn_focus_watcher(app.handle().clone());
+            // The main window starts hidden: this shows it, or first shows the update window.
+            updater::start(app.handle())?;
             Ok(())
         })
         .on_window_event(|window, event| {

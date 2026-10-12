@@ -401,6 +401,10 @@ struct About {
     port: u16,
     lan_enabled: bool,
     counts: tt_core::AboutCounts,
+    /// Put here by the installer, so it updates itself; false for the portable exe.
+    installed: bool,
+    /// A newer release, when this run's update check found one.
+    update: Option<crate::updater::Available>,
 }
 
 /// Version, where the data lives and what's in it. Local only: it names folders on this PC.
@@ -425,6 +429,8 @@ async fn admin_about(ConnectInfo(addr): ConnectInfo<SocketAddr>, State(c): State
         port: PORT,
         lan_enabled: c.lan,
         counts,
+        installed: crate::updater::is_installed(),
+        update: crate::updater::available(),
     }))
 }
 

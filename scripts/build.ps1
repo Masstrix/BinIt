@@ -59,9 +59,16 @@ if (-not $SkipTests) {
 
 Step ($(if ($SkipInstaller) { 'Building the standalone exe' } else { 'Building the app and installer (the first installer build downloads the NSIS tooling)' }))
 $started = Get-Date
+# With the update-signing key set (the release workflow sets it), the installer is also signed so
+# installed copies will accept it as an update (see docs/building.md, "Releases and updates").
+$updaterConfig = Join-Path $app 'src-tauri\tauri.updater.conf.json'
+$signed = -not $SkipInstaller -and [bool]$env:TAURI_SIGNING_PRIVATE_KEY
+if ($signed) { Write-Host 'Signing the installer for updates' -ForegroundColor Green }
 Push-Location $app
 try {
-    if ($SkipInstaller) { Run 'The build' { npm run tauri build -- --no-bundle } } else { Run 'The build' { npm run tauri build } }
+    if ($SkipInstaller) { Run 'The build' { npm run tauri build -- --no-bundle } }
+    elseif ($signed) { Run 'The build' { npm run tauri build -- --config $updaterConfig } }
+    else { Run 'The build' { npm run tauri build } }
 } finally { Pop-Location }
 
 # The build number the exe was just compiled with (app/src-tauri/build.rs keeps the counter).
@@ -92,6 +99,11 @@ if (-not $SkipInstaller) {
     if (-not $found) { throw "The build didn't produce an installer. Re-run with -SkipInstaller to get just the standalone exe." }
     $installer = Join-Path $dist "BinIt-$tag-setup.exe"
     Copy-Item $found.FullName $installer
+    if ($signed) {
+        $signature = "$($found.FullName).sig"
+        if (-not (Test-Path $signature)) { throw "The build didn't sign the installer ($signature is missing)." }
+        Copy-Item $signature "$installer.sig"
+    }
 }
 
 # README, with this build's version filled in.
@@ -110,7 +122,7 @@ Compress-Archive -Path $stage -DestinationPath (Join-Path $dist "BinIt-$tag-port
 Remove-Item $stage -Recurse -Force
 
 # Checksums, so a copy can be verified at the other end.
-$lines = Get-ChildItem $dist -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } | ForEach-Object {
+$lines = Get-ChildItem $dist -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' -and $_.Extension -ne '.sig' } | ForEach-Object {
     '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
 }
 Set-Content -Path (Join-Path $dist 'SHA256SUMS.txt') -Value $lines -Encoding ASCII

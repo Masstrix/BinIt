@@ -27,6 +27,16 @@ Windows may say "Windows protected your PC" the first time, because the app isn'
 Choose "More info", then "Run anyway".
 
 
+UPDATES
+-------
+The installed app checks for a new version every time it starts. If there is one, a small
+window shows it downloading and installing, then Bin It opens again on the new version.
+Your laps are kept. With no internet it just starts as normal.
+
+The portable exe can't update itself. Get the latest one from the link at the bottom of the
+Home page, or from https://github.com/Masstrix/BinIt/releases/latest
+
+
 FIRST RUN
 ---------
 1. Start Bin It, then start the game. Bin It notices the game on its own.
@@ -66,7 +76,7 @@ same place on the other PC. Make sure it has the same Bin It version or a newer 
 Bin It refuses to open data saved by a newer version rather than risk damaging it.
 
 If you used this app under its old name, TimeTrial, the first start copies your laps over from
-%APPDATA%pp.timetrial.desktop. That folder is left as it was, so it doubles as a backup.
+%APPDATA%\app.timetrial.desktop. That folder is left as it was, so it doubles as a backup.
 
 To keep a backup, copy that folder while Bin It is closed.
 
