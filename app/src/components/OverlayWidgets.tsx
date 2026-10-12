@@ -184,7 +184,7 @@ export function StripCard({ items, data, itemProps }: { items: WidgetId[]; data:
           <span data-widget={w} {...itemProps?.(w)} style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {w === "driver" && (
               <>
-                <Helmet color={data.driverColor} size={40} />
+                <Helmet color={data.driverColor} size={40} mood={data.lapInvalid ? "binned" : "focus"} />
                 <span style={{ font: "800 18px var(--font-display)" }}>{data.driverName}</span>
                 <span className="kbd" style={{ background: "var(--line)", color: "var(--text-2)" }}>F8</span>
               </>

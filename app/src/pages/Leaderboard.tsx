@@ -302,7 +302,7 @@ export function LeaderboardPage() {
                         >
                           <span className="lb-pos">{e.position}</span>
                           <span className="lb-c-driver" style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
-                            <Helmet color={color} size={top ? 60 : podium ? 52 : 44} />
+                            <Helmet color={color} size={top ? 60 : podium ? 52 : 44} mood={e.position === 1 ? "happy" : "idle"} />
                             <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
                               <span className="lb-name">{d?.name ?? "Guest"}</span>
                               <span className="lb-meta" style={{ color: me ? color : "var(--muted)" }}>

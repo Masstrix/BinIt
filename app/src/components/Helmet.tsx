@@ -1,14 +1,49 @@
 import type { CSSProperties } from "react";
 
-/** A driver's identity: a racing helmet in their colour on a tinted tile. */
-export function Helmet({ color, size = 48, tile = true }: { color: string; size?: number; tile?: boolean }) {
+/**
+ * How the driver looks through the visor: `happy` for a win, `binned` for a lap the game threw out,
+ * `focus` while they're in the seat, `wink` for a cheeky moment.
+ */
+export type HelmetMood = "idle" | "happy" | "binned" | "focus" | "wink";
+
+function Eyes({ mood }: { mood: HelmetMood }) {
+  const arc = { fill: "none", stroke: "#fff", strokeWidth: 1.6, strokeLinecap: "round" } as const;
+  switch (mood) {
+    case "happy":
+      return <path d="M29.6 21.8Q31.4 18.4 33.2 21.8M37 21.8Q38.8 18.4 40.6 21.8" {...arc} />;
+    case "binned":
+      return <path d="M30 18.6L33 22.4M33 18.6L30 22.4M37.4 18.6L40.4 22.4M40.4 18.6L37.4 22.4" {...arc} strokeWidth={1.5} />;
+    case "focus":
+      return <path d="M29.6 18.2L33.2 19.6V22Q33.2 23.4 31.4 23.4Q29.6 23.4 29.6 22ZM37 19.6L40.6 18.2V22Q40.6 23.4 38.8 23.4Q37 23.4 37 22Z" fill="#fff" />;
+    case "wink":
+      return (
+        <>
+          <ellipse cx="31.4" cy="20.5" rx="1.7" ry="2.6" fill="#fff" />
+          <path d="M37 21.4Q38.8 19.4 40.6 21.4" {...arc} />
+        </>
+      );
+    default:
+      return (
+        <>
+          <ellipse cx="31.4" cy="20.5" rx="1.7" ry="2.6" fill="#fff" />
+          <ellipse cx="38.8" cy="20.5" rx="1.7" ry="2.6" fill="#fff" />
+        </>
+      );
+  }
+}
+
+/** A driver's identity: a racing helmet in their colour, with eyes in the visor, on a tinted tile. */
+export function Helmet({ color, size = 48, tile = true, mood = "idle" }: { color: string; size?: number; tile?: boolean; mood?: HelmetMood }) {
   const svg = (
     <svg width={tile ? size * 0.76 : size} height={tile ? size * 0.76 : size} viewBox="0 0 48 48" aria-hidden="true">
-      <path d="M10 38C4 30 6 13 22 8.5c12-3.4 22.5 2.5 24 12.5.6 3.6.3 6.6-1 9l1.5 4c.9 2.8-.9 5-3.8 5.2L29 38c-3.2-.4-6.4.6-10 1.4-3.6.7-7 .4-9-1.4z" fill={color} />
-      <path d="M27 15l18 1.5c1.1 3 1.4 6.6 1 10.5l-18-.8c-3-.2-4.8-2.6-4.7-5.4.1-3.1 1.6-5.6 3.7-5.8z" fill="#0D1224" />
-      <circle cx="20.4" cy="20.6" r="1.6" fill="#0D1224" opacity="0.5" />
-      <path d="M12.5 34C10.5 22 16 12.5 27 10.7" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" opacity="0.55" />
-      <path d="M39.5 31.8l1.2 3.6M42.3 31.4l1.2 3.6" fill="none" stroke="#0D1224" strokeWidth="1.3" strokeLinecap="round" opacity="0.45" />
+      {/* Full-face shell: the straight underside rises from the chin to the nape, as on a race helmet. */}
+      <path d="M11.2 34C7.4 26.4 8 15.6 15.6 10.2C21.6 6 31.6 5.6 38 9C43 11.8 46.2 17 46.6 23L46.6 31.4C46.6 36.4 44.6 39.6 40.8 40L13.4 35.6C12.4 35.4 11.6 34.8 11.2 34Z" fill={color} />
+      <path d="M11.2 34L13.4 35.6L40.8 40C43 39.8 44.6 38.6 45.6 36.8L11.6 31.4Z" fill="#0D1224" opacity="0.25" />
+      <path d="M24.2 14.8H44.4C45.6 17 46.3 19.6 46.6 22.6V26.2H25.4C22.8 26.2 21.4 24.4 21.8 22L22.6 17C22.8 15.6 23.4 14.8 24.2 14.8Z" fill="#0D1224" />
+      <circle cx="18" cy="20.6" r="1.6" fill="#0D1224" opacity="0.5" />
+      <path d="M13 28C12.4 19.6 17 12.6 25.4 10.4" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" opacity="0.55" />
+      <path d="M36.6 32.4L43.6 33.5M37.2 35.2L42.6 36.1" stroke="#0D1224" strokeWidth="1.3" strokeLinecap="round" opacity="0.45" />
+      <Eyes mood={mood} />
     </svg>
   );
   if (!tile) return svg;
@@ -38,13 +73,33 @@ export function Sparkle({ size = 20, color = "#fff", opacity = 0.6, style, delay
 
 export function Logo() {
   return (
-    <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true">
-      <rect width="34" height="34" rx="10" fill="#6A58F5" />
-      <rect x="8" y="8" width="6" height="6" fill="#fff" />
-      <rect x="20" y="8" width="6" height="6" fill="#fff" />
-      <rect x="14" y="14" width="6" height="6" fill="#fff" />
-      <rect x="8" y="20" width="6" height="6" fill="#fff" />
-      <rect x="20" y="20" width="6" height="6" fill="#fff" />
+    <svg width="34" height="34" viewBox="0 0 180 180" aria-hidden="true">
+      {/* Same mark as src-tauri/icons/binit.svg, the source of every app icon. */}
+      <rect width="180" height="180" rx="44" fill="#6A58F5" />
+      <g transform="translate(0 10)">
+        <g transform="rotate(-10 90 110)">
+          <path d="M58 78 L118 78 L112 132 Q111 138 105 138 L71 138 Q65 138 64 132 Z" fill="#fff" stroke="#6A58F5" strokeWidth="6" strokeLinejoin="round" />
+          <rect x="98" y="88" width="7" height="40" rx="3.5" fill="#6A58F5" />
+        </g>
+        <circle cx="62" cy="130" r="13" fill="#6A58F5" />
+        <circle cx="62" cy="130" r="9" fill="#fff" />
+        <circle cx="62" cy="130" r="3.5" fill="#6A58F5" />
+        <path d="M112 108 Q132 108 140 94" fill="none" stroke="#fff" strokeWidth="11" strokeLinecap="round" />
+        <g transform="rotate(-16 82 64)">
+          <path d="M50 88 Q38 88 38 76 Q38 28 84 28 Q128 28 128 72 Q128 88 114 88 Z" fill="#fff" stroke="#6A58F5" strokeWidth="6" strokeLinejoin="round" />
+          <rect x="50" y="48" width="70" height="24" rx="12" fill="#6A58F5" />
+          <ellipse cx="74" cy="60" rx="4.5" ry="6.5" fill="#fff" />
+          <ellipse cx="98" cy="60" rx="4.5" ry="6.5" fill="#fff" />
+        </g>
+        <g transform="translate(-2 0)">
+          <path d="M126 54 Q114 54 116 66 Q118 74 128 74 M162 54 Q174 54 172 66 Q170 74 160 74" fill="none" stroke="#6A58F5" strokeWidth="11" strokeLinecap="round" />
+          <path d="M126 54 Q114 54 116 66 Q118 74 128 74 M162 54 Q174 54 172 66 Q170 74 160 74" fill="none" stroke="#fff" strokeWidth="5" strokeLinecap="round" />
+          <path d="M126 48 H162 V60 Q162 82 144 84 Q126 82 126 60 Z" fill="#fff" stroke="#6A58F5" strokeWidth="4" strokeLinejoin="round" />
+          <rect x="140" y="82" width="8" height="10" fill="#fff" />
+          <path d="M141 61 L146 58 V75" fill="none" stroke="#6A58F5" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        </g>
+        <circle cx="141" cy="93" r="8" fill="#fff" stroke="#6A58F5" strokeWidth="4" />
+      </g>
     </svg>
   );
 }

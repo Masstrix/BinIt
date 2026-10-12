@@ -45,7 +45,7 @@ export function Home() {
         <Sparkle size={16} opacity={0.4} style={{ right: 22, top: 104 }} delay={2.4} />
         <div className="hero-top">
           <span className="hero-tile">
-            <Helmet color={seat?.color ?? "#9AA3C7"} size={70} tile={false} />
+            <Helmet color={seat?.color ?? "#9AA3C7"} size={70} tile={false} mood={seat ? "focus" : "idle"} />
           </span>
           <div className="hero-who">
             <div className="hero-kicker">{seat ? "Driving now" : "Nobody picked"}</div>

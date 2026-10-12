@@ -76,7 +76,7 @@ export function useSeatSwitcher(): { choose: (driver: Driver | null) => void; di
 function Person({ name, color, faded = false }: { name: string; color?: string; faded?: boolean }) {
   return (
     <div className={`switch-person${faded ? " faded" : ""}`}>
-      <Helmet color={color ?? "#9AA3C7"} size={faded ? 72 : 96} />
+      <Helmet color={color ?? "#9AA3C7"} size={faded ? 72 : 96} mood={faded ? "idle" : "happy"} />
       <span className="switch-name">{name}</span>
     </div>
   );
