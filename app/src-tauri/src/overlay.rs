@@ -63,6 +63,29 @@ fn make_non_activating(window: &WebviewWindow) {
 #[cfg(not(windows))]
 fn make_non_activating(_window: &WebviewWindow) {}
 
+/// Puts the overlay back on top of every other topmost window, without activating it.
+///
+/// Some games (Assetto Corsa) make their own window topmost, and Windows orders topmost windows by when
+/// each was last raised. Showing the overlay doesn't re-raise a window that is already topmost, so if the
+/// game raised itself after the overlay appeared, the overlay stayed underneath it, visible to Windows
+/// but hidden behind the game. This is a cheap no-op when it is already on top.
+#[cfg(windows)]
+fn raise(app: &AppHandle) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos};
+    let Some(w) = window(app) else { return };
+    if !w.is_visible().unwrap_or(false) {
+        return;
+    }
+    if let Ok(hwnd) = w.hwnd() {
+        unsafe {
+            SetWindowPos(hwnd.0 as _, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn raise(_app: &AppHandle) {}
+
 fn window(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window(LABEL)
 }
@@ -272,12 +295,34 @@ pub fn spawn_focus_watcher(app: AppHandle) {
         {
             let handle = app.clone();
             let _ = app.run_on_main_thread(move || refresh(&handle));
+        } else if focused && let Some(app) = APP.get() {
+            // Still the same game, but it may just have raised its own window.
+            let handle = app.clone();
+            let _ = app.run_on_main_thread(move || raise(&handle));
         }
     }
 
     unsafe extern "system" fn callback(_: HWINEVENTHOOK, _: u32, hwnd: HWND, _: i32, _: i32, _: u32, _: u32) {
         on_foreground(hwnd);
     }
+
+    // A game can raise its window at any moment (after loading a track, leaving a menu), and Windows has no
+    // event for "something moved above me", so whenever the overlay is meant to be drawn it is simply put
+    // back on top once a second. (With "only while a game is focused" off it is drawn all the time, and
+    // should be on top all the time too.)
+    let keeper = app.clone();
+    std::thread::Builder::new()
+        .name("overlay-raiser".into())
+        .spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                if wanted() {
+                    let handle = keeper.clone();
+                    let _ = keeper.run_on_main_thread(move || raise(&handle));
+                }
+            }
+        })
+        .expect("spawn overlay raiser");
 
     let _ = APP.set(app);
     std::thread::Builder::new()
@@ -342,7 +387,9 @@ fn foreground_game(hwnd: windows_sys::Win32::Foundation::HWND) -> Option<&'stati
 pub fn set_visible(app: &AppHandle, visible: bool) {
     let Some(w) = window(app) else { return };
     let result = if visible {
-        w.show()
+        let shown = w.show();
+        raise(app);
+        shown
     } else {
         // Keep the switcher's keys working while hidden; just stop drawing.
         let _ = w.set_ignore_cursor_events(true);
