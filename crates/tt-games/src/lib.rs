@@ -75,7 +75,7 @@ pub struct SessionInfo {
 }
 
 /// One finished lap (or stage run).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CompletedLap {
     pub session: SessionInfo,
     /// Lap number within the game session (1-based).
@@ -90,6 +90,8 @@ pub struct CompletedLap {
     pub sectors_ms: Vec<u32>,
     /// Elapsed time at each 0.5% of the lap, when the lap was fully sampled.
     pub profile: Option<timing::TimingProfile>,
+    /// What the driver did through the lap (pedals, steering, gear, speed), for comparing laps.
+    pub trace: Option<timing::LapTrace>,
 }
 
 /// Why a completed lap isn't a timed lap.
@@ -103,6 +105,8 @@ pub enum UntimedReason {
     Partial,
     /// The game flagged it (track limits, cutting): a failed attempt.
     Cut,
+    /// The driver in the seat changed during the lap, so it can't be credited to anyone.
+    DriverChange,
 }
 
 impl UntimedReason {
@@ -112,6 +116,7 @@ impl UntimedReason {
             UntimedReason::InLap => "inLap",
             UntimedReason::Partial => "partial",
             UntimedReason::Cut => "cut",
+            UntimedReason::DriverChange => "driverChange",
         }
     }
 
@@ -121,16 +126,63 @@ impl UntimedReason {
     }
 }
 
+/// What the driver is doing with the car right now. Pedals and steering are as the game reports
+/// them (normalised in the adapter), gear 0 is neutral and negative is reverse.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Inputs {
+    /// 0.0 (off) .. 1.0 (floored).
+    pub throttle: f32,
+    pub brake: f32,
+    pub clutch: f32,
+    pub handbrake: f32,
+    /// -1.0 (full left) .. 1.0 (full right).
+    pub steering: f32,
+    pub gear: i16,
+    pub speed_kmh: f32,
+    pub rpm: u16,
+}
+
+/// What the game is doing, as far as the player can tell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum GamePhase {
+    /// Menus, loading screens, or no session at all.
+    #[default]
+    Menu,
+    /// In the car and driving.
+    Driving,
+    /// Paused while on track.
+    Paused,
+    /// Watching a replay.
+    Replay,
+}
+
+impl GamePhase {
+    pub fn key(self) -> &'static str {
+        match self {
+            GamePhase::Menu => "menu",
+            GamePhase::Driving => "driving",
+            GamePhase::Paused => "paused",
+            GamePhase::Replay => "replay",
+        }
+    }
+}
+
 /// Live state used by the overlay. Cheap to produce; emitted at most a few times a second.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LiveState {
     pub driving: bool,
+    pub phase: GamePhase,
     pub current_lap_ms: u32,
     pub lap_valid: bool,
     /// On an out lap (from the pits or a spawn point): not a timed attempt.
     pub out_lap: bool,
     /// 0.0..1.0 progress around the lap.
     pub lap_progress: f32,
+    /// World position of the player's car on the ground plane (x, z) in metres, when the
+    /// game reports it. Used to learn track maps and to draw the live map.
+    pub position: Option<[f32; 2]>,
+    /// Pedals, steering and gear, when the game reports them.
+    pub inputs: Option<Inputs>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

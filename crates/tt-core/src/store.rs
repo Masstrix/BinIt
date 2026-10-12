@@ -2,13 +2,17 @@
 
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::model::*;
-use tt_games::timing::TimingProfile;
+use crate::trackmap::TrackMap;
+use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 3;
+const SCHEMA_VERSION: i32 = 5;
+/// Settings that record which app version made, and last opened, this database.
+pub const CREATED_WITH_KEY: &str = "created_with";
+pub const OPENED_WITH_KEY: &str = "last_opened_with";
 
 pub struct Store {
     conn: Connection,
@@ -28,6 +32,13 @@ impl Store {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         let version: i32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+        // Never touch data made by a newer TimeTrial: opening it here would reset its format number
+        // and the next upgrade would then try to add columns that already exist.
+        if version > SCHEMA_VERSION {
+            bail!(
+                "This data was saved by a newer version of TimeTrial (database format {version}; this version understands up to {SCHEMA_VERSION}). Update TimeTrial, or open it with the newer version."
+            );
+        }
         if version < 1 {
             conn.execute_batch(
                 "
@@ -93,6 +104,25 @@ impl Store {
                 );
                 ",
             )?;
+        }
+        if version < 4 {
+            // Track outlines learned from telemetry (see trackmap.rs): JSON [[x, z], ...].
+            conn.execute_batch(
+                "
+                CREATE TABLE track_maps (
+                    game         TEXT NOT NULL,
+                    track        TEXT NOT NULL,
+                    layout       TEXT NOT NULL,
+                    points       TEXT NOT NULL,
+                    recorded_at  INTEGER NOT NULL,
+                    PRIMARY KEY (game, track, layout)
+                );
+                ",
+            )?;
+        }
+        if version < 5 {
+            // Driver inputs through each lap (throttle, brake, steering, gear): see LapTrace.
+            conn.execute_batch("ALTER TABLE laps ADD COLUMN trace BLOB;")?;
         }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         Ok(Self { conn })
@@ -160,10 +190,10 @@ impl Store {
 
     // ---- laps --------------------------------------------------------------
 
-    pub fn insert_lap(&self, lap: &Lap, profile: Option<&TimingProfile>) -> Result<LapId> {
+    pub fn insert_lap(&self, lap: &Lap, profile: Option<&TimingProfile>, trace: Option<&LapTrace>) -> Result<LapId> {
         self.conn.execute(
-            "INSERT INTO laps (driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid, sectors_ms, recorded_at, untimed_reason, profile)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            "INSERT INTO laps (driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid, sectors_ms, recorded_at, untimed_reason, profile, trace)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 lap.driver_id,
                 lap.combo.game,
@@ -178,13 +208,68 @@ impl Store {
                 lap.recorded_at,
                 lap.untimed_reason,
                 profile.map(TimingProfile::to_bytes),
+                trace.map(LapTrace::to_bytes),
             ],
         )?;
         Ok(self.conn.last_insert_rowid())
     }
 
+    /// A lap's timing profile (elapsed ms at each 0.5% of the lap), if it has one.
+    pub fn lap_profile(&self, id: LapId) -> Result<Option<TimingProfile>> {
+        let bytes: Option<Vec<u8>> = self
+            .conn
+            .query_row("SELECT profile FROM laps WHERE id = ?1", [id], |r| r.get(0))
+            .optional()?
+            .flatten();
+        Ok(bytes.and_then(|b| TimingProfile::from_bytes(&b)))
+    }
+
+    /// A lap's recorded driver inputs, if it has them.
+    pub fn lap_trace(&self, id: LapId) -> Result<Option<LapTrace>> {
+        let bytes: Option<Vec<u8>> = self
+            .conn
+            .query_row("SELECT trace FROM laps WHERE id = ?1", [id], |r| r.get(0))
+            .optional()?
+            .flatten();
+        Ok(bytes.and_then(|b| LapTrace::from_bytes(&b)))
+    }
+
     pub fn lap(&self, id: LapId) -> Result<Option<Lap>> {
         Ok(self.conn.query_row(&format!("{LAP_SELECT} WHERE id = ?1"), [id], lap_from_row).optional()?)
+    }
+
+    /// Each driver's fastest timed lap on every track + car they have driven.
+    pub fn best_times_by_driver(&self) -> Result<Vec<(DriverId, Combo, u32)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT driver_id, game, track, layout, car, MIN(time_ms) FROM laps
+             WHERE valid = 1 AND untimed_reason IS NULL AND driver_id IS NOT NULL
+             GROUP BY driver_id, game, track, layout, car",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((r.get(0)?, Combo { game: r.get(1)?, track: r.get(2)?, layout: r.get(3)?, car: r.get(4)? }, r.get(5)?))
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn about_counts(&self) -> Result<AboutCounts> {
+        let n = |sql: &str| -> Result<u32> { Ok(self.conn.query_row(sql, [], |r| r.get(0))?) };
+        Ok(AboutCounts {
+            drivers: n("SELECT COUNT(*) FROM drivers")?,
+            laps: n("SELECT COUNT(*) FROM laps")?,
+            timed_laps: n("SELECT COUNT(*) FROM laps WHERE valid = 1 AND untimed_reason IS NULL")?,
+            traced_laps: n("SELECT COUNT(*) FROM laps WHERE trace IS NOT NULL")?,
+            challenges: n("SELECT COUNT(*) FROM challenges")?,
+            schema_version: self.conn.pragma_query_value(None, "user_version", |r| r.get(0))?,
+            created_with: self.setting(CREATED_WITH_KEY)?,
+            previous_version: None,
+        })
+    }
+
+    /// Every lap a driver has recorded, oldest first (rows only, no traces).
+    pub fn driver_laps(&self, driver_id: DriverId) -> Result<Vec<Lap>> {
+        let mut stmt = self.conn.prepare(&format!("{LAP_SELECT} WHERE driver_id = ?1 ORDER BY recorded_at, id"))?;
+        let rows = stmt.query_map([driver_id], lap_from_row)?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     pub fn recent_laps(&self, limit: u32) -> Result<Vec<Lap>> {
@@ -218,6 +303,96 @@ impl Store {
             Ok(Combo { game: r.get(0)?, track: r.get(1)?, layout: r.get(2)?, car: r.get(3)? })
         })?;
         Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Distinct car and track names stored for a game (laps, challenges and maps).
+    pub fn stored_names(&self, game: &str) -> Result<(Vec<String>, Vec<String>)> {
+        let col = |sql: &str| -> Result<Vec<String>> {
+            let mut stmt = self.conn.prepare(sql)?;
+            let rows = stmt.query_map([game], |r| r.get::<_, String>(0))?;
+            Ok(rows.collect::<Result<_, _>>()?)
+        };
+        let cars = col("SELECT car FROM laps WHERE game = ?1 UNION SELECT car FROM challenges WHERE game = ?1 AND car IS NOT NULL")?;
+        let tracks = col(
+            "SELECT track FROM laps WHERE game = ?1 UNION SELECT track FROM challenges WHERE game = ?1 UNION SELECT track FROM track_maps WHERE game = ?1",
+        )?;
+        Ok((cars, tracks))
+    }
+
+    /// Re-labels stored data under the catalogue's name for a car.
+    pub fn rename_car(&self, game: &str, from: &str, to: &str) -> Result<()> {
+        self.conn.execute("UPDATE laps SET car = ?3 WHERE game = ?1 AND car = ?2", params![game, from, to])?;
+        self.conn.execute("UPDATE challenges SET car = ?3 WHERE game = ?1 AND car = ?2", params![game, from, to])?;
+        Ok(())
+    }
+
+    /// Re-labels stored data under the catalogue's name for a track. Per-track extras keep
+    /// whichever row already exists under the new name.
+    pub fn rename_track(&self, game: &str, from: &str, to: &str) -> Result<()> {
+        self.conn.execute("UPDATE laps SET track = ?3 WHERE game = ?1 AND track = ?2", params![game, from, to])?;
+        self.conn.execute("UPDATE challenges SET track = ?3 WHERE game = ?1 AND track = ?2", params![game, from, to])?;
+        self.conn.execute("UPDATE OR IGNORE track_maps SET track = ?3 WHERE game = ?1 AND track = ?2", params![game, from, to])?;
+        self.conn.execute("UPDATE OR IGNORE sector_layouts SET track = ?3 WHERE game = ?1 AND track = ?2", params![game, from, to])?;
+        Ok(())
+    }
+
+    pub fn count_laps(&self, f: &LapFilter) -> Result<u32> {
+        Ok(self.conn.query_row(
+            "SELECT COUNT(*) FROM laps WHERE game = ?1 AND track = ?2 AND (?3 IS NULL OR layout = ?3) AND (?4 IS NULL OR car = ?4)",
+            params![f.game, f.track, f.layout, f.car],
+            |r| r.get(0),
+        )?)
+    }
+
+    pub fn delete_laps(&self, f: &LapFilter) -> Result<usize> {
+        Ok(self.conn.execute(
+            "DELETE FROM laps WHERE game = ?1 AND track = ?2 AND (?3 IS NULL OR layout = ?3) AND (?4 IS NULL OR car = ?4)",
+            params![f.game, f.track, f.layout, f.car],
+        )?)
+    }
+
+    /// Drops the learned map and the sector layout of a track (one layout, or all when `layout` is `None`).
+    pub fn forget_track_extras(&self, game: &str, track: &str, layout: Option<&str>) -> Result<()> {
+        for table in ["track_maps", "sector_layouts"] {
+            self.conn.execute(
+                &format!("DELETE FROM {table} WHERE game = ?1 AND track = ?2 AND (?3 IS NULL OR layout = ?3)"),
+                params![game, track, layout],
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn track_map(&self, game: &str, track: &str, layout: &str) -> Result<Option<Vec<[f32; 2]>>> {
+        let raw: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT points FROM track_maps WHERE game = ?1 AND track = ?2 AND layout = ?3",
+                params![game, track, layout],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(raw.and_then(|r| serde_json::from_str(&r).ok()))
+    }
+
+    pub fn track_maps(&self, game: &str) -> Result<Vec<TrackMap>> {
+        let mut stmt = self.conn.prepare("SELECT track, layout, points FROM track_maps WHERE game = ?1 ORDER BY track, layout")?;
+        let rows = stmt.query_map([game], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?)))?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (track, layout, raw) = row?;
+            if let Ok(points) = serde_json::from_str(&raw) {
+                out.push(TrackMap { game: game.to_string(), track, layout, points, rotate: 0, mirror: false });
+            }
+        }
+        Ok(out)
+    }
+
+    pub fn set_track_map(&self, game: &str, track: &str, layout: &str, points: &[[f32; 2]], now: Timestamp) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO track_maps (game, track, layout, points, recorded_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![game, track, layout, serde_json::to_string(points)?, now],
+        )?;
+        Ok(())
     }
 
     pub fn leaderboard(&self, q: &LeaderboardQuery) -> Result<Vec<LeaderboardEntry>> {

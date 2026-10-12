@@ -50,6 +50,8 @@ impl TimingProfile {
 #[derive(Debug, Default, Clone)]
 pub struct ProfileRecorder {
     samples: Vec<(f32, u32)>,
+    /// What the driver was doing at each sample (same length as `samples`).
+    inputs: Vec<Option<crate::Inputs>>,
 }
 
 /// Biggest progress jump between two samples we accept (anything larger is a teleport,
@@ -61,13 +63,21 @@ const MAX_START: f32 = 0.08;
 const MIN_END: f32 = 0.9;
 /// ...and have no hole bigger than this.
 const MAX_GAP: f32 = 0.12;
+/// Elapsed time dropping by more than this near the line means the lap clock restarted.
+const CLOCK_RESTART_MS: u32 = 1_000;
 
 impl ProfileRecorder {
     pub fn reset(&mut self) {
         self.samples.clear();
+        self.inputs.clear();
     }
 
     pub fn push(&mut self, progress: f32, elapsed_ms: u32) {
+        self.push_with(progress, elapsed_ms, None);
+    }
+
+    /// Like `push`, also keeping the driver's inputs for the lap's trace.
+    pub fn push_with(&mut self, progress: f32, elapsed_ms: u32, inputs: Option<crate::Inputs>) {
         if !progress.is_finite() || !(0.0..=1.0).contains(&progress) {
             return;
         }
@@ -75,30 +85,63 @@ impl ProfileRecorder {
             // Right after the line some games still report ~1.0 for a frame: skip until
             // the car is genuinely near the start.
             None if progress > MAX_START => {}
-            None => self.samples.push((progress, elapsed_ms)),
+            None => {
+                self.samples.push((progress, elapsed_ms));
+                self.inputs.push(inputs);
+            }
             Some(&(last_p, last_t)) => {
+                // The game's clock can restart at the line a frame or two after the progress
+                // wrapped, so what we collected so far carried the previous lap's time. Start
+                // again from here, otherwise every later sample looks like time running backwards
+                // and the whole lap ends up without a profile.
+                if elapsed_ms + CLOCK_RESTART_MS < last_t && progress <= MAX_START {
+                    self.reset();
+                    self.samples.push((progress, elapsed_ms));
+                    self.inputs.push(inputs);
+                    return;
+                }
                 if progress > last_p && progress - last_p <= MAX_STEP && elapsed_ms >= last_t {
                     self.samples.push((progress, elapsed_ms));
+                    self.inputs.push(inputs);
                 }
             }
         }
     }
 
+    /// The samples that belong to the lap: the game's clock keeps running a frame or two past the
+    /// official lap time before progress wraps, and those samples are over the line already.
+    fn within(&self, lap_time_ms: u32) -> Vec<(f32, u32)> {
+        self.samples.iter().copied().filter(|&(_, t)| t <= lap_time_ms).collect()
+    }
+
+    /// Why `finish` would refuse this lap (for logs), or `None` if it's fine.
+    pub fn why_not(&self, lap_time_ms: u32) -> Option<String> {
+        let samples = self.within(lap_time_ms);
+        let (Some(first), Some(last)) = (samples.first(), samples.last()) else {
+            return Some("no samples".into());
+        };
+        if first.0 > MAX_START {
+            return Some(format!("first sample at {:.1}% of the lap", first.0 * 100.0));
+        }
+        if last.0 < MIN_END {
+            return Some(format!("last sample at {:.1}% of the lap", last.0 * 100.0));
+        }
+        samples
+            .windows(2)
+            .find(|w| w[1].0 - w[0].0 > MAX_GAP)
+            .map(|w| format!("no samples between {:.1}% and {:.1}%", w[0].0 * 100.0, w[1].0 * 100.0))
+    }
+
     /// The finished profile, or `None` if the lap wasn't sampled well enough to trust.
     pub fn finish(&self, lap_time_ms: u32) -> Option<TimingProfile> {
-        let first = self.samples.first()?;
-        let last = self.samples.last()?;
-        if first.0 > MAX_START || last.0 < MIN_END || lap_time_ms < last.1 {
-            return None;
-        }
-        if self.samples.windows(2).any(|w| w[1].0 - w[0].0 > MAX_GAP) {
+        if self.why_not(lap_time_ms).is_some() {
             return None;
         }
 
         // Anchor the ends: 0 at the line, the official lap time at the finish.
         let mut pts = Vec::with_capacity(self.samples.len() + 2);
         pts.push((0.0f32, 0u32));
-        pts.extend(self.samples.iter().copied().filter(|&(p, _)| p > 0.0 && p < 1.0));
+        pts.extend(self.within(lap_time_ms).into_iter().filter(|&(p, _)| p > 0.0 && p < 1.0));
         pts.push((1.0, lap_time_ms));
 
         let mut out = Vec::with_capacity(PROFILE_POINTS);
@@ -118,6 +161,96 @@ impl ProfileRecorder {
             out[i] = out[i].max(out[i - 1]);
         }
         Some(TimingProfile(out))
+    }
+}
+
+impl ProfileRecorder {
+    /// The lap's input trace, under the same rules as the profile (a lap that wasn't sampled well
+    /// has neither). `None` too when the game reported no inputs.
+    pub fn finish_trace(&self, lap_time_ms: u32) -> Option<LapTrace> {
+        if self.why_not(lap_time_ms).is_some() {
+            return None;
+        }
+        let points: Vec<TracePoint> = self
+            .samples
+            .iter()
+            .zip(&self.inputs)
+            .filter(|((_, t), _)| *t <= lap_time_ms)
+            .filter_map(|(&(progress, elapsed_ms), inputs)| {
+                let i = (*inputs)?;
+                Some(TracePoint {
+                    progress,
+                    elapsed_ms,
+                    speed_kmh: i.speed_kmh,
+                    throttle: i.throttle.clamp(0.0, 1.0),
+                    brake: i.brake.clamp(0.0, 1.0),
+                    clutch: i.clutch.clamp(0.0, 1.0),
+                    steering: i.steering.clamp(-1.0, 1.0),
+                    gear: i.gear,
+                })
+            })
+            .collect();
+        (points.len() >= 50).then_some(LapTrace(points))
+    }
+}
+
+/// One sample of a lap's driver inputs.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TracePoint {
+    pub progress: f32,
+    pub elapsed_ms: u32,
+    pub speed_kmh: f32,
+    pub throttle: f32,
+    pub brake: f32,
+    pub clutch: f32,
+    pub steering: f32,
+    pub gear: i16,
+}
+
+/// Throttle, brake, clutch, steering, gear and speed through one lap (about 20 samples a second),
+/// for comparing laps. Stored compactly: 13 bytes a sample, around 25 KB for a 90 s lap.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LapTrace(pub Vec<TracePoint>);
+
+const TRACE_VERSION: u8 = 1;
+const TRACE_POINT_BYTES: usize = 13;
+
+impl LapTrace {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(1 + self.0.len() * TRACE_POINT_BYTES);
+        out.push(TRACE_VERSION);
+        for p in &self.0 {
+            out.extend(((p.progress.clamp(0.0, 1.0) * 65535.0).round() as u16).to_le_bytes());
+            out.extend(p.elapsed_ms.to_le_bytes());
+            out.extend(((p.speed_kmh.clamp(0.0, 655.0) * 100.0).round() as u16).to_le_bytes());
+            out.push((p.throttle.clamp(0.0, 1.0) * 255.0).round() as u8);
+            out.push((p.brake.clamp(0.0, 1.0) * 255.0).round() as u8);
+            out.push((p.clutch.clamp(0.0, 1.0) * 255.0).round() as u8);
+            out.push(((p.steering.clamp(-1.0, 1.0) * 127.0).round() as i8) as u8);
+            out.push((p.gear.clamp(-127, 127) as i8) as u8);
+        }
+        out
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        let (&version, rest) = bytes.split_first()?;
+        if version != TRACE_VERSION || rest.len() % TRACE_POINT_BYTES != 0 {
+            return None;
+        }
+        Some(Self(
+            rest.chunks_exact(TRACE_POINT_BYTES)
+                .map(|c| TracePoint {
+                    progress: u16::from_le_bytes([c[0], c[1]]) as f32 / 65535.0,
+                    elapsed_ms: u32::from_le_bytes([c[2], c[3], c[4], c[5]]),
+                    speed_kmh: u16::from_le_bytes([c[6], c[7]]) as f32 / 100.0,
+                    throttle: c[8] as f32 / 255.0,
+                    brake: c[9] as f32 / 255.0,
+                    clutch: c[10] as f32 / 255.0,
+                    steering: (c[11] as i8) as f32 / 127.0,
+                    gear: (c[12] as i8) as i16,
+                })
+                .collect(),
+        ))
     }
 }
 
@@ -177,6 +310,84 @@ mod tests {
             r.push(i as f32 / 100.0, i * 1000);
         }
         assert!(r.finish(100_000).is_none(), "never got near the end");
+    }
+
+    #[test]
+    fn a_clock_that_restarts_after_the_line_does_not_spoil_the_lap() {
+        let mut r = ProfileRecorder::default();
+        // Progress has wrapped but the clock still shows the previous lap for two frames.
+        r.push(0.001, 99_950);
+        r.push(0.003, 99_990);
+        for i in 1..1000u32 {
+            r.push(0.003 + i as f32 * 0.001, i * 100);
+        }
+        let prof = r.finish(100_000).expect("profile despite the stale start");
+        assert!(prof.at(0.5) > 49_000.0 && prof.at(0.5) < 51_500.0, "{}", prof.at(0.5));
+        assert!(ProfileRecorder::default().why_not(1).is_some());
+    }
+
+    #[test]
+    fn samples_taken_just_past_the_official_lap_time_are_ignored_not_fatal() {
+        // The real case from a Suzuka lap: last sample 32 ms after the official time (54 597 ms).
+        let mut r = ProfileRecorder::default();
+        for i in 0..=100u32 {
+            r.push(i as f32 * 0.00995, i * 540);
+        }
+        r.push(0.9995, 54_629);
+        let prof = r.finish(54_597).expect("profile despite the late last sample");
+        assert_eq!(prof.total_ms(), 54_597);
+        assert!(r.why_not(54_597).is_none());
+        // A lap that really stopped early is still refused.
+        assert!(r.why_not(20_000).is_some());
+    }
+
+    #[test]
+    fn traces_keep_the_drivers_inputs_and_survive_storage() {
+        let mut r = ProfileRecorder::default();
+        for i in 0..=400u32 {
+            let p = i as f32 / 400.0 * 0.999;
+            let braking = (150..190).contains(&i);
+            r.push_with(
+                p,
+                i * 250,
+                Some(crate::Inputs { throttle: if braking { 0.0 } else { 1.0 }, brake: if braking { 0.8 } else { 0.0 }, steering: -0.5, gear: 3, speed_kmh: 180.5, ..Default::default() }),
+            );
+        }
+        let trace = r.finish_trace(100_100).expect("trace");
+        assert_eq!(trace.0.len(), 401);
+        let braking = trace.0.iter().find(|p| p.brake > 0.5).unwrap();
+        assert_eq!((braking.throttle, braking.gear), (0.0, 3));
+        // Stored form: 13 bytes a sample, quantised but close.
+        let bytes = trace.to_bytes();
+        assert_eq!(bytes.len(), 1 + 401 * 13);
+        let back = LapTrace::from_bytes(&bytes).unwrap();
+        assert_eq!(back.0.len(), 401);
+        let (a, b) = (&trace.0[170], &back.0[170]);
+        assert!((a.brake - b.brake).abs() < 0.01 && (a.steering - b.steering).abs() < 0.01 && (a.speed_kmh - b.speed_kmh).abs() < 0.01);
+        assert_eq!((a.elapsed_ms, a.gear), (b.elapsed_ms, b.gear));
+        // No inputs reported (or too few samples): no trace.
+        let mut bare = ProfileRecorder::default();
+        for i in 0..=400u32 {
+            bare.push(i as f32 / 400.0 * 0.999, i * 250);
+        }
+        assert!(bare.finish_trace(100_100).is_none());
+        assert!(LapTrace::from_bytes(&[9, 1, 2]).is_none());
+    }
+
+    #[test]
+    fn sitting_still_adds_nothing_to_a_trace() {
+        let input = Some(crate::Inputs { throttle: 0.0, gear: 1, ..Default::default() });
+        let mut r = ProfileRecorder::default();
+        // Ten minutes parked in the pit box at 20 samples a second: progress never moves.
+        for i in 0..12_000u32 {
+            r.push_with(0.02, i * 50, input);
+        }
+        assert_eq!(r.samples.len(), 1, "a parked car must not grow the recording");
+        // Then it drives off: only samples where the car actually advanced are kept.
+        for i in 1..=200u32 {
+            r.push_with(0.02 + i as f32 * 0.0049, 600_000 + i * 450, input);
+        }
+        assert_eq!(r.samples.len(), 201);
     }
 
     #[test]

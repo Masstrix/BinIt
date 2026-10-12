@@ -18,9 +18,11 @@ pub struct Sample {
     pub in_pit_lane: bool,
     /// 0..1 around the lap (`npos`).
     pub progress: f32,
+    /// Pedals, steering and gear at this sample (recorded into the lap's trace).
+    pub inputs: Option<crate::Inputs>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DetectedLap {
     pub lap_number: u32,
     pub time_ms: u32,
@@ -28,6 +30,8 @@ pub struct DetectedLap {
     pub untimed: Option<UntimedReason>,
     /// Elapsed time at each 0.5% of the lap, if it was fully sampled.
     pub profile: Option<TimingProfile>,
+    /// Throttle, brake, steering and gear through the lap, when the game reports them.
+    pub trace: Option<crate::timing::LapTrace>,
 }
 
 /// How many samples to wait for `last_lap_ms` to update after the lap counter ticks.
@@ -189,7 +193,7 @@ impl LapTracker {
 
     fn record_progress(&mut self, s: &Sample) {
         if s.current_lap_ms >= 0 {
-            self.profile.push(s.progress, s.current_lap_ms as u32);
+            self.profile.push_with(s.progress, s.current_lap_ms as u32, s.inputs);
         }
     }
 
@@ -223,7 +227,17 @@ impl LapTracker {
         }
         let time_ms = s.last_lap_ms as u32;
         let profile = pending.profile.finish(time_ms);
-        Some(DetectedLap { lap_number: pending.lap_number, time_ms, untimed: pending.untimed, profile })
+        if profile.is_none()
+            && pending.untimed.is_none()
+            && let Some(why) = pending.profile.why_not(time_ms)
+        {
+            // A timed lap without a profile can't be a reference for live timing: say why.
+            eprintln!("lap {} ({time_ms} ms): no timing profile ({why})", pending.lap_number);
+        }
+        // Input traces are only kept for proper timed laps: those are the ones that get compared and
+        // charted over time. Cut, in, out and partial laps keep their times (and sectors) but no trace.
+        let trace = if pending.untimed.is_none() { pending.profile.finish_trace(time_ms) } else { None };
+        Some(DetectedLap { lap_number: pending.lap_number, time_ms, untimed: pending.untimed, profile, trace })
     }
 }
 
@@ -233,7 +247,7 @@ mod tests {
     use crate::acevo::layout::STATUS_REPLAY;
 
     fn live(lap_count: i32, last: i32, current: i32, valid: bool) -> Sample {
-        Sample { status: STATUS_LIVE, lap_count, last_lap_ms: last, current_lap_ms: current, lap_valid: valid, in_pit_lane: false, progress: 0.0 }
+        Sample { status: STATUS_LIVE, lap_count, last_lap_ms: last, current_lap_ms: current, lap_valid: valid, in_pit_lane: false, progress: 0.0, inputs: None }
     }
 
     fn in_pits(mut s: Sample) -> Sample {
@@ -246,7 +260,7 @@ mod tests {
         let mut t = LapTracker::default();
         assert_eq!(t.update(live(0, 0, 30_000, true)), None);
         let lap = t.update(live(1, 102_318, 50, true)).unwrap();
-        assert_eq!(lap, DetectedLap { lap_number: 1, time_ms: 102_318, untimed: Some(UntimedReason::Partial), profile: None });
+        assert_eq!(lap, DetectedLap { lap_number: 1, time_ms: 102_318, untimed: Some(UntimedReason::Partial), profile: None, trace: None });
     }
 
     #[test]
@@ -349,6 +363,34 @@ mod tests {
         let prof = lap.profile.expect("profile");
         assert_eq!(prof.total_ms(), 100_500);
         assert!((prof.at(0.5) - 50_000.0).abs() < 1_500.0);
+    }
+
+    #[test]
+    fn only_timed_laps_keep_an_input_trace() {
+        let drive = |t: &mut LapTracker, cut_at: Option<i32>| {
+            t.update(live(1, 0, 0, true));
+            for i in 1..100 {
+                let mut s = live(1, 0, i * 1_000, cut_at.is_none_or(|c| i < c));
+                s.progress = i as f32 / 100.0;
+                s.inputs = Some(crate::Inputs { throttle: 1.0, gear: 3, speed_kmh: 120.0, ..Default::default() });
+                t.update(s);
+            }
+        };
+        let mut t = LapTracker::default();
+        drive(&mut t, None);
+        let mut done = live(2, 100_500, 20, true);
+        done.progress = 0.002;
+        let clean = t.update(done).unwrap();
+        assert_eq!(clean.untimed, None);
+        assert!(clean.trace.is_some(), "a clean lap keeps its trace");
+
+        let mut t = LapTracker::default();
+        drive(&mut t, Some(40));
+        let mut done = live(2, 100_500, 20, true);
+        done.progress = 0.002;
+        let cut = t.update(done).unwrap();
+        assert_eq!(cut.untimed, Some(UntimedReason::Cut));
+        assert!(cut.trace.is_none() && cut.profile.is_some(), "a cut lap keeps its timing profile but no input trace");
     }
 
     #[test]

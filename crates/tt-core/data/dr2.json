@@ -1,0 +1,28 @@
+{
+  "tracks": [
+    { "name": "Argentina", "country": "AR", "kind": "rally" },
+    { "name": "Australia", "country": "AU", "kind": "rally" },
+    { "name": "Finland", "country": "FI", "kind": "rally" },
+    { "name": "Germany", "country": "DE", "kind": "rally" },
+    { "name": "Greece", "country": "GR", "kind": "rally" },
+    { "name": "Monte Carlo", "country": "MC", "kind": "rally" },
+    { "name": "New Zealand", "country": "NZ", "kind": "rally" },
+    { "name": "Poland", "country": "PL", "kind": "rally" },
+    { "name": "Spain", "country": "ES", "kind": "rally" },
+    { "name": "Sweden", "country": "SE", "kind": "rally" },
+    { "name": "USA", "country": "US", "kind": "rally" },
+    { "name": "Wales", "country": "GB", "kind": "rally" }
+  ],
+  "cars": [
+    { "name": "Subaru Impreza 1995", "brand": "Subaru", "class": "Group A" },
+    { "name": "Lancia Delta HF Integrale", "brand": "Lancia", "class": "Group A" },
+    { "name": "Audi Sport quattro S1 E2", "brand": "Audi", "class": "Group B" },
+    { "name": "Ford Fiesta R5", "brand": "Ford", "class": "R5" },
+    { "name": "Citroen C3 R5", "brand": "Citroen", "class": "R5" },
+    { "name": "Skoda Fabia Rally2 evo", "brand": "Skoda", "class": "R5" },
+    { "name": "Mini Cooper S", "brand": "Mini", "class": "Classic" },
+    { "name": "Peugeot 208 R2", "brand": "Peugeot", "class": "R2" },
+    { "name": "Ford Escort Mk II", "brand": "Ford", "class": "RWD" },
+    { "name": "Renault Alpine A110 1600 S", "brand": "Renault", "class": "RWD" }
+  ]
+}

@@ -46,6 +46,38 @@ pub fn session_info(g: &Graphics, s: &Static) -> SessionInfo {
     }
 }
 
+/// The player's world (x, z): `car_coordinates` is indexed like `car_ids`.
+pub fn player_position(g: &Graphics) -> Option<[f32; 2]> {
+    let player = g.player_car_id;
+    let ids = g.car_ids;
+    let coords = g.car_coordinates;
+    let i = ids.iter().position(|id| *id == player).unwrap_or(0);
+    let [x, _, z] = coords[i];
+    (x.is_finite() && z.is_finite() && (x != 0.0 || z != 0.0)).then_some([x, z])
+}
+
+/// The game reports gears like Assetto Corsa always has: 0 = reverse, 1 = neutral, 2 = first gear.
+/// TimeTrial uses what drivers call them: -1 = reverse, 0 = neutral, 1 = first.
+pub fn display_gear(raw: i16) -> i16 {
+    raw.saturating_sub(1)
+}
+
+/// Pedals, steering and gear from the graphics page (`inputs`: rpm%, gas, brake, handbrake, clutch, steering, ...).
+pub fn inputs(g: &Graphics) -> crate::Inputs {
+    let raw = g.inputs;
+    let (gear, speed, rpm) = (display_gear(g.gear_int), g.display_speed_kmh, g.rpm);
+    crate::Inputs {
+        throttle: raw[1],
+        brake: raw[2],
+        handbrake: raw[3],
+        clutch: raw[4],
+        steering: raw[5],
+        gear,
+        speed_kmh: speed as f32,
+        rpm,
+    }
+}
+
 pub fn sample(g: &Graphics) -> Sample {
     Sample {
         status: g.status,
@@ -55,7 +87,8 @@ pub fn sample(g: &Graphics) -> Sample {
         lap_valid: g.is_valid_lap != 0 && g.timing_state.is_invalid == 0,
         in_pit_lane: g.is_in_pit_lane != 0 || g.is_in_pit_box != 0,
         progress: g.npos,
-    }
+            inputs: Some(inputs(g)),
+}
 }
 
 #[cfg(windows)]
@@ -235,6 +268,7 @@ impl GameAdapter for AcEvoAdapter {
                 untimed: lap.untimed,
                 sectors_ms: Vec::new(),
                 profile: lap.profile,
+                trace: lap.trace,
             }));
         }
 
@@ -243,13 +277,35 @@ impl GameAdapter for AcEvoAdapter {
             self.last_live = Some(now);
             events.push(GameEvent::Live(LiveState {
                 driving: g.status == layout::STATUS_LIVE,
+                phase: match g.status {
+                    layout::STATUS_LIVE => crate::GamePhase::Driving,
+                    layout::STATUS_PAUSE => crate::GamePhase::Paused,
+                    layout::STATUS_REPLAY => crate::GamePhase::Replay,
+                    _ => crate::GamePhase::Menu,
+                },
                 current_lap_ms: g.current_lap_time_ms.max(0) as u32,
                 lap_valid: sample(&g).lap_valid,
                 out_lap: self.tracker.on_out_lap(),
                 lap_progress: g.npos.clamp(0.0, 1.0),
+                position: player_position(&g),
+                inputs: Some(inputs(&g)),
             }));
         }
 
         events
+    }
+}
+
+#[cfg(test)]
+mod gear_tests {
+    use super::display_gear;
+
+    #[test]
+    fn the_games_gear_numbers_become_the_ones_drivers_use() {
+        assert_eq!(display_gear(0), -1, "reverse");
+        assert_eq!(display_gear(1), 0, "neutral");
+        assert_eq!(display_gear(2), 1, "first gear");
+        assert_eq!(display_gear(7), 6);
+        assert_eq!(display_gear(i16::MIN), i16::MIN, "never wraps");
     }
 }

@@ -1,11 +1,13 @@
 //! TimeTrial core: who's in the seat, recording laps against them, challenges and
 //! leaderboards. UI-agnostic; the desktop app and the LAN web server both sit on top.
 
+pub mod catalogue;
 pub mod live;
 pub mod model;
 mod store;
+pub mod trackmap;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -15,6 +17,7 @@ use tokio::sync::broadcast;
 use tt_games::timing::even_boundaries;
 use tt_games::{CompletedLap, GameEvent, GameId, LiveState, SessionInfo, TimingKind, UntimedReason};
 
+use trackmap::{MapRecorder, TrackMap};
 use live::{LiveTiming, LiveTimingView, TimingContext, sector_status};
 
 pub use model::*;
@@ -28,6 +31,7 @@ pub const HELMET_COLORS: [&str; 10] = [
 const SEAT_KEY: &str = "seat_driver_id";
 const OVERLAY_KEY: &str = "overlay_enabled";
 const OVERLAY_FOCUS_KEY: &str = "overlay_focus_only";
+const OVERLAY_SHOW_KEY: &str = "overlay_show";
 
 /// Pushed to every connected UI (desktop window, overlay, office browsers).
 #[derive(Debug, Clone, Serialize)]
@@ -42,13 +46,15 @@ pub enum AppEvent {
     LapRecorded { result: LapResult },
     LapsChanged,
     ChallengesChanged,
+    /// A track map was learned: pickers and the live map should refetch.
+    MapsChanged,
     Live { live: LiveView },
     OverlayLayoutChanged { game: String },
     #[serde(rename_all = "camelCase")]
-    OverlaySettings { enabled: bool, focus_only: bool },
+    OverlaySettings { enabled: bool, focus_only: bool, show: String },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionView {
     #[serde(flatten)]
@@ -57,16 +63,45 @@ pub struct SessionView {
     pub session_kind: String,
     /// How many sectors this track layout is split into.
     pub sector_count: usize,
+    /// Sector boundaries as fractions of the lap, `[0.0, ..., 1.0]` (so the UI can colour the map).
+    pub boundaries: Vec<f32>,
+}
+
+/// Pedals, steering and gear for the live inputs display.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveInputs {
+    pub throttle: f32,
+    pub brake: f32,
+    pub clutch: f32,
+    pub handbrake: f32,
+    pub steering: f32,
+    pub gear: i16,
+    pub speed_kmh: f32,
+    pub rpm: u16,
+}
+
+impl From<tt_games::Inputs> for LiveInputs {
+    fn from(i: tt_games::Inputs) -> Self {
+        Self { throttle: i.throttle, brake: i.brake, clutch: i.clutch, handbrake: i.handbrake, steering: i.steering, gear: i.gear, speed_kmh: i.speed_kmh, rpm: i.rpm }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LiveView {
     pub driving: bool,
+    /// "menu", "driving", "paused" or "replay".
+    pub phase: &'static str,
     pub current_lap_ms: u32,
     pub lap_valid: bool,
     pub out_lap: bool,
+    /// Why the lap in progress won't be timed, besides a cut: "driverChange".
+    pub void_reason: Option<&'static str>,
     pub lap_progress: f32,
+    /// Car position in world metres (x, z), for the live map.
+    pub position: Option<[f32; 2]>,
+    pub inputs: Option<LiveInputs>,
     /// Delta and sector bars for the lap in progress (when there's a session).
     pub timing: Option<LiveTimingView>,
 }
@@ -83,6 +118,8 @@ pub struct Status {
     pub live: Option<LiveView>,
     pub overlay_enabled: bool,
     pub overlay_focus_only: bool,
+    /// When widgets are drawn: "always", "drivingPaused" (not in menus) or "driving" (only while driving).
+    pub overlay_show: String,
 }
 
 #[derive(Default)]
@@ -92,9 +129,29 @@ struct Runtime {
     session_info: Option<SessionInfo>,
     live: Option<LiveView>,
     timing: LiveTiming,
+    map: MapRecorder,
+    /// The seat changed hands during the lap in progress: that lap won't count for anyone.
+    lap_driver_changed: bool,
+    /// A lap just ended (the car crossed the line) that had a driver change in it, and its result hasn't arrived yet.
+    void_pending: bool,
+    /// The car has crossed the line on a lap that should be reported shortly (out laps aren't reported by the game).
+    wrap_waiting: bool,
+    last_progress: f32,
+    last_out_lap: bool,
+}
+
+/// Where the catalogue looks for extra names. Set by the host app.
+#[derive(Default, Clone)]
+pub struct CataloguePaths {
+    /// AC EVO's `Documents/ACE` folder (plain-text session results and event files).
+    pub ace_documents: Option<PathBuf>,
+    /// Folder of user-supplied `<game>.json` lists.
+    pub custom: Option<PathBuf>,
 }
 
 pub struct TimeTrial {
+    previous_version: Mutex<Option<String>>,
+    catalogue_paths: Mutex<CataloguePaths>,
     store: Mutex<Store>,
     runtime: Mutex<Runtime>,
     events: broadcast::Sender<AppEvent>,
@@ -115,7 +172,18 @@ fn combo_of(s: &SessionInfo) -> Combo {
 
 impl TimeTrial {
     pub fn open(db_path: &Path) -> Result<Self> {
-        Ok(Self::with_store(Store::open(db_path)?))
+        let store = Store::open(db_path)?;
+        // Note which version made this data and which one had it last, for the About page and for
+        // working out what a future upgrade has to do.
+        let version = env!("CARGO_PKG_VERSION");
+        let previous = store.setting(store::OPENED_WITH_KEY)?;
+        if store.setting(store::CREATED_WITH_KEY)?.is_none() {
+            store.set_setting(store::CREATED_WITH_KEY, Some(version))?;
+        }
+        store.set_setting(store::OPENED_WITH_KEY, Some(version))?;
+        let tt = Self::with_store(store);
+        *tt.previous_version.lock().expect("previous version mutex poisoned") = previous;
+        Ok(tt)
     }
 
     pub fn in_memory() -> Result<Self> {
@@ -124,7 +192,7 @@ impl TimeTrial {
 
     fn with_store(store: Store) -> Self {
         let (events, _) = broadcast::channel(256);
-        Self { store: Mutex::new(store), runtime: Mutex::new(Runtime::default()), events }
+        Self { previous_version: Mutex::default(), catalogue_paths: Mutex::default(), store: Mutex::new(store), runtime: Mutex::new(Runtime::default()), events }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<AppEvent> {
@@ -151,6 +219,7 @@ impl TimeTrial {
             live: rt.live.clone(),
             overlay_enabled: self.overlay_enabled()?,
             overlay_focus_only: self.overlay_focus_only()?,
+            overlay_show: self.overlay_show()?,
         })
     }
 
@@ -174,8 +243,22 @@ impl TimeTrial {
         self.emit_overlay_settings()
     }
 
+    /// When the overlay's widgets show: "always", "drivingPaused" (hidden in menus and replays; the
+    /// default) or "driving" (only while actually driving).
+    pub fn overlay_show(&self) -> Result<String> {
+        Ok(self.store().setting(OVERLAY_SHOW_KEY)?.filter(|v| ["always", "drivingPaused", "driving"].contains(&v.as_str())).unwrap_or_else(|| "drivingPaused".into()))
+    }
+
+    pub fn set_overlay_show(&self, mode: &str) -> Result<()> {
+        if !["always", "drivingPaused", "driving"].contains(&mode) {
+            bail!("unknown overlay mode");
+        }
+        self.store().set_setting(OVERLAY_SHOW_KEY, Some(mode))?;
+        self.emit_overlay_settings()
+    }
+
     fn emit_overlay_settings(&self) -> Result<()> {
-        self.emit(AppEvent::OverlaySettings { enabled: self.overlay_enabled()?, focus_only: self.overlay_focus_only()? });
+        self.emit(AppEvent::OverlaySettings { enabled: self.overlay_enabled()?, focus_only: self.overlay_focus_only()?, show: self.overlay_show()? });
         Ok(())
     }
 
@@ -268,8 +351,18 @@ impl TimeTrial {
         {
             bail!("no such driver");
         }
+        let before = store.setting(SEAT_KEY)?.and_then(|v| v.parse::<DriverId>().ok());
         store.set_setting(SEAT_KEY, driver_id.map(|id| id.to_string()).as_deref())?;
         drop(store);
+        if before != driver_id {
+            // Swapping drivers part-way round a lap would let someone take over a good lap (or dump a bad
+            // one on somebody else), so the lap in progress is voided for everybody.
+            let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
+            let on_track = rt.session_info.is_some() && rt.live.as_ref().is_some_and(|l| l.phase == "driving" || l.phase == "paused");
+            if on_track {
+                rt.lap_driver_changed = true;
+            }
+        }
         // Live delta compares against the new driver's PB.
         self.refresh_timing()?;
         self.emit(AppEvent::SeatChanged { driver_id });
@@ -285,6 +378,58 @@ impl TimeTrial {
 
     // ---- laps ----------------------------------------------------------------
 
+    /// The throttle / brake / steering / gear trace of a lap, if it was recorded.
+    pub fn lap_trace(&self, id: LapId) -> Result<Option<tt_games::timing::LapTrace>> {
+        self.store().lap_trace(id)
+    }
+
+    /// Row counts and the schema version, for the About page.
+    pub fn about_counts(&self) -> Result<AboutCounts> {
+        let mut counts = self.store().about_counts()?;
+        counts.previous_version = self.previous_version.lock().expect("previous version mutex poisoned").clone();
+        Ok(counts)
+    }
+
+    /// Speed scores for everyone: see [`DriverRating`]. Only like-for-like comparisons count (same
+    /// track, layout and car, with at least two drivers), so a rating can't be skewed by one driver
+    /// choosing a slower car or an easier track.
+    pub fn driver_ratings(&self) -> Result<Vec<DriverRating>> {
+        let store = self.store();
+        let drivers = store.drivers()?;
+        let times = store.best_times_by_driver()?;
+        let mut fastest: std::collections::HashMap<&Combo, u32> = std::collections::HashMap::new();
+        let mut entrants: std::collections::HashMap<&Combo, u32> = std::collections::HashMap::new();
+        for (_, combo, ms) in &times {
+            let f = fastest.entry(combo).or_insert(*ms);
+            *f = (*f).min(*ms);
+            *entrants.entry(combo).or_insert(0) += 1;
+        }
+        Ok(drivers
+            .iter()
+            .map(|d| {
+                let mut gaps = Vec::new();
+                let mut fastest_on = 0;
+                for (id, combo, ms) in &times {
+                    if *id != d.id || entrants[combo] < 2 {
+                        continue;
+                    }
+                    let best = fastest[combo];
+                    gaps.push((*ms as f64 - best as f64) / best as f64 * 100.0);
+                    if *ms == best {
+                        fastest_on += 1;
+                    }
+                }
+                let score = (!gaps.is_empty()).then(|| (100.0 - gaps.iter().sum::<f64>() / gaps.len() as f64).clamp(0.0, 100.0));
+                DriverRating { driver_id: d.id, score, combos: gaps.len() as u32, fastest_on }
+            })
+            .collect())
+    }
+
+    /// All of a driver's laps, oldest first: what their progress over time is drawn from.
+    pub fn driver_laps(&self, driver_id: DriverId) -> Result<Vec<Lap>> {
+        self.store().driver_laps(driver_id)
+    }
+
     pub fn recent_laps(&self, limit: u32) -> Result<Vec<Lap>> {
         self.store().recent_laps(limit)
     }
@@ -295,6 +440,116 @@ impl TimeTrial {
         self.refresh_timing()?;
         self.emit(AppEvent::LapsChanged);
         Ok(())
+    }
+
+    pub fn set_catalogue_paths(&self, paths: CataloguePaths) {
+        *self.catalogue_paths.lock().expect("catalogue paths mutex poisoned") = paths;
+    }
+
+    /// The catalogue lists (bundled, then the user's) used to name things consistently.
+    fn seeds(&self, game: &str) -> Vec<catalogue::Seed> {
+        let custom = self.catalogue_paths.lock().expect("catalogue paths mutex poisoned").custom.clone();
+        let mut seeds = vec![catalogue::bundled(game)];
+        seeds.extend(custom.map(|dir| catalogue::custom(&dir, game)));
+        seeds
+    }
+
+    /// Rewrites a session's track and car to the catalogue's names, so a lap driven in a car the
+    /// game calls "Porsche 911 GT3 Cup (992)" and a challenge made from "Porsche 992 GT3 Cup" agree.
+    fn canonical_session(&self, info: &mut SessionInfo) {
+        let seeds = self.seeds(info.game.key());
+        info.track = catalogue::canonical_track(&seeds, &info.track);
+        info.car = catalogue::canonical_car(&seeds, &info.car);
+    }
+
+    /// Brings laps and challenges recorded before a name was in the catalogue under the catalogue's
+    /// name. Safe to run any time; does nothing when everything already agrees.
+    pub fn canonicalize_history(&self, game: &str) -> Result<usize> {
+        let seeds = self.seeds(game);
+        let store = self.store();
+        let (cars, tracks) = store.stored_names(game)?;
+        let mut changed = 0;
+        for car in cars {
+            let canon = catalogue::canonical_car(&seeds, &car);
+            if canon != car {
+                store.rename_car(game, &car, &canon)?;
+                changed += 1;
+            }
+        }
+        for track in tracks {
+            let canon = catalogue::canonical_track(&seeds, &track);
+            if canon != track {
+                store.rename_track(game, &track, &canon)?;
+                changed += 1;
+            }
+        }
+        Ok(changed)
+    }
+
+    /// Every track, layout and car for a game, including ones nobody has driven.
+    pub fn catalogue(&self, game: &str) -> Result<catalogue::Catalogue> {
+        let paths = self.catalogue_paths.lock().expect("catalogue paths mutex poisoned").clone();
+        let mut seeds = vec![catalogue::bundled(game)];
+        if let Some(dir) = &paths.custom {
+            seeds.push(catalogue::custom(dir, game));
+        }
+        let observed = match (&paths.ace_documents, game) {
+            (Some(dir), "acevo") => catalogue::scan_ace_documents(dir),
+            _ => catalogue::Observed::default(),
+        };
+        let store = self.store();
+        let driven = store.combos(Some(game))?;
+        let maps: Vec<(String, String)> = store.track_maps(game)?.into_iter().map(|m| (m.track, m.layout)).collect();
+        Ok(catalogue::build(game, seeds, &observed, &driven, &maps))
+    }
+
+    /// Learned track outlines for a game.
+    pub fn track_maps(&self, game: &str) -> Result<Vec<TrackMap>> {
+        let store = self.store();
+        let mut maps = store.track_maps(game)?;
+        for m in &mut maps {
+            let raw = store.setting(&map_view_key(&m.game, &m.track, &m.layout))?;
+            if let Some((rotate, mirror)) = raw.as_deref().and_then(|r| r.split_once(',')) {
+                m.rotate = rotate.parse().unwrap_or(0);
+                m.mirror = mirror == "1";
+            }
+        }
+        Ok(maps)
+    }
+
+    /// How a track's map is drawn (rotation in degrees clockwise, and mirroring), for tracks whose
+    /// world axes don't match the way people expect to see them.
+    pub fn set_map_view(&self, game: &str, track: &str, layout: &str, rotate: u16, mirror: bool) -> Result<()> {
+        if rotate % 90 != 0 || rotate >= 360 {
+            bail!("rotation must be 0, 90, 180 or 270");
+        }
+        let value = format!("{rotate},{}", u8::from(mirror));
+        self.store().set_setting(&map_view_key(game, track, layout), Some(&value))?;
+        self.emit(AppEvent::MapsChanged);
+        Ok(())
+    }
+
+    /// How many laps a cleanup would delete.
+    pub fn count_laps(&self, filter: &LapFilter) -> Result<u32> {
+        self.store().count_laps(filter)
+    }
+
+    /// Permanently deletes laps (and with `forget_map`, the learned map and sector layout of the
+    /// track) so that bad or test data can be cleared. Challenges stay; their boards just lose the laps.
+    pub fn delete_laps(&self, filter: &LapFilter) -> Result<usize> {
+        let store = self.store();
+        let deleted = store.delete_laps(filter)?;
+        if filter.forget_map {
+            store.forget_track_extras(&filter.game, &filter.track, filter.layout.as_deref())?;
+        }
+        drop(store);
+        // Live timing's reference and bests came from these laps.
+        self.refresh_timing()?;
+        self.emit(AppEvent::LapsChanged);
+        if filter.forget_map {
+            self.emit(AppEvent::MapsChanged);
+        }
+        Ok(deleted)
     }
 
     pub fn combos(&self, game: Option<&str>) -> Result<Vec<Combo>> {
@@ -339,7 +594,7 @@ impl TimeTrial {
             sectors_ms,
             recorded_at: now,
         };
-        lap.id = store.insert_lap(&lap, completed.profile.as_ref())?;
+        lap.id = store.insert_lap(&lap, completed.profile.as_ref(), completed.trace.as_ref())?;
 
         // Purple / green / yellow per sector, against every other valid lap on this combo.
         let sector_status = if lap.valid || completed.untimed == Some(UntimedReason::Cut) {
@@ -421,10 +676,29 @@ impl TimeTrial {
         store.leaderboard(&challenge_query(&c))
     }
 
+    /// Every ranked driver's best lap with its timing profile, so the UI can run them side by side.
+    pub fn challenge_replay(&self, id: ChallengeId) -> Result<Vec<ReplayEntry>> {
+        let store = self.store();
+        let c = store.challenge(id)?.ok_or_else(|| anyhow::anyhow!("no such challenge"))?;
+        store
+            .leaderboard(&challenge_query(&c))?
+            .into_iter()
+            .map(|e| {
+                let profile = store.lap_profile(e.lap_id)?.map(|p| p.0);
+                Ok(ReplayEntry { position: e.position, driver_id: e.driver_id, lap_id: e.lap_id, time_ms: e.time_ms, profile })
+            })
+            .collect()
+    }
+
     // ---- game events -------------------------------------------------------------
 
     /// Feed every event from a game adapter through here.
-    pub fn handle_game_event(&self, event: GameEvent) -> Result<()> {
+    pub fn handle_game_event(&self, mut event: GameEvent) -> Result<()> {
+        match &mut event {
+            GameEvent::SessionChanged(info) => self.canonical_session(info),
+            GameEvent::LapCompleted(lap) => self.canonical_session(&mut lap.session),
+            _ => {}
+        }
         match event {
             GameEvent::Connected { game, .. } => {
                 self.runtime.lock().expect("runtime mutex poisoned").game = Some(game);
@@ -440,12 +714,13 @@ impl TimeTrial {
                 self.emit(AppEvent::Session { session: None });
             }
             GameEvent::SessionChanged(info) => {
-                let sector_count = boundaries_for(&self.store(), &info)?.len().saturating_sub(1);
+                let boundaries = boundaries_for(&self.store(), &info)?;
                 let view = SessionView {
                     combo: combo_of(&info),
                     game_name: info.game.display_name().to_string(),
                     session_kind: info.session_kind.clone(),
-                    sector_count,
+                    sector_count: boundaries.len().saturating_sub(1),
+                    boundaries,
                 };
                 {
                     let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
@@ -455,10 +730,29 @@ impl TimeTrial {
                 self.refresh_timing()?;
                 self.emit(AppEvent::Session { session: Some(view) });
             }
-            GameEvent::LapCompleted(lap) => {
+            GameEvent::LapCompleted(mut lap) => {
+                let changed = {
+                    let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
+                    // The lap's result can arrive a moment after the car crossed the line: by then a new
+                    // lap has begun, and a swap made in that gap belongs to the new lap, not this one.
+                    if std::mem::take(&mut rt.wrap_waiting) {
+                        std::mem::take(&mut rt.void_pending)
+                    } else {
+                        std::mem::take(&mut rt.lap_driver_changed)
+                    }
+                };
+                // Only a lap that would have counted (or been a failed attempt) needs voiding; out, in and
+                // partial laps are already not timed.
+                if changed && matches!(lap.untimed, None | Some(UntimedReason::Cut)) {
+                    lap.untimed = Some(UntimedReason::DriverChange);
+                    lap.valid = false;
+                    lap.profile = None;
+                    lap.trace = None;
+                }
+                self.learn_map(&lap)?;
                 self.record_lap(&lap)?;
             }
-            GameEvent::Live(LiveState { driving, current_lap_ms, lap_valid, out_lap, lap_progress }) => {
+            GameEvent::Live(LiveState { driving, phase, current_lap_ms, lap_valid, out_lap, lap_progress, position, inputs }) => {
                 let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
                 let timing = if out_lap {
                     rt.timing.pause();
@@ -468,7 +762,24 @@ impl TimeTrial {
                 } else {
                     None
                 };
-                let live = LiveView { driving, current_lap_ms, lap_valid, out_lap, lap_progress, timing };
+                if let (true, false, true, Some(pos)) = (driving, out_lap, rt.session_info.is_some(), position) {
+                    rt.map.record(lap_progress, pos);
+                }
+                // Crossing the line starts a new lap. A swap during an out lap (a handover in the pits) is
+                // fine: that lap isn't timed. A swap during a timed lap voids it when its result arrives.
+                if rt.last_progress > 0.9 && lap_progress < 0.1 {
+                    if rt.last_out_lap {
+                        rt.lap_driver_changed = false;
+                    } else {
+                        rt.void_pending = std::mem::take(&mut rt.lap_driver_changed);
+                        rt.wrap_waiting = true;
+                    }
+                }
+                rt.last_progress = lap_progress;
+                rt.last_out_lap = out_lap;
+                let changed = rt.lap_driver_changed && !out_lap;
+                let lap_valid = lap_valid && !changed;
+                let live = LiveView { driving, phase: phase.key(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
                 rt.live = Some(live.clone());
                 drop(rt);
                 self.emit(AppEvent::Live { live });
@@ -479,6 +790,23 @@ impl TimeTrial {
 }
 
 impl TimeTrial {
+    /// Keeps the outline of a clean lap as the track's map, if the track has none yet.
+    fn learn_map(&self, lap: &CompletedLap) -> Result<()> {
+        let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
+        let points = rt.map.finish();
+        drop(rt);
+        let (true, Some(points)) = (lap.valid && lap.untimed.is_none(), points) else { return Ok(()) };
+        let c = combo_of(&lap.session);
+        let store = self.store();
+        if store.track_map(&c.game, &c.track, &c.layout)?.is_some() {
+            return Ok(());
+        }
+        store.set_track_map(&c.game, &c.track, &c.layout, &points, now_ms())?;
+        drop(store);
+        self.emit(AppEvent::MapsChanged);
+        Ok(())
+    }
+
     /// Reloads what live timing compares against: the track's sector boundaries, the
     /// seated driver's PB profile (else the combo's best) and the best sector times.
     fn refresh_timing(&self) -> Result<()> {
@@ -492,13 +820,31 @@ impl TimeTrial {
             let boundaries = boundaries_for(&store, &info)?;
             let rows = store.valid_sectors(&combo, -1)?;
             let (best_overall, best_driver) = sector_bests(&rows, boundaries.len().saturating_sub(1), seat);
+            // The reference is the fastest lap that has a recorded profile. Call it "PB" / "Best" only
+            // when that really is the fastest valid lap; otherwise name the lap by its time.
+            let label = |profile: &tt_games::timing::TimingProfile, fastest: Option<u32>, word: &str| {
+                let ms = profile.total_ms();
+                if fastest == Some(ms) { word.to_string() } else { format!("{}:{:02}.{:03}", ms / 60_000, ms / 1000 % 60, ms % 1000) }
+            };
             let pb = match seat {
-                Some(id) => store.best_profile(&combo, Some(id))?.map(|p| (p, "PB")),
+                Some(id) => match store.best_profile(&combo, Some(id))? {
+                    Some(p) => {
+                        let l = label(&p, store.best_valid_time(&combo, Some(id), -1)?, "PB");
+                        Some((p, l))
+                    }
+                    None => None,
+                },
                 None => None,
             };
             let reference = match pb {
                 Some(r) => Some(r),
-                None => store.best_profile(&combo, None)?.map(|p| (p, "Best")),
+                None => match store.best_profile(&combo, None)? {
+                    Some(p) => {
+                        let l = label(&p, store.best_valid_time(&combo, None, -1)?, "Best");
+                        Some((p, l))
+                    }
+                    None => None,
+                },
             };
             TimingContext { boundaries, reference, best_overall, best_driver }
         };
@@ -538,6 +884,10 @@ fn sector_bests(rows: &[(Option<DriverId>, Vec<u32>)], n: usize, driver: Option<
         }
     }
     (overall, mine)
+}
+
+fn map_view_key(game: &str, track: &str, layout: &str) -> String {
+    format!("map_view:{game}|{track}|{layout}")
 }
 
 fn valid_color(c: &str) -> Result<String> {

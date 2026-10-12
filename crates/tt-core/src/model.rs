@@ -133,6 +133,18 @@ pub struct LeaderboardEntry {
     pub best_sectors_ms: Vec<Option<u32>>,
 }
 
+/// One driver's best lap in a challenge, with enough to replay it against the others.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplayEntry {
+    pub position: u32,
+    pub driver_id: Option<DriverId>,
+    pub lap_id: LapId,
+    pub time_ms: u32,
+    /// Elapsed ms at each 0.5% of the lap; `None` for laps recorded before timing traces existed.
+    pub profile: Option<Vec<u32>>,
+}
+
 /// Everything the overlay and home screen need about the person driving.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -155,4 +167,53 @@ pub struct ChallengeStanding {
     pub previous_position: Option<u32>,
     /// Gap to P1 in ms (0 when leading).
     pub gap_to_leader_ms: Option<u32>,
+}
+
+/// What's in the database, for the About page.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AboutCounts {
+    pub drivers: u32,
+    pub laps: u32,
+    /// Laps that count (valid, not out/in/partial/driver-change).
+    pub timed_laps: u32,
+    /// Laps that have a saved input trace.
+    pub traced_laps: u32,
+    pub challenges: u32,
+    pub schema_version: i32,
+    /// The TimeTrial version that first created this database.
+    pub created_with: Option<String>,
+    /// The version that had this database open before this run (`None` the first time).
+    pub previous_version: Option<String>,
+}
+
+/// How quick a driver is compared with the others, from the track and car combinations they share.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriverRating {
+    pub driver_id: DriverId,
+    /// 100 minus the average percentage gap to the fastest driver on each shared track and car
+    /// (so 100 = quickest everywhere). `None` until they share at least one combination with someone.
+    pub score: Option<f64>,
+    /// How many track + car combinations the score is based on.
+    pub combos: u32,
+    /// How many of those they hold the fastest time on.
+    pub fastest_on: u32,
+}
+
+/// Which laps a cleanup touches: everything on a track, optionally narrowed to one layout and/or car.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LapFilter {
+    pub game: String,
+    pub track: String,
+    /// `None` = every layout of the track.
+    #[serde(default)]
+    pub layout: Option<String>,
+    /// `None` = every car.
+    #[serde(default)]
+    pub car: Option<String>,
+    /// Also forget the learned map and sector layout (only when the whole track or that layout goes).
+    #[serde(default)]
+    pub forget_map: bool,
 }

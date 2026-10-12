@@ -1,0 +1,476 @@
+{
+ "tracks": [
+  {
+   "name": "Imola",
+   "country": "IT",
+   "aliases": [
+    "Autodromo Enzo e Dino Ferrari"
+   ]
+  },
+  {
+   "name": "Brands Hatch",
+   "country": "GB",
+   "layouts": [
+    "GP"
+   ]
+  },
+  {
+   "name": "Circuit Paul Ricard",
+   "country": "FR",
+   "aliases": [
+    "Paul Ricard",
+    "Ricard"
+   ]
+  },
+  {
+   "name": "Fuji Speedway",
+   "country": "JP",
+   "aliases": [
+    "Fuji",
+    "Fuji International Speedway"
+   ]
+  },
+  {
+   "name": "Laguna Seca",
+   "country": "US",
+   "aliases": [
+    "WeatherTech Raceway"
+   ]
+  },
+  {
+   "name": "Mount Panorama",
+   "country": "AU",
+   "aliases": [
+    "Bathurst"
+   ],
+   "layouts": [
+    "GP"
+   ]
+  },
+  {
+   "name": "Suzuka",
+   "country": "JP",
+   "layouts": [
+    "East"
+   ]
+  },
+  {
+   "name": "Watkins Glen",
+   "country": "US",
+   "aliases": [
+    "Watkins Glen International"
+   ]
+  },
+  {
+   "name": "Spa-Francorchamps",
+   "country": "BE",
+   "aliases": [
+    "Spa"
+   ]
+  },
+  {
+   "name": "Red Bull Ring",
+   "country": "AT",
+   "aliases": [
+    "Spielberg"
+   ]
+  },
+  {
+   "name": "Circuit of the Americas",
+   "country": "US",
+   "aliases": [
+    "COTA",
+    "Austin"
+   ]
+  },
+  {
+   "name": "Donington Park",
+   "country": "GB",
+   "aliases": [
+    "Donington"
+   ]
+  },
+  {
+   "name": "Nurburgring",
+   "country": "DE",
+   "aliases": [
+    "Nordschleife",
+    "Nurburgring Nordschleife",
+    "Ring",
+    "Green Hell",
+    "24H"
+   ],
+   "layouts": [
+    "Touristenfahrten"
+   ]
+  },
+  {
+   "name": "Oulton Park",
+   "country": "GB",
+   "aliases": [
+    "Oulton"
+   ]
+  },
+  {
+   "name": "Road Atlanta",
+   "country": "US"
+  },
+  {
+   "name": "Kyalami",
+   "country": "ZA",
+   "aliases": [
+    "Kyalami Grand Prix Circuit"
+   ]
+  },
+  {
+   "name": "Monza",
+   "country": "IT"
+  }
+ ],
+ "cars": [
+  {
+   "name": "Abarth 695 Biposto",
+   "brand": "Abarth",
+   "class": "Road"
+  },
+  {
+   "name": "Alfa Romeo Giulia GTAm",
+   "brand": "Alfa Romeo",
+   "class": "Road"
+  },
+  {
+   "name": "Alfa Romeo Junior Veloce",
+   "brand": "Alfa Romeo",
+   "class": "Road"
+  },
+  {
+   "name": "Alpine A110 S",
+   "brand": "Alpine",
+   "class": "Road"
+  },
+  {
+   "name": "Alpine A290",
+   "brand": "Alpine",
+   "class": "Road"
+  },
+  {
+   "name": "Audi RS 3 Sportback",
+   "brand": "Audi",
+   "class": "Road"
+  },
+  {
+   "name": "Audi RS 6 Avant",
+   "brand": "Audi",
+   "class": "Road"
+  },
+  {
+   "name": "BMW M2 (G87)",
+   "brand": "BMW",
+   "class": "Road"
+  },
+  {
+   "name": "BMW M4 CSL (G82)",
+   "brand": "BMW",
+   "class": "Road"
+  },
+  {
+   "name": "BMW M8 Competition",
+   "brand": "BMW",
+   "class": "Road"
+  },
+  {
+   "name": "Caterham 485 CSR",
+   "brand": "Caterham",
+   "class": "Road"
+  },
+  {
+   "name": "Chevrolet Camaro ZL1 1LE",
+   "brand": "Chevrolet",
+   "class": "Road"
+  },
+  {
+   "name": "Dallara Stradale",
+   "brand": "Dallara",
+   "class": "Road"
+  },
+  {
+   "name": "Ferrari 296 GTB",
+   "brand": "Ferrari",
+   "class": "Road"
+  },
+  {
+   "name": "Honda S2000",
+   "brand": "Honda",
+   "class": "Road"
+  },
+  {
+   "name": "Hyundai i30 N",
+   "brand": "Hyundai",
+   "class": "Road"
+  },
+  {
+   "name": "Lamborghini Huracan STO",
+   "brand": "Lamborghini",
+   "class": "Road"
+  },
+  {
+   "name": "Lotus Emira",
+   "brand": "Lotus",
+   "class": "Road"
+  },
+  {
+   "name": "Lotus Exige V6 Cup",
+   "brand": "Lotus",
+   "class": "Road"
+  },
+  {
+   "name": "Mazda MX-5 (NA)",
+   "brand": "Mazda",
+   "class": "Road"
+  },
+  {
+   "name": "Porsche 911 (992) GT3 RS",
+   "brand": "Porsche",
+   "class": "Road"
+  },
+  {
+   "name": "Porsche 718 Cayman GT4 RS",
+   "brand": "Porsche",
+   "class": "Road"
+  },
+  {
+   "name": "Toyota GR86",
+   "brand": "Toyota",
+   "class": "Road"
+  },
+  {
+   "name": "Volkswagen Golf GTI Mk1",
+   "brand": "Volkswagen",
+   "class": "Road"
+  },
+  {
+   "name": "Volkswagen Golf 8 GTI Clubsport",
+   "brand": "Volkswagen",
+   "class": "Road"
+  },
+  {
+   "name": "Volkswagen Golf 8 R",
+   "brand": "Volkswagen",
+   "class": "Road"
+  },
+  {
+   "name": "Ferrari Daytona SP3",
+   "brand": "Ferrari",
+   "class": "Road"
+  },
+  {
+   "name": "Ferrari 288 GTO",
+   "brand": "Ferrari",
+   "class": "Road"
+  },
+  {
+   "name": "Lamborghini Countach",
+   "brand": "Lamborghini",
+   "class": "Road"
+  },
+  {
+   "name": "Audi R8 LMS GT3 Evo II",
+   "brand": "Audi",
+   "class": "GT3"
+  },
+  {
+   "name": "BMW M4 GT3 EVO",
+   "brand": "BMW",
+   "class": "GT3"
+  },
+  {
+   "name": "Ferrari 296 GT3",
+   "brand": "Ferrari",
+   "class": "GT3"
+  },
+  {
+   "name": "Ford Mustang GT3",
+   "brand": "Ford",
+   "class": "GT3"
+  },
+  {
+   "name": "Porsche 992 GT3 R",
+   "brand": "Porsche",
+   "class": "GT3"
+  },
+  {
+   "name": "Audi R8 LMS GT4 Evo",
+   "brand": "Audi",
+   "class": "GT4"
+  },
+  {
+   "name": "KTM X-Bow GT4",
+   "brand": "KTM",
+   "class": "GT4"
+  },
+  {
+   "name": "Porsche 718 Cayman GT4 Clubsport",
+   "brand": "Porsche",
+   "class": "GT4"
+  },
+  {
+   "name": "KTM X-Bow GT2",
+   "brand": "KTM",
+   "class": "GT2"
+  },
+  {
+   "name": "Maserati MC20 GT2",
+   "brand": "Maserati",
+   "class": "GT2"
+  },
+  {
+   "name": "Mercedes-AMG GT2",
+   "brand": "Mercedes-AMG",
+   "class": "GT2"
+  },
+  {
+   "name": "Porsche 991 II GT2 RS Clubsport Evo",
+   "brand": "Porsche",
+   "class": "GT2"
+  },
+  {
+   "name": "BMW M2 CS Racing",
+   "brand": "BMW",
+   "class": "One-make"
+  },
+  {
+   "name": "Ferrari 488 Challenge Evo",
+   "brand": "Ferrari",
+   "class": "One-make"
+  },
+  {
+   "name": "Lamborghini Huracan Super Trofeo EVO2",
+   "brand": "Lamborghini",
+   "class": "One-make"
+  },
+  {
+   "name": "Mazda MX-5 Cup",
+   "brand": "Mazda",
+   "class": "One-make"
+  },
+  {
+   "name": "Porsche 911 GT3 Cup (992)",
+   "brand": "Porsche",
+   "class": "One-make",
+   "aliases": [
+    "Porsche 992 GT3 Cup"
+   ]
+  },
+  {
+   "name": "Ferrari F2004",
+   "brand": "Ferrari",
+   "class": "Open wheel",
+   "aliases": [
+    "Ferrari F2004 (V10 Formula 1)"
+   ]
+  },
+  {
+   "name": "Ferrari SF-25",
+   "brand": "Ferrari",
+   "class": "Open wheel",
+   "aliases": [
+    "Ferrari SF-25 (2025 Formula 1)"
+   ]
+  },
+  {
+   "name": "Dallara EXP",
+   "brand": "Dallara",
+   "class": "Open wheel"
+  },
+  {
+   "name": "Alfa Romeo 75 Turbo Evoluzione",
+   "brand": "Alfa Romeo",
+   "class": "Classic"
+  },
+  {
+   "name": "Alfa Romeo Giulia Sprint GTA",
+   "brand": "Alfa Romeo",
+   "class": "Classic"
+  },
+  {
+   "name": "Audi Sport Quattro",
+   "brand": "Audi",
+   "class": "Classic"
+  },
+  {
+   "name": "BMW M3 E30 Sport Evo",
+   "brand": "BMW",
+   "class": "Classic"
+  },
+  {
+   "name": "BMW M3 E46 CSL",
+   "brand": "BMW",
+   "class": "Classic"
+  },
+  {
+   "name": "Ferrari F40",
+   "brand": "Ferrari",
+   "class": "Classic"
+  },
+  {
+   "name": "Ford Escort RS Cosworth",
+   "brand": "Ford",
+   "class": "Classic"
+  },
+  {
+   "name": "Honda NSX-R",
+   "brand": "Honda",
+   "class": "Classic"
+  },
+  {
+   "name": "Lancia Delta HF Integrale Evoluzione II",
+   "brand": "Lancia",
+   "class": "Classic"
+  },
+  {
+   "name": "Mercedes-Benz 190E 2.5-16 Evo II",
+   "brand": "Mercedes-Benz",
+   "class": "Classic"
+  },
+  {
+   "name": "Mini Cooper",
+   "brand": "Mini",
+   "class": "Classic"
+  },
+  {
+   "name": "Nissan (Datsun) 240Z",
+   "brand": "Nissan",
+   "class": "Classic"
+  },
+  {
+   "name": "Peugeot 205 T16",
+   "brand": "Peugeot",
+   "class": "Classic"
+  },
+  {
+   "name": "Porsche 935",
+   "brand": "Porsche",
+   "class": "Classic"
+  },
+  {
+   "name": "Porsche 964 Turbo 3.6",
+   "brand": "Porsche",
+   "class": "Classic"
+  },
+  {
+   "name": "Renault 5 GT Turbo",
+   "brand": "Renault",
+   "class": "Classic"
+  },
+  {
+   "name": "Toyota AE86",
+   "brand": "Toyota",
+   "class": "Classic"
+  },
+  {
+   "name": "Toyota Supra RZ (Mk IV)",
+   "brand": "Toyota",
+   "class": "Classic"
+  }
+ ]
+}

@@ -56,7 +56,7 @@ pub struct LiveTimingView {
 pub struct TimingContext {
     /// Sector boundaries as fractions of the lap, `[0.0, ..., 1.0]`.
     pub boundaries: Vec<f32>,
-    pub reference: Option<(TimingProfile, &'static str)>,
+    pub reference: Option<(TimingProfile, String)>,
     pub best_overall: Vec<Option<u32>>,
     pub best_driver: Vec<Option<u32>>,
 }
@@ -167,7 +167,7 @@ mod tests {
     fn ctx() -> TimingContext {
         TimingContext {
             boundaries: vec![0.0, 1.0 / 3.0, 2.0 / 3.0, 1.0],
-            reference: Some((reference(), "PB")),
+            reference: Some((reference(), "PB".to_string())),
             best_overall: vec![Some(29_000), Some(30_000), Some(30_000)],
             best_driver: vec![Some(30_500), Some(30_500), Some(30_500)],
         }
