@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { api, useAppState, useCatalogue, useDriverMap, useFetch, useTrackMaps, type Combo } from "../api";
 import { CarBadge, carItems, drivenTrackItems, findMap, TrackThumb } from "../catalogueItems";
+import { Dropdown } from "../components/Dropdown";
 import { Picker } from "../components/Picker";
 import { Helmet } from "../components/Helmet";
 import { TrackHero } from "../components/TrackHero";
@@ -159,13 +160,7 @@ export function LeaderboardPage() {
         <>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             {games.length > 1 ? (
-              <div className="segmented" role="group" aria-label="Game">
-                {games.map((g) => (
-                  <button key={g} aria-pressed={selected?.game === g} onClick={() => chooseGame(g)}>
-                    {gameName(g)}
-                  </button>
-                ))}
-              </div>
+              <Dropdown variant="pill" label="Game" value={selected?.game ?? games[0]} options={games.map((g) => ({ value: g, label: gameName(g) }))} onChange={chooseGame} />
             ) : (
               selected && <span className="filter-pill on">{gameName(selected.game)}</span>
             )}
