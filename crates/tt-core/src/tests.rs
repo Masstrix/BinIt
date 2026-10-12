@@ -170,6 +170,68 @@ fn database_survives_reopen() {
     assert_eq!(tt.recent_laps(10).unwrap().len(), 1);
 }
 
+#[test]
+fn another_database_merges_in_by_driver_name_and_only_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let old_path = dir.path().join("timetrial.db");
+    {
+        let old = BinIt::open(&old_path).unwrap();
+        old.add_and_seat("Jess", None).unwrap();
+        old.record_lap(&lap(102_114, true)).unwrap();
+        old.add_and_seat("Sam", None).unwrap();
+        old.record_lap(&lap(103_000, true)).unwrap();
+        old.record_lap(&lap(101_500, true)).unwrap();
+        old.set_seat(None).unwrap();
+        old.record_lap(&lap(104_000, true)).unwrap(); // a guest lap
+        old.create_challenge(&NewChallenge {
+            name: "Imola Week".into(),
+            game: "acevo".into(),
+            track: "Imola".into(),
+            layout: String::new(),
+            car: None,
+            starts_at: Some(0),
+            ends_at: None,
+            valid_only: true,
+            max_laps: None,
+            prizes: vec![],
+        })
+        .unwrap();
+        old.set_seat(Some(old.drivers().unwrap()[0].id)).unwrap();
+        old.set_setting("lan_enabled", Some("0")).unwrap();
+        old.set_setting("overlay_layout:acevo", Some("{}")).unwrap();
+    }
+
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_driver("Taylor", None).unwrap();
+    let sam = tt.add_and_seat("sam", None).unwrap(); // the same Sam, already here
+    tt.record_lap(&lap(100_900, true)).unwrap();
+    tt.set_setting("lan_enabled", Some("1")).unwrap();
+
+    let report = tt.merge_from(&old_path).unwrap();
+    assert_eq!(report, MergeReport { drivers: 1, laps: 4, challenges: 1 });
+
+    let mut names: Vec<_> = tt.drivers().unwrap().into_iter().map(|d| d.name).collect();
+    names.sort();
+    assert_eq!(names, ["Jess", "Taylor", "sam"]);
+    let jess = tt.drivers().unwrap().into_iter().find(|d| d.name == "Jess").unwrap();
+    // Sam's old laps join the Sam already here (oldest first); the guest lap stays a guest lap.
+    assert_eq!(tt.driver_laps(sam.id).unwrap().iter().map(|l| l.time_ms).collect::<Vec<_>>(), [103_000, 101_500, 100_900]);
+    assert_eq!(tt.driver_laps(jess.id).unwrap().len(), 1);
+    assert_eq!(tt.recent_laps(10).unwrap().iter().filter(|l| l.driver_id.is_none()).count(), 1);
+    let board = tt.leaderboard(&imola_board()).unwrap();
+    assert_eq!(board.iter().map(|e| (e.driver_id, e.time_ms)).collect::<Vec<_>>(), [(Some(sam.id), 100_900), (Some(jess.id), 102_114), (None, 104_000)]);
+    assert_eq!(tt.challenges().unwrap().len(), 1);
+
+    // Bin It's own settings and seat win; what it didn't have comes over.
+    assert_eq!(tt.setting("lan_enabled").unwrap().as_deref(), Some("1"));
+    assert_eq!(tt.setting("overlay_layout:acevo").unwrap().as_deref(), Some("{}"));
+    assert_eq!(tt.seat().unwrap(), Some(sam.id));
+
+    // Merging the same data again adds nothing.
+    assert_eq!(tt.merge_from(&old_path).unwrap(), MergeReport::default());
+    assert_eq!(tt.recent_laps(10).unwrap().len(), 5);
+}
+
 /// A lap driven at constant speed, sampled every 0.5%.
 fn profiled_lap(time_ms: u32) -> CompletedLap {
     use tt_games::timing::ProfileRecorder;

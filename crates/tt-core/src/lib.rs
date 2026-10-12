@@ -21,14 +21,14 @@ use trackmap::{MapRecorder, TrackMap};
 use live::{LiveTiming, LiveTimingView, TimingContext, sector_status};
 
 pub use model::*;
-pub use store::{Store, holds_records};
+pub use store::Store;
 
 /// Helmet colours handed out to drivers who don't pick one.
 pub const HELMET_COLORS: [&str; 10] = [
     "#FF9F6B", "#4FC3FF", "#FF7AC6", "#4BE3A6", "#FFC93C", "#B18CFF", "#FF6B8A", "#7CF5C4", "#6BD5FF", "#FFD86B",
 ];
 
-const SEAT_KEY: &str = "seat_driver_id";
+const SEAT_KEY: &str = store::SEAT_SETTING;
 const OVERLAY_KEY: &str = "overlay_enabled";
 const OVERLAY_FOCUS_KEY: &str = "overlay_focus_only";
 const OVERLAY_SHOW_KEY: &str = "overlay_show";
@@ -267,6 +267,12 @@ impl BinIt {
 
     pub fn setting(&self, key: &str) -> Result<Option<String>> {
         self.store().setting(key)
+    }
+
+    /// Adds another database's drivers, laps, challenges and maps to this one, skipping what is
+    /// already here (see [`Store::merge_from`]). `other` is changed (upgraded), so pass a copy.
+    pub fn merge_from(&self, other: &Path) -> Result<MergeReport> {
+        self.store().merge_from(other)
     }
 
     pub fn set_setting(&self, key: &str, value: Option<&str>) -> Result<()> {

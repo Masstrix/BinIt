@@ -62,19 +62,6 @@ fn main() {
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
-            // Data saved under the old name (TimeTrial) is carried over the first time this runs.
-            if let Some(legacy) = migrate::legacy_dir(&data_dir) {
-                match migrate::import_legacy_data(&legacy, &data_dir) {
-                    Ok(true) => eprintln!("data: copied your laps from {}", legacy.display()),
-                    Ok(false) => {}
-                    Err(e) => {
-                        message_box("Bin It can't bring over your old data", &format!("{e:#}
-
-Old folder: {}", legacy.display()));
-                        return Err(e.into());
-                    }
-                }
-            }
             let tt = match BinIt::open(&data_dir.join("binit.db")) {
                 Ok(tt) => Arc::new(tt),
                 Err(e) => {
@@ -85,6 +72,18 @@ Data folder: {}", data_dir.display()));
                     return Err(e.into());
                 }
             };
+            // Data saved under the old name (TimeTrial) is merged in, and again whenever it changes.
+            // It's not worth refusing to start over: Bin It's own data is untouched if this fails.
+            if let Some(legacy) = migrate::legacy_dir(&data_dir) {
+                match migrate::merge_legacy_data(&tt, &legacy, &data_dir) {
+                    Ok(Some(r)) => eprintln!("data: merged {} drivers, {} laps, {} challenges from {}", r.drivers, r.laps, r.challenges, legacy.display()),
+                    Ok(None) => {}
+                    Err(e) => message_box(
+                        "Bin It can't bring over your TimeTrial data",
+                        &format!("{e:#}\n\nBin It will start with its own data. Old folder (left as it was): {}", legacy.display()),
+                    ),
+                }
+            }
             // Plain-text sources for the track/car catalogue (never game binaries).
             tt.set_catalogue_paths(tt_core::CataloguePaths {
                 documents: app.path().document_dir().ok(),

@@ -105,7 +105,7 @@ curl -s -w " [%{http_code}]\n" http://192.168.0.79:7878/api/admin/about         
 
 The owner uses this app while you work, often mid-lap.
 
-* The database is `%APPDATA%\app.binit.desktop\binit.db` (plus `-wal` and `-shm`). Under the old name TimeTrial it was `app.timetrial.desktop\timetrial.db`; the first start of Bin It copies that over (`migrate.rs`) and leaves the old folder as a backup. To look at
+* The database is `%APPDATA%\app.binit.desktop\binit.db` (plus `-wal` and `-shm`). Under the old name TimeTrial it was `app.timetrial.desktop\timetrial.db`; Bin It merges it in on start whenever it has changed (`migrate.rs`, `Store::merge_from`: drivers joined by name, laps and challenges never doubled) and leaves the old folder as a backup. To look at
   it, copy **all three** files to a temp folder and open the copy (the live data is mostly in the
   `-wal` file while the app is running). Never write to the live file; use the API.
 * **Do not change the seat or the overlay layout** to test something. Switching driver mid-lap voids
