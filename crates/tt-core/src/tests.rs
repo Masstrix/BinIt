@@ -137,6 +137,31 @@ fn challenge_tracks_position_changes_and_attempt_limit() {
 }
 
 #[test]
+fn a_challenge_position_counts_a_lap_from_the_same_millisecond() {
+    // A fast PC can record two laps in one millisecond: the earlier one still counts as "before".
+    let tt = BinIt::in_memory().unwrap();
+    tt.create_challenge(&NewChallenge {
+        name: "Imola".into(),
+        game: "acevo".into(),
+        track: "Imola".into(),
+        layout: String::new(),
+        car: None,
+        starts_at: Some(0),
+        ends_at: None,
+        valid_only: true,
+        max_laps: None,
+        prizes: vec![],
+    })
+    .unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    let first = tt.record_lap_at(&lap(103_000, true), 5_000).unwrap();
+    assert_eq!(first.challenges[0].position, Some(1));
+    let second = tt.record_lap_at(&lap(101_900, true), 5_000).unwrap();
+    assert_eq!(second.challenges[0].previous_position, Some(1));
+    assert_eq!(second.challenges[0].position, Some(1));
+}
+
+#[test]
 fn game_events_drive_session_and_laps() {
     let tt = BinIt::in_memory().unwrap();
     let mut rx = tt.subscribe();

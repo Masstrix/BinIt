@@ -588,8 +588,9 @@ impl BinIt {
 
         let challenges: Vec<Challenge> =
             store.challenges()?.into_iter().filter(|c| challenge_applies(c, &combo, now)).collect();
+        // Before this lap is saved: every lap so far, including one recorded in this same millisecond.
         let before: Vec<Option<u32>> =
-            challenges.iter().map(|c| Ok(standing(&store, c, driver_id, now)?.map(|s| s.0))).collect::<Result<_>>()?;
+            challenges.iter().map(|c| Ok(standing(&store, c, driver_id, now + 1)?.map(|s| s.0))).collect::<Result<_>>()?;
 
         // Sectors: the game's own when it reports them, else split from the lap's profile.
         let boundaries = boundaries_for(&store, &completed.session)?;
