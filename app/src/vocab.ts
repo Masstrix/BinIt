@@ -22,3 +22,18 @@ const RALLY: Words = { track: "stage", tracks: "stages", lap: "run", laps: "runs
 export const words = (game?: string | null): Words => (isRally(game) ? RALLY : CIRCUIT);
 
 export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Locations whose names are more than one word, so "Monte Carlo Col de Turini" splits as Monte Carlo + Col de Turini. */
+const MULTI_WORD_LOCATIONS = ["Monte Carlo", "New Zealand", "Costa Brava", "Costa Smeralda", "Great Britain"];
+
+/**
+ * A rally game's stage name starts with the location the way the game shows it ("Wales Afon Bidno"), so the
+ * stages can be grouped by location like the game groups them. A name that does not start with a place
+ * (a catalogue with its own country) has no location here.
+ */
+export function stageParts(track: string): { location: string | null; stage: string } {
+  const long = MULTI_WORD_LOCATIONS.find((l) => track.toLowerCase().startsWith(`${l.toLowerCase()} `));
+  if (long) return { location: long, stage: track.slice(long.length + 1) };
+  const space = track.indexOf(" ");
+  return space > 0 ? { location: track.slice(0, space), stage: track.slice(space + 1) } : { location: null, stage: track };
+}

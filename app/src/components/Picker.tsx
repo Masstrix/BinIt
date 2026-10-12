@@ -14,6 +14,8 @@ export interface PickerItem {
   tag?: string;
   /** Section header; items should already be sorted by it. */
   group?: string;
+  /** The name on a card when the section header already says part of it (the trigger keeps the full label). */
+  cardLabel?: string;
   /** Thumbnail: a track map, a badge... */
   visual?: ReactNode;
 }
@@ -190,7 +192,7 @@ function PickerBody({ items, value, tagLabel, onPick }: { items: PickerItem[]; v
                 >
                   {item.visual !== undefined && <span className="picker-thumb">{item.visual}</span>}
                   <span className="picker-text">
-                    <span className="picker-name">{item.label}</span>
+                    <span className="picker-name">{item.cardLabel ?? item.label}</span>
                     {item.sub && <span className="muted picker-sub">{item.sub}</span>}
                     {item.note && <span className="picker-note">{item.note}</span>}
                   </span>

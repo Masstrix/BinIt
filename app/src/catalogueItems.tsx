@@ -5,6 +5,7 @@ import { TrackMap } from "./components/TrackMap";
 import type { PickerItem } from "./components/Picker";
 import { fold } from "./components/Picker";
 import { carName, trackName } from "./format";
+import { isRally, stageParts } from "./vocab";
 
 export const trackValue = (track: string, layout: string) => `${track}|${layout}`;
 
@@ -52,7 +53,7 @@ export function trackItems(cat: Catalogue | null, maps: TrackMapData[]): PickerI
     const layouts = t.layouts.length ? t.layouts : [{ name: "", seen: t.seen, hasMap: false }];
     for (const l of layouts) items.push(trackItem(t, l.name, l.seen, maps));
   }
-  return items;
+  return isRally(cat.game) ? byLocation(items, false) : items;
 }
 
 /** Only the track + layouts that have laps (leaderboards; values are `game|track|layout`), with the catalogue's search words and maps. */
@@ -68,7 +69,8 @@ export function drivenTrackItems(combos: Combo[], cat: Catalogue | null, maps: T
     // Match laps by the spelling they were recorded with.
     items.push({ ...item, value: v, label: trackName(c.track, c.layout) });
   }
-  return items;
+  // A rally game's stages are grouped by location, as the game does.
+  return combos.some((c) => isRally(c.game)) ? byLocation(items, true) : items;
 }
 
 function trackItem(t: CatTrack, layout: string, seen: boolean, maps: TrackMapData[]): PickerItem {
@@ -109,4 +111,16 @@ export function carItems(cat: Catalogue | null, opts: { only?: Set<string> } = {
       group: c.brand ?? undefined,
       visual: <CarBadge brand={c.brand} name={carName(c.name)} />,
     }));
+}
+
+/** Groups stage items under their location (the first word of the stage's name), sorted by location then stage. */
+function byLocation(items: PickerItem[], valueHasGame: boolean): PickerItem[] {
+  return items
+    .map((i) => {
+      const { track: raw, layout } = splitTrackValue(i.value);
+      const track = valueHasGame ? raw.slice(raw.indexOf("|") + 1) : raw;
+      const { location, stage } = stageParts(track);
+      return location ? { ...i, group: location, tag: location, cardLabel: trackName(stage, layout), sub: undefined } : i;
+    })
+    .sort((a, b) => (a.group ?? "").localeCompare(b.group ?? "") || a.label.localeCompare(b.label));
 }
