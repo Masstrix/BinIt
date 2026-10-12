@@ -5,3 +5,9 @@ dist/
 *.db-journal
 /dumps
 app/src-tauri/gen/
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
+
+# Build counter (see app/src-tauri/build.rs): per checkout, never committed.
+/.build-number
