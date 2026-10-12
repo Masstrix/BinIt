@@ -12,6 +12,20 @@ use tt_core::TimeTrial;
 use tt_games::GameAdapter;
 use tt_games::acevo::AcEvoAdapter;
 
+/// A plain error dialog, for failures that happen before there is a window to show anything in.
+#[cfg(windows)]
+fn message_box(title: &str, text: &str) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
+    let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    // SAFETY: both strings are NUL-terminated and outlive the call; no owner window.
+    unsafe { MessageBoxW(std::ptr::null_mut(), wide(text).as_ptr(), wide(title).as_ptr(), MB_OK | MB_ICONERROR) };
+}
+
+#[cfg(not(windows))]
+fn message_box(title: &str, text: &str) {
+    eprintln!("{title}: {text}");
+}
+
 fn main() {
     let switch_driver = Shortcut::new(None, Code::F8);
     let hide_overlay = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyH);
@@ -43,7 +57,27 @@ fn main() {
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
-            let tt = Arc::new(TimeTrial::open(&data_dir.join("timetrial.db"))?);
+            let tt = match TimeTrial::open(&data_dir.join("timetrial.db")) {
+                Ok(tt) => Arc::new(tt),
+                Err(e) => {
+                    // There's no console in a release build, so say why we're closing.
+                    message_box("TimeTrial can't open its data", &format!("{e:#}
+
+Data folder: {}", data_dir.display()));
+                    return Err(e.into());
+                }
+            };
+            // Plain-text sources for the track/car catalogue (never game binaries).
+            tt.set_catalogue_paths(tt_core::CataloguePaths {
+                ace_documents: app.path().document_dir().ok().map(|d| d.join("ACE")),
+                custom: Some(data_dir.join("catalogue")),
+            });
+            // Laps from before a name was in the catalogue get filed under the catalogue's name.
+            match tt.canonicalize_history("acevo") {
+                Ok(0) => {}
+                Ok(n) => eprintln!("catalogue: relabelled {n} stored names"),
+                Err(e) => eprintln!("catalogue: could not relabel stored names: {e:#}"),
+            }
             app.manage(tt.clone());
 
             spawn_game_watcher(tt.clone());
