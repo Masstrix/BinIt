@@ -169,6 +169,15 @@ pub struct ChallengeStanding {
     pub gap_to_leader_ms: Option<u32>,
 }
 
+/// What [`crate::BinIt::merge_from`] added from another database.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeReport {
+    pub drivers: usize,
+    pub laps: usize,
+    pub challenges: usize,
+}
+
 /// What's in the database, for the About page.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -1,14 +1,6 @@
 import { useEffect, useState } from "react";
-import { isTauri } from "../api";
+import { isTauri, type UpdateStage as Stage } from "../api";
 import { Logo } from "../components/Helmet";
-
-/** Where the update stands, as sent by the desktop app (src-tauri/src/updater.rs). */
-type Stage =
-  | { stage: "checking" }
-  | { stage: "downloading"; version: string; downloaded: number; total: number | null }
-  | { stage: "installing"; version: string }
-  | { stage: "failed"; message: string }
-  | { stage: "starting" };
 
 const mb = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 

@@ -75,8 +75,11 @@ binit.db files (binit.db, and binit.db-wal / binit.db-shm if they exist) into th
 same place on the other PC. Make sure it has the same Bin It version or a newer one:
 Bin It refuses to open data saved by a newer version rather than risk damaging it.
 
-If you used this app under its old name, TimeTrial, the first start copies your laps over from
-%APPDATA%\app.timetrial.desktop. That folder is left as it was, so it doubles as a backup.
+If you used this app under its old name, TimeTrial, Bin It brings those laps, drivers and
+challenges in from %APPDATA%\app.timetrial.desktop when it starts, alongside anything recorded
+in Bin It since (drivers with the same name are joined up, nothing is counted twice). If TimeTrial
+is used again later, the next start of Bin It brings the new laps in too. That folder is left as
+it was, so it doubles as a backup.
 
 To keep a backup, copy that folder while Bin It is closed.
 

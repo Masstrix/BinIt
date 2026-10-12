@@ -1,7 +1,19 @@
 //! Brings data over from the app's old name (TimeTrial). The old folder is only read, never
 //! changed, so it stays as a backup.
+//!
+//! The old data is merged into Bin It's, not copied over it: drivers are matched by name and laps,
+//! challenges and maps that Bin It already has are skipped (see `BinIt::merge_from`). So it works
+//! whether Bin It has no data yet, an empty database, or laps of its own, and merging the same data
+//! again adds nothing. It runs again only when the old database changes (someone used TimeTrial
+//! since), which is noted in the `timetrial_merged` setting.
 
 use std::path::{Path, PathBuf};
+
+use anyhow::Context;
+use tt_core::{BinIt, MergeReport};
+
+/// Which old database was merged last: its files' sizes and modification times.
+const MERGED_SETTING: &str = "timetrial_merged";
 
 /// The data folder the app used under its old identifier, `app.timetrial.desktop`, which sits
 /// next to the current one.
@@ -9,34 +21,59 @@ pub fn legacy_dir(data_dir: &Path) -> Option<PathBuf> {
     Some(data_dir.parent()?.join("app.timetrial.desktop"))
 }
 
-/// Copies the old database (and the catalogue folder) into `data_dir` when there is no new
-/// database yet. Returns whether anything was copied.
-///
-/// The new database file is put in place last, so an interrupted copy is simply redone on the
-/// next start.
-pub fn import_legacy_data(legacy: &Path, data_dir: &Path) -> std::io::Result<bool> {
-    let new_db = data_dir.join("binit.db");
+/// Merges the old database (and the catalogue folder) into Bin It's, when there is one and it has
+/// changed since it was last merged. Returns what was added, or `None` when there was nothing to do.
+pub fn merge_legacy_data(tt: &BinIt, legacy: &Path, data_dir: &Path) -> anyhow::Result<Option<MergeReport>> {
     let old_db = legacy.join("timetrial.db");
-    if new_db.exists() || !old_db.is_file() {
-        return Ok(false);
-    }
-    std::fs::create_dir_all(data_dir)?;
-    // The log holds laps not yet folded into the main file. The shared-memory file is rebuilt by SQLite.
     let old_wal = legacy.join("timetrial.db-wal");
-    let new_wal = data_dir.join("binit.db-wal");
-    if old_wal.is_file() {
-        std::fs::copy(&old_wal, &new_wal)?;
-    } else if new_wal.exists() {
-        std::fs::remove_file(&new_wal)?;
+    if !old_db.is_file() {
+        return Ok(None);
     }
-    let partial = data_dir.join("binit.db.partial");
-    std::fs::copy(&old_db, &partial)?;
-    copy_dir(&legacy.join("catalogue"), &data_dir.join("catalogue"))?;
-    std::fs::rename(&partial, &new_db)?;
-    Ok(true)
+    let stamp = fingerprint(&[&old_db, &old_wal]);
+    if tt.setting(MERGED_SETTING)?.as_deref() == Some(stamp.as_str()) {
+        return Ok(None);
+    }
+
+    // Merging brings the database up to this version's format, so it works on a copy. The log
+    // holds laps not yet folded into the main file; the shared-memory file is rebuilt by SQLite.
+    let copy = data_dir.join("timetrial-merge.db");
+    let copy_wal = data_dir.join("timetrial-merge.db-wal");
+    let remove_copy = || {
+        for f in [&copy, &copy_wal, &data_dir.join("timetrial-merge.db-shm")] {
+            let _ = std::fs::remove_file(f);
+        }
+    };
+    remove_copy();
+    std::fs::copy(&old_db, &copy).with_context(|| format!("copying {}", old_db.display()))?;
+    if old_wal.is_file() {
+        std::fs::copy(&old_wal, &copy_wal).with_context(|| format!("copying {}", old_wal.display()))?;
+    }
+    let merged = tt.merge_from(&copy);
+    remove_copy();
+    let report = merged?;
+
+    copy_missing(&legacy.join("catalogue"), &data_dir.join("catalogue"))?;
+    tt.set_setting(MERGED_SETTING, Some(&stamp))?;
+    Ok(Some(report))
 }
 
-fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+/// Sizes and modification times: changes whenever the old app records anything.
+fn fingerprint(files: &[&Path]) -> String {
+    files
+        .iter()
+        .map(|f| match std::fs::metadata(f) {
+            Ok(m) => {
+                let modified = m.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok());
+                format!("{}:{}", m.len(), modified.map_or(0, |d| d.as_millis()))
+            }
+            Err(_) => "-".into(),
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+/// Copies the files in `from` that `to` doesn't have yet. Bin It's own files are kept.
+fn copy_missing(from: &Path, to: &Path) -> std::io::Result<()> {
     if !from.is_dir() {
         return Ok(());
     }
@@ -45,8 +82,8 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
         let entry = entry?;
         let target = to.join(entry.file_name());
         if entry.file_type()?.is_dir() {
-            copy_dir(&entry.path(), &target)?;
-        } else {
+            copy_missing(&entry.path(), &target)?;
+        } else if !target.exists() {
             std::fs::copy(entry.path(), target)?;
         }
     }
@@ -64,34 +101,74 @@ mod tests {
         d
     }
 
+    /// The old app's folder, with a database holding these drivers.
+    fn old_app(root: &Path, drivers: &[&str]) -> PathBuf {
+        let old = root.join("app.timetrial.desktop");
+        std::fs::create_dir_all(&old).unwrap();
+        let tt = BinIt::open(&old.join("timetrial.db")).unwrap();
+        for d in drivers {
+            tt.add_driver(d, None).unwrap();
+        }
+        old
+    }
+
+    fn names(tt: &BinIt) -> Vec<String> {
+        let mut names: Vec<_> = tt.drivers().unwrap().into_iter().map(|d| d.name).collect();
+        names.sort();
+        names
+    }
+
     #[test]
-    fn old_data_is_copied_once_and_left_in_place() {
-        let root = scratch("copy");
-        let (old, new) = (root.join("app.timetrial.desktop"), root.join("app.binit.desktop"));
+    fn old_data_is_merged_once_and_left_in_place() {
+        let root = scratch("merge");
+        let old = old_app(&root, &["Sam", "Alex"]);
         std::fs::create_dir_all(old.join("catalogue")).unwrap();
-        std::fs::write(old.join("timetrial.db"), b"db").unwrap();
-        std::fs::write(old.join("timetrial.db-wal"), b"wal").unwrap();
         std::fs::write(old.join("catalogue").join("acevo.json"), b"{}").unwrap();
+        let before = std::fs::read(old.join("timetrial.db")).unwrap();
 
-        assert!(import_legacy_data(&old, &new).unwrap());
-        assert_eq!(std::fs::read(new.join("binit.db")).unwrap(), b"db");
-        assert_eq!(std::fs::read(new.join("binit.db-wal")).unwrap(), b"wal");
+        let new = root.join("app.binit.desktop");
+        std::fs::create_dir_all(&new).unwrap();
+        let tt = BinIt::open(&new.join("binit.db")).unwrap();
+        tt.add_driver("alex", None).unwrap(); // the same person, already here
+
+        let report = merge_legacy_data(&tt, &old, &new).unwrap().unwrap();
+        assert_eq!(report.drivers, 1, "only Sam is new");
+        assert_eq!(names(&tt), ["Sam", "alex"]);
         assert!(new.join("catalogue").join("acevo.json").is_file());
-        assert!(old.join("timetrial.db").is_file(), "the old copy stays as a backup");
-        assert!(!new.join("binit.db.partial").exists());
+        assert!(!new.join("timetrial-merge.db").exists(), "the working copy is removed");
+        assert_eq!(std::fs::read(old.join("timetrial.db")).unwrap(), before, "the old data is never changed");
 
-        // Once there is a new database, the old one is never copied over it.
-        std::fs::write(new.join("binit.db"), b"newer").unwrap();
-        assert!(!import_legacy_data(&old, &new).unwrap());
-        assert_eq!(std::fs::read(new.join("binit.db")).unwrap(), b"newer");
+        // Nothing changed in the old app since: nothing to do.
+        assert!(merge_legacy_data(&tt, &old, &new).unwrap().is_none());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn merging_again_after_the_old_app_was_used_adds_only_what_is_new() {
+        let root = scratch("again");
+        let old = old_app(&root, &["Sam"]);
+        let new = root.join("app.binit.desktop");
+        std::fs::create_dir_all(&new).unwrap();
+        let tt = BinIt::open(&new.join("binit.db")).unwrap();
+        merge_legacy_data(&tt, &old, &new).unwrap().unwrap();
+
+        // Someone opens TimeTrial again and adds a driver.
+        BinIt::open(&old.join("timetrial.db")).unwrap().add_driver("Jo", None).unwrap();
+        tt.set_setting(MERGED_SETTING, Some("stale")).unwrap(); // as if the files' times had moved on
+        let report = merge_legacy_data(&tt, &old, &new).unwrap().unwrap();
+        assert_eq!(report, MergeReport { drivers: 1, laps: 0, challenges: 0 });
+        assert_eq!(names(&tt), ["Jo", "Sam"]);
         let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
     fn nothing_happens_without_old_data() {
         let root = scratch("none");
-        assert!(!import_legacy_data(&root.join("app.timetrial.desktop"), &root.join("app.binit.desktop")).unwrap());
-        assert!(!root.join("app.binit.desktop").exists());
+        let new = root.join("app.binit.desktop");
+        std::fs::create_dir_all(&new).unwrap();
+        let tt = BinIt::open(&new.join("binit.db")).unwrap();
+        assert!(merge_legacy_data(&tt, &root.join("app.timetrial.desktop"), &new).unwrap().is_none());
+        assert!(tt.setting(MERGED_SETTING).unwrap().is_none());
         let _ = std::fs::remove_dir_all(&root);
     }
 }

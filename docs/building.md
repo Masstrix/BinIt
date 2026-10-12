@@ -67,9 +67,15 @@ Nothing is committed, tagged or published unless the tests and the build pass.
   there's a newer version it downloads the installer, checks its signature against `pubkey` in
   `tauri.conf.json`, runs it silently, and the installer starts Bin It again. No update, no
   internet (it gives up after 8 seconds) or any error: the small window closes and the app opens.
-* The **portable** exe can't replace itself. It checks in the background, and the strip at the
-  foot of Home (desktop app only) says when there's a newer version and links to the latest
-  installer and portable exe.
+* While it runs, the app **checks again every hour**. A newer version found then is announced, not
+  installed by itself (nobody gets thrown out mid-lap): an "Update to X" button appears in the menu,
+  on the PC and on phones, and the **Updates** card at the top of Advanced says what's new. "Update
+  now" (either place, after a confirmation) shows the same small window and installs it; "Check for
+  updates" looks straight away. Phones go through the same HTTP API as the desktop window:
+  `GET /api/update`, `POST /api/update/check`, `POST /api/update/install`, and every change is pushed
+  to all screens as an `updateChanged` event.
+* The **portable** exe can't replace itself. It checks too (at start and hourly), and the menu
+  button, the Updates card and the strip at the foot of Home link to the latest download instead.
 * **Development builds** never check. Open `http://localhost:1420/#/updater` in a browser while
   `npm run dev` runs to see the update window play through its stages.
 * Versions only go up: an installed copy ignores a release that isn't newer than itself.

@@ -13,6 +13,8 @@ const SCHEMA_VERSION: i32 = 6;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
+/// Who is in the seat: a driver id, so it means nothing in another database.
+pub const SEAT_SETTING: &str = "seat_driver_id";
 
 pub struct Store {
     conn: Connection,
@@ -267,6 +269,66 @@ impl Store {
             created_with: self.setting(CREATED_WITH_KEY)?,
             previous_version: None,
         })
+    }
+
+    /// Adds the records of another database (an older copy, or the TimeTrial app's) to this one,
+    /// in one transaction. `other` must be a copy that may be changed: it is first brought up to
+    /// this version's format.
+    ///
+    /// Drivers are matched by name (as names are unique here) and their laps follow them. A lap or
+    /// challenge that is already here is not added again, so merging the same data twice adds
+    /// nothing. Learned track maps, sector boundaries and settings are only added where this
+    /// database has none of its own; who is in the seat is never taken over.
+    ///
+    /// When a table or column is added to the format, add it here too.
+    pub fn merge_from(&self, other: &Path) -> Result<MergeReport> {
+        drop(Store::open(other).with_context(|| format!("upgrading {}", other.display()))?);
+        self.conn.execute("ATTACH DATABASE ?1 AS other", [other.to_string_lossy()])?;
+        let merged = (|| -> Result<MergeReport> {
+            let tx = self.conn.unchecked_transaction()?;
+            let drivers = tx.execute(
+                "INSERT OR IGNORE INTO main.drivers (name, color, created_at)
+                 SELECT name, color, created_at FROM other.drivers ORDER BY id",
+                [],
+            )?;
+            let laps = tx.execute(
+                "INSERT INTO main.laps (driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid,
+                                        sectors_ms, recorded_at, untimed_reason, profile, trace)
+                 SELECT (SELECT d.id FROM main.drivers d JOIN other.drivers od ON d.name = od.name WHERE od.id = o.driver_id),
+                        o.game, o.track, o.layout, o.car, o.session_kind, o.lap_number, o.time_ms, o.valid,
+                        o.sectors_ms, o.recorded_at, o.untimed_reason, o.profile, o.trace
+                 FROM other.laps o
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM main.laps l
+                     WHERE l.game = o.game AND l.track = o.track AND l.layout = o.layout AND l.car = o.car
+                       AND l.time_ms = o.time_ms AND l.lap_number = o.lap_number AND l.recorded_at = o.recorded_at)
+                 ORDER BY o.id",
+                [],
+            )?;
+            let challenges = tx.execute(
+                "INSERT INTO main.challenges (name, game, track, layout, car, starts_at, ends_at, valid_only, max_laps, prizes, created_at)
+                 SELECT o.name, o.game, o.track, o.layout, o.car, o.starts_at, o.ends_at, o.valid_only, o.max_laps, o.prizes, o.created_at
+                 FROM other.challenges o
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM main.challenges c
+                     WHERE c.name = o.name AND c.game = o.game AND c.track = o.track AND c.layout = o.layout
+                       AND c.starts_at = o.starts_at AND c.created_at = o.created_at)
+                 ORDER BY o.id",
+                [],
+            )?;
+            tx.execute_batch(&format!(
+                "INSERT OR IGNORE INTO main.sector_layouts (game, track, layout, boundaries, source)
+                     SELECT game, track, layout, boundaries, source FROM other.sector_layouts;
+                 INSERT OR IGNORE INTO main.track_maps (game, track, layout, points, recorded_at, closed)
+                     SELECT game, track, layout, points, recorded_at, closed FROM other.track_maps;
+                 INSERT OR IGNORE INTO main.settings (key, value) SELECT key, value FROM other.settings
+                     WHERE key NOT IN ('{SEAT_SETTING}', '{CREATED_WITH_KEY}', '{OPENED_WITH_KEY}');"
+            ))?;
+            tx.commit()?;
+            Ok(MergeReport { drivers, laps, challenges })
+        })();
+        self.conn.execute("DETACH DATABASE other", [])?;
+        merged
     }
 
     /// Every lap a driver has recorded, oldest first (rows only, no traces).

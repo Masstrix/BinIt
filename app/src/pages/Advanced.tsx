@@ -3,6 +3,7 @@ import { api, isTauri, useAppState, useFetch, type Combo } from "../api";
 import { CarBadge } from "../catalogueItems";
 import { Logo } from "../components/Helmet";
 import { Modal } from "../components/Modal";
+import { UpdateCard } from "../components/Update";
 import { Picker, type PickerItem } from "../components/Picker";
 import { carName, gameName, trackName } from "../format";
 
@@ -22,16 +23,6 @@ function AboutCard() {
   if (!about) return null;
   const rows: [string, string][] = [
     ["Version", `${about.version} · build ${about.buildNumber}${about.build === "development" ? " (development build)" : ""}`],
-    [
-      "Updates",
-      about.build === "development"
-        ? "Development build: doesn't check for updates"
-        : about.installed
-          ? about.update
-            ? `${about.update.version} is out and installs next time Bin It starts`
-            : "Checks for a new version every time Bin It starts, and installs it"
-          : `Portable copy: it can't update itself${about.update ? `, and ${about.update.version} is out` : ""}. Get the latest from the Home page`,
-    ],
     ["Network", `Port ${about.port}, ${about.lanEnabled ? "shared on the office network" : "this PC only"}`],
     ["Data", about.counts.laps === 0 ? "No laps yet" : `${about.counts.laps} laps (${about.counts.timedLaps} timed, ${about.counts.tracedLaps} with input traces), ${about.counts.drivers} drivers, ${about.counts.challenges} challenges`],
     ["Database", `${about.dbBytes !== null ? `${mb(about.dbBytes)} · ` : ""}format ${about.counts.schemaVersion}${about.counts.createdWith ? ` · created by ${about.counts.createdWith}` : ""}${about.counts.previousVersion && about.counts.previousVersion !== about.version ? ` · last used by ${about.counts.previousVersion}` : ""}`],
@@ -138,6 +129,7 @@ export function AdvancedPage() {
   return (
     <>
       <h1>Advanced</h1>
+      <UpdateCard />
       <AboutCard />
       <section className="card" aria-label="Clean up lap times">
         <div>
