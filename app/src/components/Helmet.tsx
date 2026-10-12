@@ -141,9 +141,9 @@ export function Sparkle({ size = 20, color = "#fff", opacity = 0.6, style, delay
   );
 }
 
-export function Logo() {
+export function Logo({ size = 34 }: { size?: number }) {
   return (
-    <svg width="34" height="34" viewBox="0 0 180 180" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 180 180" aria-hidden="true">
       {/* Same mark as src-tauri/icons/binit.svg, the source of every app icon. */}
       <rect width="180" height="180" rx="44" fill="#6A58F5" />
       <g transform="translate(0 10)">

@@ -12,6 +12,7 @@ import { GamesPage } from "./pages/Games";
 import { AdvancedPage } from "./pages/Advanced";
 import { TelemetryPage } from "./pages/Telemetry";
 import { Overlay } from "./pages/Overlay";
+import { Updater } from "./pages/Updater";
 
 const ROUTES = [
   { path: "/", label: "Home", icon: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" },
@@ -51,6 +52,7 @@ export function App() {
     document.querySelector(".content")?.scrollTo(0, 0);
   }, [path]);
   if (path.startsWith("/overlay")) return <Overlay />;
+  if (path.startsWith("/updater")) return <Updater />;
 
   let page;
   if (path.startsWith("/leaderboard")) page = <LeaderboardPage />;

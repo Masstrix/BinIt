@@ -148,6 +148,10 @@ export interface About {
   port: number;
   lanEnabled: boolean;
   counts: { drivers: number; laps: number; timedLaps: number; tracedLaps: number; challenges: number; schemaVersion: number; createdWith: string | null; previousVersion: string | null };
+  /** Put here by the installer, so it updates itself when it starts. False for the portable exe. */
+  installed: boolean;
+  /** A newer release, when this run's update check found one. */
+  update: { version: string; notes: string | null } | null;
 }
 
 /** Which laps a cleanup touches (desktop app only). */
@@ -272,6 +276,11 @@ export type AppEvent =
 // ---- transport ----------------------------------------------------------------
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
+
+/** Opens the latest installer or portable exe (or the release page) in the browser. Desktop app only. */
+export function openDownload(what: "installer" | "portable" | "release") {
+  return import("@tauri-apps/api/core").then(({ invoke }) => invoke("open_download", { what }));
+}
 // Dev server (:1420): call the API on whatever host served the page, so a phone opening
 // http://<pc>:1420 reaches the PC's server rather than itself.
 const BASE = isTauri ? "http://127.0.0.1:7878" : location.port === "1420" ? `http://${location.hostname}:7878` : "";

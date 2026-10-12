@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { api, useAppState, useCurrentChallenge, useDriverMap, useFetch, type Driver } from "../api";
+import { useEffect, useState } from "react";
+import { api, isTauri, openDownload, useAppState, useCurrentChallenge, useDriverMap, useFetch, type Driver } from "../api";
 import { Helmet, Sparkle } from "../components/Helmet";
 import { LiveMap } from "../components/LiveMap";
 import { useSeatSwitcher } from "../components/SeatSwitcher";
@@ -159,7 +159,49 @@ export function Home() {
           )}
         </section>
       </div>
+
+      {isTauri && <GetLatest />}
     </>
+  );
+}
+
+/**
+ * Links to the latest installer and portable exe, to set Bin It up on another PC or (for the
+ * portable copy, which can't update itself) to get a new version. Desktop app only.
+ */
+function GetLatest() {
+  const { online } = useAppState();
+  // The portable copy checks for a new version in the background, so ask again once that's done.
+  const [recheck, setRecheck] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => setRecheck(1), 10_000);
+    return () => clearTimeout(t);
+  }, []);
+  const about = useFetch(() => api.about(), [online, recheck]);
+  if (!about) return null;
+  const update = about.update;
+  return (
+    <section className={`get-latest${update ? " has-update" : ""}`} aria-label="Get the latest Bin It">
+      <span className="grow">
+        {update ? (
+          <>
+            <strong>Bin It {update.version} is out.</strong>{" "}
+            <span className="muted">{about.installed ? "It installs next time Bin It starts." : `This copy is ${about.version}.`}</span>
+          </>
+        ) : (
+          <span className="muted">
+            Bin It {about.version}
+            {about.build === "release" && (about.installed ? " · updates itself when it starts" : " · portable copy")}
+          </span>
+        )}
+      </span>
+      <span className="get-latest-links">
+        <span className="muted">Latest:</span>
+        <button className="chip plain" onClick={() => openDownload("installer")}>Installer</button>
+        <button className="chip plain" onClick={() => openDownload("portable")}>Portable exe</button>
+        <button className="chip plain" onClick={() => openDownload("release")}>What's new</button>
+      </span>
+    </section>
   );
 }
 
