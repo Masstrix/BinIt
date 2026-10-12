@@ -2,10 +2,12 @@
 //! pickers can offer things nobody has driven yet.
 //!
 //! Sources, merged by normalised name (never by reading game binaries):
-//!   1. bundled lists in `data/<game>.json`, maintained by us,
+//!   1. the list each game bundles (`tt-games/src/<game>/catalogue.json`), maintained by us,
 //!   2. an optional user file `catalogue/<game>.json` in the app data folder (same format),
-//!   3. names seen in a game's plain-text files (AC EVO `Documents/ACE`),
+//!   3. names seen in a game's plain-text files (`tt-games/src/<game>/documents.rs`),
 //!   4. everything that has actually been driven (the laps table).
+//!
+//! Everything specific to one game lives in that game's module in `tt-games`; this file only merges.
 //!
 //! Names are exactly what the game's telemetry reports; they're what laps and
 //! challenges match on. `aliases` are only for search ("Bathurst" finds Mount Panorama).
@@ -163,12 +165,9 @@ pub fn canonical_car(seeds: &[Seed], name: &str) -> String {
 
 /// The bundled seed for a game (empty if we ship none).
 pub fn bundled(game: &str) -> Seed {
-    let raw = match game {
-        "acevo" => include_str!("../data/acevo.json"),
-        "dr2" => include_str!("../data/dr2.json"),
-        _ => return Seed::default(),
-    };
-    serde_json::from_str(raw).expect("bundled catalogue is valid JSON")
+    tt_games::catalogue::seed_json(game)
+        .map(|raw| serde_json::from_str(raw).expect("bundled catalogue is valid JSON"))
+        .unwrap_or_default()
 }
 
 /// A user-supplied `<dir>/<game>.json`; a missing or broken file is just ignored.
@@ -179,53 +178,7 @@ pub fn custom(dir: &Path, game: &str) -> Seed {
         .unwrap_or_default()
 }
 
-/// Names observed in AC EVO's plain-text files under `Documents/ACE`: session results
-/// and the last loaded event. Layout names there differ from telemetry's, so only
-/// tracks and cars are taken.
-#[derive(Debug, Default)]
-pub struct Observed {
-    pub tracks: Vec<String>,
-    pub cars: Vec<(String, Option<String>)>,
-}
-
-pub fn scan_ace_documents(dir: &Path) -> Observed {
-    let mut out = Observed::default();
-    let read = |p: &Path| std::fs::read_to_string(p).ok().and_then(|r| serde_json::from_str::<serde_json::Value>(&r).ok());
-
-    if let Some(season) = read(&dir.join("last_season.seasondefinition.json")) {
-        collect_track_names(&season, &mut out.tracks);
-    }
-    let Ok(entries) = std::fs::read_dir(dir.join("Results")) else { return out };
-    for path in entries.flatten().map(|e| e.path()) {
-        if !path.to_string_lossy().ends_with(".sessionresults.json") {
-            continue;
-        }
-        let Some(v) = read(&path) else { continue };
-        if let Some(t) = v.get("track").and_then(|t| t.as_str()) {
-            out.tracks.push(t.to_string());
-        }
-        for d in v.get("drivers").and_then(|d| d.as_array()).into_iter().flatten() {
-            if let Some(car) = d.get("car_name").and_then(|c| c.as_str()).filter(|c| !c.is_empty()) {
-                out.cars.push((car.to_string(), d.get("car_brand").and_then(|b| b.as_str()).map(String::from)));
-            }
-        }
-    }
-    out
-}
-
-/// `track_content_data.name` anywhere in a season definition.
-fn collect_track_names(v: &serde_json::Value, out: &mut Vec<String>) {
-    match v {
-        serde_json::Value::Object(m) => {
-            if let Some(name) = m.get("track_content_data").and_then(|t| t.get("name")).and_then(|n| n.as_str()) {
-                out.push(name.to_string());
-            }
-            m.values().for_each(|c| collect_track_names(c, out));
-        }
-        serde_json::Value::Array(a) => a.iter().for_each(|c| collect_track_names(c, out)),
-        _ => {}
-    }
-}
+pub use tt_games::catalogue::Observed;
 
 /// Builds a game's catalogue. `maps` holds `(track, layout)` pairs that have a learned map.
 pub fn build(game: &str, seeds: Vec<Seed>, observed: &Observed, driven: &[Combo], maps: &[(String, String)]) -> Catalogue {
@@ -280,6 +233,9 @@ pub fn build(game: &str, seeds: Vec<Seed>, observed: &Observed, driven: &[Combo]
     for name in &observed.tracks {
         upsert_track(name, true, None, None);
     }
+    for (track, layout) in &observed.track_layouts {
+        upsert_track(track, true, None, Some(layout));
+    }
     for c in driven {
         upsert_track(&c.track, true, None, Some(&c.layout));
     }
@@ -324,7 +280,7 @@ pub fn build(game: &str, seeds: Vec<Seed>, observed: &Observed, driven: &[Combo]
             .filter(|b| lower.starts_with(&b.to_lowercase()))
             .max_by_key(|b| b.len())
             .cloned()
-            .or_else(|| c.name.split_whitespace().next().filter(|w| w.chars().any(char::is_alphabetic)).map(String::from));
+            .or_else(|| brand_guess(&c.name));
     }
 
     for t in &mut tracks {
@@ -337,6 +293,27 @@ pub fn build(game: &str, seeds: Vec<Seed>, observed: &Observed, driven: &[Combo]
     tracks.sort_by_key(|t| t.name.to_lowercase());
     cars.sort_by_key(|c| (c.brand.clone().unwrap_or_default().to_lowercase(), c.name.to_lowercase()));
     Catalogue { game: game.to_string(), tracks, cars }
+}
+
+/// A brand for a car nothing told us the brand of: a folder-style id (`ks_porsche_911_gt3_r_2016`,
+/// `bmw_m3_e30`) gives its first word after any `ks_` prefix; a display name gives its first word.
+fn brand_guess(name: &str) -> Option<String> {
+    let word = if !name.contains(char::is_whitespace) && name.contains('_') {
+        let id = name.strip_prefix("ks_").unwrap_or(name);
+        let first = id.split('_').find(|w| !w.is_empty())?;
+        match first.len() {
+            0..=3 => first.to_uppercase(),
+            _ => first[..1].to_uppercase() + &first[1..],
+        }
+    } else {
+        let first = name.split_whitespace().next()?;
+        // A lone lowercase word is a folder id too ("minimiglia"): capitalise it.
+        match first.chars().next() {
+            Some(c) if c.is_lowercase() && !first.chars().any(char::is_uppercase) => c.to_uppercase().collect::<String>() + &first[c.len_utf8()..],
+            _ => first.to_string(),
+        }
+    };
+    word.chars().any(char::is_alphabetic).then_some(word)
 }
 
 fn add_layout(t: &mut CatTrack, name: &str, seen: bool) {
@@ -436,21 +413,20 @@ mod tests {
     }
 
     #[test]
-    fn scans_ace_documents() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir(dir.path().join("Results")).unwrap();
-        std::fs::write(
-            dir.path().join("Results/a.sessionresults.json"),
-            r#"{"track":"Suzuka","layout":"East Time Attack","drivers":[{"car_name":"Dallara EXP","car_brand":"Dallara"}]}"#,
-        )
-        .unwrap();
-        std::fs::write(
-            dir.path().join("last_season.seasondefinition.json"),
-            r#"{"event_map":{"0":{"session_map":{"0":{"scene":{"track_content_data":{"name":"Brands Hatch"}}}}}}}"#,
-        )
-        .unwrap();
-        let o = scan_ace_documents(dir.path());
-        assert!(o.tracks.contains(&"Suzuka".to_string()) && o.tracks.contains(&"Brands Hatch".to_string()));
-        assert_eq!(o.cars, vec![("Dallara EXP".to_string(), Some("Dallara".to_string()))]);
+    fn folder_style_car_ids_get_a_brand_from_their_first_word() {
+        let driven = [combo("imola", "", "ks_porsche_911_gt3_r_2016"), combo("imola", "", "bmw_m3_e30"), combo("imola", "", "Porsche 992 GT3 R")];
+        let cat = build("ac", vec![], &Observed::default(), &driven, &[]);
+        let brand = |name: &str| cat.cars.iter().find(|c| c.name == name).and_then(|c| c.brand.clone());
+        assert_eq!(brand("ks_porsche_911_gt3_r_2016").as_deref(), Some("Porsche"));
+        assert_eq!(brand("bmw_m3_e30").as_deref(), Some("BMW"));
+        assert_eq!(brand("Porsche 992 GT3 R").as_deref(), Some("Porsche"));
+    }
+
+    #[test]
+    fn observed_layouts_are_confirmed_along_with_their_track() {
+        let observed = Observed { tracks: vec!["ks_nurburgring".into()], track_layouts: vec![("ks_nurburgring".into(), "layout_gp_b".into())], cars: vec![] };
+        let cat = build("ac", vec![], &observed, &[], &[]);
+        let t = &cat.tracks[0];
+        assert!(t.seen && t.layouts.iter().any(|l| l.name == "layout_gp_b" && l.seen));
     }
 }

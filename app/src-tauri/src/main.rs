@@ -9,8 +9,7 @@ use std::sync::Arc;
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
 use tt_core::TimeTrial;
-use tt_games::GameAdapter;
-use tt_games::acevo::AcEvoAdapter;
+use tt_games::{GameId, GameWatcher};
 
 /// A plain error dialog, for failures that happen before there is a window to show anything in.
 #[cfg(windows)]
@@ -69,14 +68,16 @@ Data folder: {}", data_dir.display()));
             };
             // Plain-text sources for the track/car catalogue (never game binaries).
             tt.set_catalogue_paths(tt_core::CataloguePaths {
-                ace_documents: app.path().document_dir().ok().map(|d| d.join("ACE")),
+                documents: app.path().document_dir().ok(),
                 custom: Some(data_dir.join("catalogue")),
             });
             // Laps from before a name was in the catalogue get filed under the catalogue's name.
-            match tt.canonicalize_history("acevo") {
-                Ok(0) => {}
-                Ok(n) => eprintln!("catalogue: relabelled {n} stored names"),
-                Err(e) => eprintln!("catalogue: could not relabel stored names: {e:#}"),
+            for game in GameId::ALL {
+                match tt.canonicalize_history(game.key()) {
+                    Ok(0) => {}
+                    Ok(n) => eprintln!("catalogue: relabelled {n} stored {} names", game.key()),
+                    Err(e) => eprintln!("catalogue: could not relabel stored {} names: {e:#}", game.key()),
+                }
             }
             app.manage(tt.clone());
 
@@ -113,14 +114,14 @@ fn spawn_game_watcher(tt: Arc<TimeTrial>) {
         .name("game-watcher".into())
         .spawn(move || {
             lower_thread_priority();
-            let mut adapter = AcEvoAdapter::new();
+            let mut watcher = GameWatcher::standard();
             loop {
-                for event in adapter.poll() {
+                for event in watcher.poll() {
                     if let Err(e) = tt.handle_game_event(event) {
                         eprintln!("failed to handle game event: {e:#}");
                     }
                 }
-                std::thread::sleep(adapter.poll_interval());
+                std::thread::sleep(watcher.wait());
             }
         })
         .expect("spawn game watcher");

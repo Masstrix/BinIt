@@ -1,12 +1,19 @@
 //! Turns a stream of telemetry samples into completed laps.
 //!
-//! Kept free of any I/O so it can be unit-tested with synthetic samples.
+//! Shared by every circuit game's adapter: each one turns its own telemetry into [`Sample`]s and this
+//! decides what counts as a lap. Kept free of any I/O so it can be unit-tested with synthetic samples.
 
-use super::layout::{STATUS_LIVE, STATUS_PAUSE};
 use crate::UntimedReason;
 use crate::timing::{ProfileRecorder, TimingProfile};
 
-/// The handful of values lap detection needs, copied out of the graphics page.
+/// Values of [`Sample::status`]. Both Assetto Corsa games number their session state this way, so a game
+/// whose own numbering differs maps it onto these when it builds a [`Sample`].
+pub const STATUS_OFF: i32 = 0;
+pub const STATUS_REPLAY: i32 = 1;
+pub const STATUS_LIVE: i32 = 2;
+pub const STATUS_PAUSE: i32 = 3;
+
+/// The handful of values lap detection needs, copied out of a game's telemetry.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Sample {
     pub status: i32,
@@ -244,7 +251,6 @@ impl LapTracker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::acevo::layout::STATUS_REPLAY;
 
     fn live(lap_count: i32, last: i32, current: i32, valid: bool) -> Sample {
         Sample { status: STATUS_LIVE, lap_count, last_lap_ms: last, current_lap_ms: current, lap_valid: valid, in_pit_lane: false, progress: 0.0, inputs: None }

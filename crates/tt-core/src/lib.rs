@@ -143,8 +143,9 @@ struct Runtime {
 /// Where the catalogue looks for extra names. Set by the host app.
 #[derive(Default, Clone)]
 pub struct CataloguePaths {
-    /// AC EVO's `Documents/ACE` folder (plain-text session results and event files).
-    pub ace_documents: Option<PathBuf>,
+    /// The user's Documents folder. Each game's scanner (`tt_games::catalogue::observe`) looks in its own
+    /// subfolder for the plain-text files that game writes.
+    pub documents: Option<PathBuf>,
     /// Folder of user-supplied `<game>.json` lists.
     pub custom: Option<PathBuf>,
 }
@@ -493,9 +494,9 @@ impl TimeTrial {
         if let Some(dir) = &paths.custom {
             seeds.push(catalogue::custom(dir, game));
         }
-        let observed = match (&paths.ace_documents, game) {
-            (Some(dir), "acevo") => catalogue::scan_ace_documents(dir),
-            _ => catalogue::Observed::default(),
+        let observed = match &paths.documents {
+            Some(dir) => tt_games::catalogue::observe(game, dir),
+            None => catalogue::Observed::default(),
         };
         let store = self.store();
         let driven = store.combos(Some(game))?;

@@ -4,14 +4,17 @@
 //! (per-frame HUD data) and `static` (per-session) pages are used; the 333 Hz physics
 //! page is never opened. Polling at 20 Hz copies ~8 KB per tick: microseconds of work.
 
+pub mod documents;
 pub mod layout;
-mod tracker;
 
 use std::time::{Duration, Instant};
 
 use crate::{CompletedLap, GameAdapter, GameEvent, GameId, LiveState, SessionInfo, TimingKind};
 use layout::{Graphics, Static, c_str};
-pub use tracker::{DetectedLap, LapTracker, Sample};
+pub use crate::tracker::{DetectedLap, LapTracker, Sample};
+
+/// The bundled list of cars and tracks, in the names the game reports.
+pub const CATALOGUE_JSON: &str = include_str!("catalogue.json");
 
 pub const PROCESS_NAME: &str = "AssettoCorsaEVO.exe";
 pub const GRAPHICS_PAGE: &str = "Local\\acevo_pmf_graphics";
