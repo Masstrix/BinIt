@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { api, useAppState, useDriverMap, useTrackMaps } from "../api";
 import { findMap } from "../catalogueItems";
 import { carName, lapTime, trackName } from "../format";
@@ -21,6 +22,29 @@ const SECTOR_COLOURS: Record<SectorStatus, string> = {
 
 const deltaText = (ms: number) => `${ms <= 0 ? "-" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
 
+const LEARN_BINS = 240;
+
+/**
+ * The path driven so far, for drawing a map while it is being learned: one point per slice of progress, kept
+ * in driving order, started over when a new lap or a restart begins. Only while there is no stored map.
+ */
+function useLearningPath(key: string | null, active: boolean, rally: boolean, progress: number, clockMs: number, position: [number, number] | null) {
+  const state = useRef<{ key: string | null; bins: ([number, number] | undefined)[]; last: number; clock: number }>({ key: null, bins: [], last: 0, clock: 0 });
+  const s = state.current;
+  if (s.key !== key || !active || progress + 0.3 < s.last || (rally && clockMs + 1000 < s.clock)) {
+    s.key = key;
+    s.bins = new Array(LEARN_BINS);
+    s.last = 0;
+    s.clock = 0;
+  }
+  if (active && position && progress >= 0 && progress < 1 && (!rally || clockMs > 0)) {
+    s.bins[Math.floor(progress * LEARN_BINS)] = position;
+  }
+  s.last = progress;
+  s.clock = clockMs;
+  return s.bins.filter((p): p is [number, number] => !!p);
+}
+
 export function LiveMap() {
   const { status } = useAppState();
   const drivers = useDriverMap();
@@ -28,9 +52,10 @@ export function LiveMap() {
   const live = status?.live ?? null;
   const w = words(session?.game);
   const maps = useTrackMaps(session?.game ?? null);
+  const map = session ? findMap(maps, session.track, session.layout) : undefined;
+  const learned = useLearningPath(session ? `${session.game}|${session.track}|${session.layout}|${session.car}` : null, !!live?.driving && !map, w.rally, live?.lapProgress ?? 0, live?.currentLapMs ?? 0, live?.position ?? null);
   if (!session || !live?.driving) return null;
 
-  const map = findMap(maps, session.track, session.layout);
   const setView = (patch: { rotate?: number; mirror?: boolean }) =>
     map && api.setMapView({ game: map.game, track: map.track, layout: map.layout, rotate: map.rotate, mirror: map.mirror, ...patch });
   // Sector colours follow the live timing: purple = fastest anyone, green = this driver's best, yellow = slower.
@@ -57,8 +82,13 @@ export function LiveMap() {
           <TrackMap points={map.points} position={live.position} rotate={map.rotate} mirror={map.mirror} closed={map.closed} stroke={5}
             sectors={session.boundaries.length > 2 ? { boundaries: session.boundaries, colors: sectorColours, active: timing?.currentSector } : undefined} label={`${trackName(session.track, session.layout)} live map`} />
         ) : (
-          <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 10, width: "min(320px, 100%)" }}>
-            <span className="muted">Learning this {w.track}. Finish one clean {w.lap} and its map appears here.</span>
+          <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 10, width: "min(320px, 100%)", height: "100%" }}>
+            {learned.length > 8 && (
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <TrackMap points={learned} position={live.position} closed={false} stroke={5} label={`${trackName(session.track, session.layout)} map being drawn`} />
+              </div>
+            )}
+            <span className="muted">Learning this {w.track}. Finish one clean {w.lap} and its map is kept.</span>
             <div style={{ height: 10, borderRadius: 5, background: "var(--panel-3)", overflow: "hidden" }}>
               <div style={{ width: `${Math.round(live.lapProgress * 100)}%`, height: "100%", background: "var(--violet)" }} />
             </div>
