@@ -10,7 +10,7 @@ import { DateTimePicker } from "../components/DateTimePicker";
 import { Modal } from "../components/Modal";
 import { Picker } from "../components/Picker";
 import { Podium } from "../components/Podium";
-import { ago, bestSectors, carName, countdown, gameName, gap, gridMinWidth, lapTime, ordinal, SECTOR_MINT, SECTOR_PURPLE, sectorColor, trackName, whenLabel } from "../format";
+import { ago, bestSectors, carName, countdown, gameName, gap, gridMinWidth, lapTime, ordinal, SECTOR_MINT, SECTOR_PURPLE, sectorColor, SUPPORTED_GAMES, trackName, whenLabel } from "../format";
 
 type EndPreset = "lunch" | "five" | "friday" | "custom" | "never";
 
@@ -285,10 +285,10 @@ function PastChallenge({ challenge: c, selected }: { challenge: Challenge; selec
     <a className="list-row link-row" href={`#/challenges/${c.id}`} aria-current={selected ? "page" : undefined} style={{ justifyContent: "space-between" }}>
       <span>
         <TrophyBadge small />
-        {c.name} <span className="muted" style={{ fontSize: 13 }}>· {trackName(c.track, c.layout)}</span>
+        {c.name} <span className="muted" style={{ fontSize: 13 }}>· {gameName(c.game)} · {trackName(c.track, c.layout)}</span>
       </span>
       <span className="muted">
-        {winner ? `Won by ${winner.driverId != null ? drivers.get(winner.driverId)?.name : "a guest"} · ${lapTime(winner.timeMs)}` : "No laps"}
+        {winner ? `Won by ${winner.driverId != null ? drivers.get(winner.driverId)?.name : "a guest"} · ${lapTime(winner.timeMs)}` : `No ${words(c.game).laps}`}
       </span>
     </a>
   );
@@ -306,11 +306,19 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
   const combos = useFetch(() => api.combos(), []) ?? [];
   const session = status?.session ?? null;
 
-  // Games to pick from: what's being driven, anything with laps, and AC EVO (the supported one).
-  const games = useMemo(() => [...new Set([session?.game, ...combos.map((c) => c.game), "acevo"].filter((g): g is string => !!g))], [combos, session]);
-  const [game, setGame] = useState(session?.game ?? "acevo");
-  const catalogue = useCatalogue(game);
-  const maps = useTrackMaps(game);
+  // Games to pick from: every supported game, plus anything with laps or being driven (a game whose
+  // adapter isn't finished can still have data).
+  const games = useMemo(
+    () => [...new Set([...SUPPORTED_GAMES, ...combos.map((c) => c.game), session?.game].filter((g): g is string => !!g))],
+    [combos, session],
+  );
+  const [game, setGame] = useState(session?.game ?? SUPPORTED_GAMES[0]);
+  // Right after switching game the previous game's catalogue is still held until the new one loads: ignore it,
+  // so the track can't be picked from the wrong game.
+  const fetchedCatalogue = useCatalogue(game);
+  const catalogue = fetchedCatalogue?.game === game ? fetchedCatalogue : null;
+  const fetchedMaps = useTrackMaps(game);
+  const maps = useMemo(() => fetchedMaps.filter((m) => m.game === game), [fetchedMaps, game]);
   const trackPickItems = useMemo(() => trackItems(catalogue, maps), [catalogue, maps]);
   const carPickItems = useMemo(() => carItems(catalogue), [catalogue]);
 
@@ -363,10 +371,30 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
     }
   };
 
-  if (catalogue && trackPickItems.length === 0) {
+  const noTracks = catalogue !== null && trackPickItems.length === 0;
+  const gamePicker = (
+    <Dropdown
+      label="Game"
+      value={game}
+      options={games.map((g) => ({ value: g, label: gameName(g) }))}
+      onChange={(g) => {
+        setGame(g);
+        setTrack("");
+        setCar("");
+      }}
+    />
+  );
+
+  if (noTracks) {
     return (
-      <div className="modal-body">
-        <div className="empty">Bin It doesn't know any {words(game).tracks} for this game yet. {words(game).rally ? "Drive a stage" : "Get on track"} for a moment and it will learn {words(game).rally ? "it" : "them"}.</div>
+      <div className="modal-form">
+        <div className="modal-body">
+          {gamePicker}
+          <div className="empty">Bin It doesn't know any {words(game).tracks} for {gameName(game)} yet. {words(game).rally ? "Drive a stage" : "Get on track"} for a moment and it will learn {words(game).rally ? "it" : "them"}.</div>
+        </div>
+        <div className="modal-foot">
+          <button type="button" className="btn ghost" onClick={onCancel}>Cancel</button>
+        </div>
       </div>
     );
   }
@@ -385,20 +413,7 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
           <input className="input" autoFocus={!window.matchMedia("(pointer: coarse)").matches} value={name} onChange={(e) => setName(e.target.value)} placeholder={selected ? `${trackName(selected.track)} Hot Lap` : ""} style={{ fontSize: 20, fontWeight: 700, minHeight: 56 }} />
         </label>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-          {games.length > 1 && (
-            <div style={{ flex: "1 1 100%", minWidth: 0 }}>
-              <Dropdown
-                label="Game"
-                value={game}
-                options={games.map((g) => ({ value: g, label: gameName(g) }))}
-                onChange={(g) => {
-                  setGame(g);
-                  setTrack("");
-                  setCar("");
-                }}
-              />
-            </div>
-          )}
+          <div style={{ flex: "1 1 100%", minWidth: 0 }}>{gamePicker}</div>
           <div style={{ flex: "1 1 220px", minWidth: 0 }}>
             <Picker
               label={cap(words(game).track)}

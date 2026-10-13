@@ -71,10 +71,19 @@ export const LAP_BADGE: Record<Exclude<LapKind, "timed">, { text: string; classN
   driverChange: { text: "DRIVER CHANGE", className: "chip plain", title: "The driver changed during this lap, so it was not timed for anyone" },
 };
 
-const GAME_NAMES: Record<string, string> = { acevo: "AC EVO", ac: "Assetto Corsa", dr2: "DiRT Rally 2.0", acr: "Assetto Corsa Rally" };
+/** Every game Bin It knows, by key. `ready`: it has an adapter, so laps can be recorded for it. */
+export const GAMES = [
+  { key: "acevo", name: "AC EVO", detail: "Laps · shared memory", ready: true },
+  { key: "ac", name: "Assetto Corsa", detail: "Laps · shared memory", ready: true },
+  { key: "dr2", name: "DiRT Rally 2.0", detail: "Stages · UDP telemetry", ready: false },
+  { key: "acr", name: "Assetto Corsa Rally", detail: "Stages · shared memory", ready: true },
+];
+
+/** Keys of the games Bin It can record, in display order. */
+export const SUPPORTED_GAMES = GAMES.filter((g) => g.ready).map((g) => g.key);
 
 export function gameName(key: string): string {
-  return GAME_NAMES[key] ?? key;
+  return GAMES.find((g) => g.key === key)?.name ?? key;
 }
 
 export function ordinal(n: number): string {
