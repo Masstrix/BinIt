@@ -786,6 +786,7 @@ h2 { font-size: 22px; }
   font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em; line-height: 1;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); vertical-align: middle; margin-right: 6px;
 }
+img.game-icon { object-fit: cover; display: inline-block; }
 .game-label .game-icon, .dropdown .game-icon, .game-tile .game-icon, .th-game .game-icon { margin-right: 0; }
 .th-game { display: flex; align-items: center; gap: 8px; }
 .game-label { display: inline-flex; align-items: center; gap: 8px; min-width: 0; vertical-align: middle; }
