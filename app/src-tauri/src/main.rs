@@ -7,6 +7,7 @@ mod server;
 mod updater;
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut, ShortcutState};
@@ -128,6 +129,9 @@ Data folder: {}", data_dir.display()));
         .expect("error while running Bin It");
 }
 
+/// A watcher pass slower than this is logged (adapters poll every 50 ms while a game is connected).
+const SLOW_POLL: Duration = Duration::from_millis(100);
+
 /// Polls the game adapters on one low-priority background thread.
 fn spawn_game_watcher(tt: Arc<BinIt>) {
     std::thread::Builder::new()
@@ -135,13 +139,23 @@ fn spawn_game_watcher(tt: Arc<BinIt>) {
         .spawn(move || {
             lower_thread_priority();
             let mut watcher = GameWatcher::standard();
+            let mut next = Instant::now();
             loop {
+                let started = Instant::now();
                 for event in watcher.poll() {
                     if let Err(e) = tt.handle_game_event(event) {
                         eprintln!("failed to handle game event: {e:#}");
                     }
                 }
-                std::thread::sleep(watcher.wait());
+                // Lap traces are sampled here: a slow pass shows up as a hole in every trace.
+                let busy = started.elapsed();
+                if busy > SLOW_POLL {
+                    eprintln!("game watcher: one poll took {} ms", busy.as_millis());
+                }
+                // Keep to a steady schedule (the work doesn't push the next poll back), and after falling
+                // behind start afresh rather than polling back to back to catch up.
+                next = (next + watcher.wait()).max(Instant::now());
+                std::thread::sleep(next.saturating_duration_since(Instant::now()));
             }
         })
         .expect("spawn game watcher");
