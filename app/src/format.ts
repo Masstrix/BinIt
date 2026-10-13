@@ -73,7 +73,7 @@ export const LAP_BADGE: Record<Exclude<LapKind, "timed">, { text: string; classN
 
 /**
  * Every game Bin It knows, by key. `ready`: it has an adapter, so laps can be recorded for it.
- * `mark`, `color` and `ink` draw its badge (`GameIcon`): the mark's text on the colour.
+ * `mark`, `color` and `ink` draw its fallback badge (`GameIcon`) when it has no app icon.
  */
 export const GAMES = [
   { key: "acevo", name: "AC EVO", detail: "Laps · shared memory", ready: true, mark: "EVO", color: "#E5484D", ink: "#FFFFFF" },
