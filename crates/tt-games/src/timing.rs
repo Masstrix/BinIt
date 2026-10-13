@@ -65,6 +65,13 @@ const MIN_END: f32 = 0.9;
 const MAX_GAP: f32 = 0.12;
 /// Elapsed time dropping by more than this near the line means the lap clock restarted.
 const CLOCK_RESTART_MS: u32 = 1_000;
+/// A sample whose clock is this far from where its neighbours put it is out of step (see `drop_out_of_step`)...
+const OUT_OF_STEP_MS: f32 = 40.0;
+/// ...and whose position is this far off too (0.4 m on a 4 km lap), so a car crawling along isn't thinned out.
+const OUT_OF_STEP_PROGRESS: f32 = 0.0001;
+/// Only judge a sample when its neighbours are this close in time: across a longer gap (a car stopped
+/// and moving off again) the pace really does change, and nothing is wrong with the sample.
+const OUT_OF_STEP_SPAN_MS: u32 = 500;
 
 impl ProfileRecorder {
     pub fn reset(&mut self) {
@@ -101,10 +108,33 @@ impl ProfileRecorder {
                     return;
                 }
                 if progress > last_p && progress - last_p <= MAX_STEP && elapsed_ms >= last_t {
+                    self.drop_out_of_step(progress, elapsed_ms);
                     self.samples.push((progress, elapsed_ms));
                     self.inputs.push(inputs);
                 }
             }
+        }
+    }
+
+    /// Drops the latest sample if its clock and position don't belong together, judged against the
+    /// sample before it and the one arriving now.
+    ///
+    /// AC EVO sometimes hitches for ~200 ms (seen every ~5 s on some sessions): when it resumes, one
+    /// packet can carry the new position with the lap clock from before the hitch, so the car seems to
+    /// cover 11 m in 13 ms and then crawl. Both values come from the same copy of the page, so the only
+    /// cure is to notice the sample doesn't fit and leave it out.
+    fn drop_out_of_step(&mut self, progress: f32, elapsed_ms: u32) {
+        let [.., (p0, t0), (p1, t1)] = self.samples[..] else { return };
+        let span = elapsed_ms - t0;
+        if span == 0 || span > OUT_OF_STEP_SPAN_MS || progress <= p0 {
+            return;
+        }
+        // Where the line from the sample before to this one puts the latest sample, in time and in distance.
+        let expected_ms = t0 as f32 + span as f32 * (p1 - p0) / (progress - p0);
+        let expected_progress = p0 + (progress - p0) * (t1 - t0) as f32 / span as f32;
+        if (t1 as f32 - expected_ms).abs() > OUT_OF_STEP_MS && (p1 - expected_progress).abs() > OUT_OF_STEP_PROGRESS {
+            self.samples.pop();
+            self.inputs.pop();
         }
     }
 
@@ -388,6 +418,38 @@ mod tests {
             r.push_with(0.02 + i as f32 * 0.0049, 600_000 + i * 450, input);
         }
         assert_eq!(r.samples.len(), 201);
+    }
+
+    #[test]
+    fn a_sample_whose_clock_lags_its_position_is_left_out() {
+        // Suzuka lap 31 at 255 km/h: the 7 753 ms sample is ~150 ms further on than its clock says
+        // (the game hitched and resumed with the old lap time), then nothing for 200 ms.
+        let real = [(0.2161, 7655), (0.2174, 7697), (0.2188, 7740), (0.2238, 7753), (0.2257, 7955), (0.2274, 8008), (0.2290, 8058)];
+        let mut r = ProfileRecorder::default();
+        r.push(0.0, 0);
+        for i in 1..150u32 {
+            r.push(0.2161 * i as f32 / 150.0, 7655 * i / 150);
+        }
+        for (p, t) in real {
+            r.push(p, t);
+        }
+        let kept: Vec<u32> = r.samples.iter().map(|s| s.1).filter(|&t| t >= 7655).collect();
+        assert_eq!(kept, [7655, 7697, 7740, 7955, 8008, 8058]);
+
+        // Ordinary driving, braking hard and a long stop keep every sample.
+        let mut r = ProfileRecorder::default();
+        let mut p = 0.0f32;
+        let mut t = 0u32;
+        for i in 0..400u32 {
+            // Progress per ms: steady, then braking almost to a standstill, parked 8 s, and off again.
+            let speed = if i < 200 { 0.00004 } else { (0.00004 - (i - 200) as f32 * 0.0000002).max(0.000001) };
+            let dt = [43, 57, 50, 46, 61][i as usize % 5];
+            p += speed * dt as f32;
+            t += dt + if i == 300 { 8_000 } else { 0 };
+            r.push(p, t);
+        }
+        assert!(p < 1.0);
+        assert_eq!(r.samples.len(), 400);
     }
 
     #[test]
