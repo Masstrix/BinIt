@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, useAppState, useFetch } from "../api";
 import { OverlayEditor } from "../components/OverlayEditor";
 import { QrCode } from "../components/QrCode";
+import { GameIcon } from "../components/GameIcon";
 import { GAMES } from "../format";
 
 /** Which games Bin It can follow, and which one is running right now. */
@@ -14,6 +15,7 @@ function SupportedGames({ running }: { running: string | null }) {
           const on = running === g.key;
           return (
             <div key={g.key} className="game-tile" data-running={on || undefined} data-soon={!g.ready || undefined}>
+              <GameIcon game={g.key} size={30} />
               <span className="game-tile-name">{g.name}</span>
               <span className={`chip ${on ? "" : "plain"}`} style={on ? { background: "rgba(13,18,36,0.3)" } : undefined}>
                 {on && <span className="dot on" style={{ width: 8, height: 8 }} />}

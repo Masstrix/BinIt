@@ -12,6 +12,7 @@ import {
   type Anchor,
   type WidgetId,
 } from "../overlayLayout";
+import { GameLabel } from "./GameIcon";
 import { OverlayFocusToggle, OverlayShowPicker, OverlayToggle } from "./OverlayToggle";
 import {
   LeaderboardCard,
@@ -277,7 +278,7 @@ export function OverlayEditor() {
         <div className="segmented" role="group" aria-label="Game" style={{ flexWrap: "wrap" }}>
           {GAME_PROFILES.map((p) => (
             <button key={p.key} aria-pressed={game === p.key} onClick={() => setGame(p.key)}>
-              {p.name}
+              <GameLabel game={p.key} size={20} />
             </button>
           ))}
         </div>

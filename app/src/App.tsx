@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, isTauri, useAppState, useFetch } from "./api";
+import { GameIcon } from "./components/GameIcon";
 import { Logo } from "./components/Helmet";
 import { readStored, writeStored } from "./persist";
 import { OverlayToggle } from "./components/OverlayToggle";
@@ -86,6 +87,7 @@ function Sidebar({ path }: { path: string }) {
       </a>
       <div className="game-pill" title={!online ? "Can't reach the Bin It service" : status?.connected ? `${status.gameName} is running` : "No game running"}>
         <span className={`dot${status?.connected ? " on" : ""}`} />
+        {online && status?.connected && status.game && <GameIcon game={status.game} size={22} />}
         <span className="game-name" style={{ flex: 1 }}>{!online ? "Offline" : status?.connected ? status.gameName : "No game running"}</span>
         {status?.connected && <span className="live" style={{ fontSize: 12, color: "var(--mint)" }}>live</span>}
       </div>

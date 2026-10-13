@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { api, useAppState, useCatalogue, useDriverMap, useFetch, useTrackMaps, type Combo } from "../api";
 import { CarBadge, carItems, drivenTrackItems, findMap, TrackThumb } from "../catalogueItems";
 import { Dropdown } from "../components/Dropdown";
+import { GameIcon, GameLabel } from "../components/GameIcon";
 import { Picker } from "../components/Picker";
 import { Helmet } from "../components/Helmet";
 import { TrackHero } from "../components/TrackHero";
@@ -162,9 +163,9 @@ export function LeaderboardPage() {
         <>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
             {games.length > 1 ? (
-              <Dropdown variant="pill" label="Game" value={selected?.game ?? games[0]} options={games.map((g) => ({ value: g, label: gameName(g) }))} onChange={chooseGame} />
+              <Dropdown variant="pill" label="Game" value={selected?.game ?? games[0]} options={games.map((g) => ({ value: g, label: gameName(g), icon: <GameIcon game={g} size={20} /> }))} onChange={chooseGame} />
             ) : (
-              selected && <span className="filter-pill on">{gameName(selected.game)}</span>
+              selected && <span className="filter-pill on"><GameLabel game={selected.game} size={20} /></span>
             )}
             <Picker
               variant="pill"

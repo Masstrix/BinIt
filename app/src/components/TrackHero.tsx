@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { api, useFetch, type Catalogue, type TrackMapData } from "../api";
 import { countryName, findMap, TrackThumb } from "../catalogueItems";
 import { fold } from "./Picker";
+import { GameIcon } from "./GameIcon";
 import { TrackMap } from "./TrackMap";
 import { carName, gameName, lapTime, prettify, SECTOR_PURPLE } from "../format";
 
@@ -55,7 +56,10 @@ export function TrackHero({
   return (
     <section className="card track-hero" aria-label={`Selected ${w.track}`}>
       <div className="th-info">
-        <div className="label">{[gameName(game), country].filter(Boolean).join(" · ")}</div>
+        <div className="label th-game">
+          <GameIcon game={game} size={18} />
+          {[gameName(game), country].filter(Boolean).join(" · ")}
+        </div>
         <h2 className="th-name">{prettify(track)}</h2>
         <div className="th-layout">{layout ? prettify(layout) : "Default layout"}</div>
         <div className="th-chips">

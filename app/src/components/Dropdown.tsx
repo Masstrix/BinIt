@@ -1,9 +1,11 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 export interface DropdownOption<T extends string> {
   value: T;
   label: string;
   hint?: string;
+  /** Drawn before the label, in the menu and on the button (a game's badge, for example). */
+  icon?: ReactNode;
 }
 
 /**
@@ -84,7 +86,10 @@ export function Dropdown<T extends string>({
         onClick={() => (open ? setOpen(false) : openMenu())}
         onKeyDown={onKeyDown}
       >
-        <span className="dropdown-value">{selected?.label ?? "Choose…"}</span>
+        <span className="dropdown-value">
+          {selected?.icon}
+          <span className="dropdown-value-text">{selected?.label ?? "Choose…"}</span>
+        </span>
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true" style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform .15s", flex: "none" }}>
           <path d="M6 9l6 6 6-6" />
         </svg>
@@ -101,9 +106,12 @@ export function Dropdown<T extends string>({
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => choose(o.value)}
             >
-              <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                <span className="dropdown-option">{o.label}</span>
-                {o.hint && <span className="muted" style={{ fontSize: 12 }}>{o.hint}</span>}
+              <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                {o.icon}
+                <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                  <span className="dropdown-option">{o.label}</span>
+                  {o.hint && <span className="muted" style={{ fontSize: 12 }}>{o.hint}</span>}
+                </span>
               </span>
               {o.value === value && (
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--peri-1)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flex: "none" }}>

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { api, challengeMatches, isActive, useAppState, useCatalogue, useDriverMap, useFetch, useTrackMaps, type Challenge, type Prize } from "../api";
 import { carItems, findMap, splitTrackValue, TrackThumb, trackItems } from "../catalogueItems";
 import { ChallengeReplay } from "../components/ChallengeReplay";
+import { GameIcon, GameLabel } from "../components/GameIcon";
 import { Helmet } from "../components/Helmet";
 import { useCompactTable } from "../useCompactTable";
 import { Dropdown } from "../components/Dropdown";
@@ -103,7 +104,7 @@ export function ChallengesPage({ path }: { path: string }) {
         <nav className="ch-picker" aria-label="Running challenges">
           {running.map((c) => (
             <a key={c.id} href={`#/challenges/${c.id}`} className="ch-tab" aria-current={shown?.id === c.id ? "page" : undefined}>
-              <span className="ch-tab-name"><TrophyBadge small />{c.name}</span>
+              <span className="ch-tab-name"><TrophyBadge small /><GameIcon game={c.game} size={18} />{c.name}</span>
               <span className="ch-tab-meta">
                 {trackName(c.track, c.layout)}
                 {c.endsAt ? ` · ${countdown(c.endsAt)}` : ""}
@@ -169,7 +170,7 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
             <h2 className="ch-name">{c.name}</h2>
           </div>
           <div className="ch-rules">
-            <span className="chip plain">{gameName(c.game)}</span>
+            <span className="chip plain"><GameLabel game={c.game} size={18} /></span>
             <span className="chip plain">{trackName(c.track, c.layout)}</span>
             <span className="chip plain">{c.car ? carName(c.car) : "Any car"}</span>
             {c.validOnly && <span className="chip plain">Valid {words(c.game).laps} only</span>}
@@ -285,7 +286,7 @@ function PastChallenge({ challenge: c, selected }: { challenge: Challenge; selec
     <a className="list-row link-row" href={`#/challenges/${c.id}`} aria-current={selected ? "page" : undefined} style={{ justifyContent: "space-between" }}>
       <span>
         <TrophyBadge small />
-        {c.name} <span className="muted" style={{ fontSize: 13 }}>· {gameName(c.game)} · {trackName(c.track, c.layout)}</span>
+        <GameIcon game={c.game} size={18} /> {c.name} <span className="muted" style={{ fontSize: 13 }}>· {gameName(c.game)} · {trackName(c.track, c.layout)}</span>
       </span>
       <span className="muted">
         {winner ? `Won by ${winner.driverId != null ? drivers.get(winner.driverId)?.name : "a guest"} · ${lapTime(winner.timeMs)}` : `No ${words(c.game).laps}`}
@@ -376,7 +377,7 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
     <Dropdown
       label="Game"
       value={game}
-      options={games.map((g) => ({ value: g, label: gameName(g) }))}
+      options={games.map((g) => ({ value: g, label: gameName(g), icon: <GameIcon game={g} size={26} /> }))}
       onChange={(g) => {
         setGame(g);
         setTrack("");

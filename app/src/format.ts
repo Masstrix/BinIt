@@ -71,12 +71,15 @@ export const LAP_BADGE: Record<Exclude<LapKind, "timed">, { text: string; classN
   driverChange: { text: "DRIVER CHANGE", className: "chip plain", title: "The driver changed during this lap, so it was not timed for anyone" },
 };
 
-/** Every game Bin It knows, by key. `ready`: it has an adapter, so laps can be recorded for it. */
+/**
+ * Every game Bin It knows, by key. `ready`: it has an adapter, so laps can be recorded for it.
+ * `mark`, `color` and `ink` draw its badge (`GameIcon`): the mark's text on the colour.
+ */
 export const GAMES = [
-  { key: "acevo", name: "AC EVO", detail: "Laps · shared memory", ready: true },
-  { key: "ac", name: "Assetto Corsa", detail: "Laps · shared memory", ready: true },
-  { key: "dr2", name: "DiRT Rally 2.0", detail: "Stages · UDP telemetry", ready: false },
-  { key: "acr", name: "Assetto Corsa Rally", detail: "Stages · shared memory", ready: true },
+  { key: "acevo", name: "AC EVO", detail: "Laps · shared memory", ready: true, mark: "EVO", color: "#E5484D", ink: "#FFFFFF" },
+  { key: "ac", name: "Assetto Corsa", detail: "Laps · shared memory", ready: true, mark: "AC", color: "#3E7BFA", ink: "#FFFFFF" },
+  { key: "dr2", name: "DiRT Rally 2.0", detail: "Stages · UDP telemetry", ready: false, mark: "DR2", color: "#2FBF8F", ink: "#0D1224" },
+  { key: "acr", name: "Assetto Corsa Rally", detail: "Stages · shared memory", ready: true, mark: "ACR", color: "#F5A524", ink: "#0D1224" },
 ];
 
 /** Keys of the games Bin It can record, in display order. */
