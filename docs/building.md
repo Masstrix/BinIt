@@ -7,8 +7,11 @@ Working on the code day to day (rebuilding, previewing, checking on a phone)? Se
 ```
 cd app
 npm install          # once
-npm run tauri dev    # desktop app with hot reload (UI on :1420, Bin It server on :7878)
+npm start            # desktop app with hot reload (UI on :1420, Bin It server on :7878); same as npm run tauri dev
 ```
+
+`npm run dev` starts only the UI (Vite, the `beforeDevCommand` that `tauri dev` runs itself), without the
+desktop app or its server.
 
 Tests: `cargo test --workspace` and, in `app/`, `npx tsc --noEmit`.
 

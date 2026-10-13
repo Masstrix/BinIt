@@ -20,7 +20,7 @@ app/src             the React UI (Vite, port 1420 in development)
 
 ## Who runs what
 
-**The owner runs the dev app** (`cd app; npm run tauri dev`) and keeps it open; its output goes to
+**The owner runs the dev app** (`cd app; npm start`, which is `tauri dev`) and keeps it open; its output goes to
 `dumps/tauri-dev.log`. You normally just edit files. Do not start a second dev server, and do not
 kill theirs. If `http://127.0.0.1:7878/api/status` doesn't answer, say so and ask rather than
 starting your own. The app also allows only one instance at a time.
