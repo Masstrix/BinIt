@@ -426,17 +426,30 @@ h2 { font-size: 22px; }
   .overlay-toggle.compact .overlay-toggle-label { display: none; }
 }
 
-/* Phones (office network page): top bar + normal page scrolling. */
+/* "This is me" bar (MeBar): phones only, shown by the rule below. */
+.me-bar { display: none; }
+.me-who { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
+.me-text { display: flex; flex-direction: column; min-width: 0; }
+.me-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.me-sub { font-size: 12px; color: var(--muted); }
+.me-go { flex: none; min-height: 40px; padding: 0 16px; }
+.me-driving { display: flex; align-items: center; gap: 8px; flex: none; padding: 0 8px; color: var(--mint); font-weight: 700; font-size: 14px; }
+
+/* Phones (office network page): a tab bar along the bottom, in thumb reach, + normal page scrolling. */
 @media (max-width: 640px) {
   .shell { display: block; height: auto; padding: 0; }
   .sidebar {
-    position: sticky; top: 0; z-index: 10; margin: 0; border-radius: 0; border-width: 0 0 1px;
-    flex-direction: row; align-items: center; padding: 10px 12px; gap: 10px; overflow-x: auto; overflow-y: hidden;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; margin: 0; border-radius: 0; border-width: 1px 0 0;
+    flex-direction: row; align-items: center; gap: 6px; overflow-x: auto; overflow-y: hidden;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
   }
-  .sidebar .game-pill, .sidebar .overlay-toggle { display: none; }
-  .nav { flex-direction: row; gap: 2px; }
+  .sidebar .brand, .sidebar .game-pill, .sidebar .overlay-toggle { display: none; }
+  .sidebar { flex-wrap: wrap; row-gap: 8px; }
+  .me-bar { display: flex; order: -1; width: 100%; align-items: center; gap: 10px; padding: 2px 4px 8px; border-bottom: 1px solid var(--line); }
+  .nav { flex: 1; flex-direction: row; justify-content: space-around; gap: 2px; }
   .nav a { width: 44px; min-height: 44px; }
-  .content { overflow: visible; padding: 16px; gap: 16px; }
+  .content { overflow: visible; padding: 16px 16px calc(80px + env(safe-area-inset-bottom)); gap: 16px; }
+  .shell:has(.me-bar) .content { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
   .card, .hero { padding: 18px; border-radius: 22px; }
   /* Driving-now card: helmet, name and a small switch button on one row. */
   .hero, .card.hero { padding: 14px; gap: 12px; }

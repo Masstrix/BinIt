@@ -5,6 +5,7 @@ import { Logo } from "./components/Helmet";
 import { readStored, writeStored } from "./persist";
 import { OverlayToggle } from "./components/OverlayToggle";
 import { UpdateButton } from "./components/Update";
+import { MeBar } from "./components/MeBar";
 import { Home } from "./pages/Home";
 import { ConnectionGate } from "./components/ConnectionGate";
 import { LeaderboardPage } from "./pages/Leaderboard";
@@ -93,6 +94,7 @@ function Sidebar({ path }: { path: string }) {
       </div>
       <OverlayToggle compact />
       <UpdateButton />
+      {!isTauri && <MeBar />}
       <nav className="nav" aria-label="Main">
         {ROUTES.map((r) => {
           const current = r.path === "/" ? path === "/" : path.startsWith(r.path);
