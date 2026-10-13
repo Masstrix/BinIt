@@ -116,8 +116,12 @@ function PickerBody({ items, value, tagLabel, onPick }: { items: PickerItem[]; v
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Type-to-search straight away with a keyboard. Not on touch screens: focusing the box raises the
+  // on-screen keyboard, which covers most of the list you came to tap. Tap the box to search there.
+  const typeFirst = !window.matchMedia?.("(pointer: coarse)").matches;
   // The dialog opens after this mounts, so autoFocus would run too early.
   useEffect(() => {
+    if (!typeFirst) return;
     const t = setTimeout(() => inputRef.current?.focus(), 0);
     return () => clearTimeout(t);
   }, []);
@@ -153,7 +157,7 @@ function PickerBody({ items, value, tagLabel, onPick }: { items: PickerItem[]; v
           className="input"
           type="search"
           ref={inputRef}
-          data-autofocus
+          data-autofocus={typeFirst || undefined}
           inputMode="search"
           enterKeyHint="go"
           value={query}
