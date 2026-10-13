@@ -1,15 +1,13 @@
-import { cap, words } from "../vocab";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { api, useAppState, useCatalogue, useDriverMap, useFetch, useTrackMaps, type Combo } from "../api";
-import { CarBadge, carItems, drivenTrackItems, findMap, TrackThumb } from "../catalogueItems";
-import { Dropdown } from "../components/Dropdown";
-import { GameIcon, GameLabel } from "../components/GameIcon";
-import { Picker } from "../components/Picker";
+import { words } from "../vocab";
+import { type CSSProperties } from "react";
+import { api, useAppState, useDriverMap, useFetch } from "../api";
+import { CarBadge } from "../catalogueItems";
 import { Helmet } from "../components/Helmet";
 import { TrackHero } from "../components/TrackHero";
+import { TrackFilters, trackKey, useTrackSelection } from "../components/TrackFilters";
 import { useCompactTable } from "../useCompactTable";
 import { usePersistedState } from "../persist";
-import { ago, bestSectors as fastestSectors, carName, gameName, gap, gridMinWidth, lapTime, SECTOR_MINT as MINT, SECTOR_PURPLE as PURPLE, sectorColor } from "../format";
+import { ago, bestSectors as fastestSectors, carName, gap, gridMinWidth, lapTime, SECTOR_MINT as MINT, SECTOR_PURPLE as PURPLE, sectorColor } from "../format";
 
 type Period = "today" | "week" | "all";
 
@@ -21,83 +19,15 @@ function periodStart(p: Period): number | null {
   return d.getTime();
 }
 
-const CAR_KEY = "tt.leaderboard.car";
-
-const trackKey = (c: Pick<Combo, "game" | "track" | "layout">) => `${c.game}|${c.track}|${c.layout}`;
-
 export function LeaderboardPage() {
   const { status } = useAppState();
   const driverMap = useDriverMap();
-  const combos = useFetch(() => api.combos(), []) ?? [];
-
-  const tracks = useMemo(() => {
-    const seen = new Map<string, Combo>();
-    combos.forEach((c) => seen.set(trackKey(c), c));
-    return [...seen.values()];
-  }, [combos]);
-
-  // Games that have laps, and the track last picked in each, so switching game returns to where you were in it.
-  const games = useMemo(() => [...new Set(tracks.map((t) => t.game))], [tracks]);
-  const [track, setTrack] = usePersistedState<string | null>("leaderboard.track", null, (v) => typeof v === "string");
-  const [lastTrack, setLastTrack] = usePersistedState<Record<string, string>>("leaderboard.trackByGame", {}, (v) => typeof v === "object" && v !== null && !Array.isArray(v));
-  const chooseTrack = (key: string) => {
-    setTrack(key);
-    setLastTrack({ ...lastTrack, [key.split("|")[0]]: key });
-  };
-  const chooseGame = (game: string) => {
-    const remembered = lastTrack[game];
-    const next = remembered && tracks.some((t) => trackKey(t) === remembered) ? remembered : tracks.find((t) => t.game === game) && trackKey(tracks.find((t) => t.game === game)!);
-    if (next) chooseTrack(next);
-  };
-  // The car you picked sticks across track changes (and restarts); tracks where nobody
-  // has driven it fall back to "Any car" without forgetting the pick.
-  const [pickedCar, setPickedCarState] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(CAR_KEY);
-    } catch {
-      return null;
-    }
-  });
-  const setPickedCar = (c: string | null) => {
-    setPickedCarState(c);
-    try {
-      if (c) localStorage.setItem(CAR_KEY, c);
-      else localStorage.removeItem(CAR_KEY);
-    } catch {
-      // Storage unavailable: the pick just isn't remembered.
-    }
-  };
+  const sel = useTrackSelection();
+  const { tracks, track, selected, catalogue, maps, carsHere, car, setPickedCar } = sel;
   const [period, setPeriod] = usePersistedState<Period>("leaderboard.period", "all", (v) => v === "today" || v === "week" || v === "all");
   const [includeInvalid, setIncludeInvalid] = usePersistedState("leaderboard.includeInvalid", false, (v) => typeof v === "boolean");
 
-  // Default to what's being driven right now, else the first track with laps.
-  useEffect(() => {
-    if (tracks.length === 0) return; // still loading: keep what was remembered
-    if (track && tracks.some((x) => trackKey(x) === track)) return; // a remembered track that still has laps
-
-    const s = status?.session;
-    const pick = (s && tracks.find((t) => trackKey(t) === trackKey(s))) || tracks[0];
-    setTrack(trackKey(pick));
-    if (s && trackKey(s) === trackKey(pick)) setPickedCar(s.car);
-  }, [tracks, status?.session, track]);
-
-  const selected = tracks.find((t) => trackKey(t) === track);
   const w = words(selected?.game);
-  const catalogue = useCatalogue(selected?.game ?? null);
-  const maps = useTrackMaps(selected?.game ?? null);
-  const carsHere = combos.filter((c) => selected && trackKey(c) === trackKey(selected)).map((c) => c.car);
-  const car = pickedCar && carsHere.includes(pickedCar) ? pickedCar : null;
-  // Only the selected game's tracks: another game may have a track with the same name, and the switch above picks the game.
-  const trackPickItems = useMemo(
-    () => drivenTrackItems(combos.filter((c) => c.game === selected?.game), catalogue, maps),
-    [combos, selected?.game, catalogue, maps],
-  );
-  const carPickItems = useMemo(() => {
-    const items = carItems(catalogue, { only: new Set(carsHere) });
-    // Cars the catalogue somehow lacks still get listed.
-    const known = new Set(items.map((i) => i.value));
-    return [...items, ...carsHere.filter((c) => !known.has(c)).map((c) => ({ value: c, label: carName(c), visual: <CarBadge name={carName(c)} /> }))];
-  }, [catalogue, carsHere.join("|")]);
 
   const board =
     useFetch(
@@ -161,40 +91,14 @@ export function LeaderboardPage() {
         <div className="empty">Nothing recorded yet. Once someone finishes a lap or a stage it'll show up here.</div>
       ) : (
         <>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-            {games.length > 1 ? (
-              <Dropdown variant="pill" label="Game" value={selected?.game ?? games[0]} options={games.map((g) => ({ value: g, label: gameName(g), icon: <GameIcon game={g} size={20} /> }))} onChange={chooseGame} />
-            ) : (
-              selected && <span className="filter-pill on"><GameLabel game={selected.game} size={20} /></span>
-            )}
-            <Picker
-              variant="pill"
-              label={cap(w.track)}
-              value={track ?? ""}
-              items={trackPickItems}
-              onChange={chooseTrack}
-              tagLabel="Country"
-              visualOf={(v) => {
-                const t = tracks.find((x) => trackKey(x) === v);
-                return <TrackThumb map={t ? findMap(maps, t.track, t.layout) : undefined} />;
-              }}
-            />
-            <Picker
-              variant="pill"
-              label="Car"
-              value={car ?? ""}
-              anyLabel="Any car"
-              items={carPickItems}
-              onChange={(v) => setPickedCar(v || null)}
-              tagLabel="Class"
-            />
+          <TrackFilters sel={sel}>
             <button className="filter-pill" aria-pressed={!includeInvalid} onClick={() => setIncludeInvalid(!includeInvalid)}>
               {!includeInvalid && (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10" /></svg>
               )}
               {w.rally ? "Valid runs only" : "Valid laps only"}
             </button>
-          </div>
+          </TrackFilters>
 
           {selected && (
             <TrackHero
@@ -293,9 +197,11 @@ export function LeaderboardPage() {
                       const podium = idx < 3;
                       const me = e.driverId != null && e.driverId === seat;
                       return (
-                        <div
+                        <a
                           key={e.lapId}
-                          className={`lb-grid lb-row${top ? " top" : podium ? " lb-podium" : ""}`}
+                          href={`#/telemetry/lap/${e.lapId}`}
+                          title="Analyse this lap"
+                          className={`lb-grid lb-row lb-btn${top ? " top" : podium ? " lb-podium" : ""}`}
                           style={{
                             gridTemplateColumns: cols,
                             ...(me && !top ? { background: `${color}1F`, borderColor: `${color}73` } : {}),
@@ -324,7 +230,7 @@ export function LeaderboardPage() {
                             );
                           })}
                           <span className="mono r lb-small lb-c-stat" data-label={w.rally ? "RUNS" : "LAPS"} style={{ color: "var(--text-2)" }}>{e.lapCount}</span>
-                        </div>
+                        </a>
                       );
                     })}
                   </div>
@@ -343,7 +249,7 @@ export function LeaderboardPage() {
                       <span className="lb-key"><i style={{ background: PURPLE }} />Fastest sector</span>
                       <span className="lb-key"><i style={{ background: MINT }} />Personal best sector</span>
                     </span>
-                    <span>{includeInvalid ? `Cut ${w.laps} included` : `Valid ${w.laps} only`} · out and in {w.laps} never count</span>
+                    <span>{includeInvalid ? `Cut ${w.laps} included` : `Valid ${w.laps} only`} · out and in {w.laps} never count · tap a row to analyse it</span>
                   </>
                 )}
               </div>

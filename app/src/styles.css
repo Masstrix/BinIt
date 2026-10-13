@@ -593,6 +593,36 @@ h2 { font-size: 22px; }
 /* ---- telemetry page ------------------------------------------------------------------------- */
 
 .telemetry-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; align-items: start; }
+.segmented button { display: inline-flex; align-items: center; justify-content: center; }
+
+/* ---- lap analysis (Telemetry) ------------------------------------------------------------------ */
+
+.la-pick { display: flex; flex-direction: column; gap: 14px; }
+.la-pickers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 10px; }
+.la-laps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 10px; }
+.la-lap { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 16px; background: var(--panel-2); border-left: 4px solid; min-width: 0; }
+.la-lap-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.la-lap-name { display: flex; align-items: center; gap: 8px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.la-lap-name i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.la-lap-time { display: flex; flex-direction: column; align-items: flex-end; flex: none; }
+.la-lap-time .mono:first-child { font-size: 20px; font-weight: 700; }
+
+.la-traces { display: flex; flex-direction: column; gap: 12px; }
+.la-readout { display: flex; flex-wrap: wrap; gap: 8px 22px; min-height: 44px; align-items: center; }
+.la-read { display: flex; flex-direction: column; }
+.la-read .mono { font-size: 16px; font-weight: 700; }
+.la-read small { color: var(--muted); font-weight: 500; }
+.la-charts { position: relative; display: flex; flex-direction: column; gap: 10px; touch-action: pan-y; cursor: crosshair; user-select: none; }
+.la-chart-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; margin-bottom: 2px; }
+.la-chart svg { display: block; overflow: visible; }
+.la-axis { position: relative; height: 16px; font-size: 11px; color: var(--muted); }
+.la-axis span { position: absolute; transform: translateX(-50%); }
+.la-axis span:first-child { left: 0; transform: none; }
+.la-axis span:last-child { right: 0; transform: none; }
+
+.la-sectors { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.la-sector { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: 14px; background: var(--panel-2); }
+.la-sector .mono:nth-child(2) { font-size: 18px; font-weight: 700; }
 .inputs-top { display: grid; grid-template-columns: auto 1fr 1fr; gap: 12px; align-items: stretch; }
 .inputs-gear, .inputs-stat { background: var(--panel-2); border-radius: 18px; padding: 10px 16px; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .inputs-gear { align-items: center; min-width: 92px; background: var(--violet); }
@@ -773,7 +803,7 @@ h2 { font-size: 22px; }
 
 /* Drivers / Cars switch above the board, and the per-car rows */
 .lb-views { align-self: flex-start; margin: 4px 0 6px 8px; }
-.lb-btn { width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.lb-btn { width: 100%; font: inherit; color: inherit; text-align: left; cursor: pointer; text-decoration: none; }
 .lb-btn:hover { filter: brightness(1.15); }
 .lb-btn:focus-visible { outline: 2px solid var(--violet); outline-offset: 2px; }
 .lb-driver-cell { display: flex; align-items: center; gap: 10px; min-width: 0; padding-left: 14px; }

@@ -62,7 +62,7 @@ export function App() {
   else if (path.startsWith("/challenges")) page = <ChallengesPage path={path} />;
   else if (path.startsWith("/drivers")) page = <DriversPage path={path} />;
   else if (path.startsWith("/games")) page = <GamesPage />;
-  else if (path.startsWith("/telemetry")) page = <TelemetryPage />;
+  else if (path.startsWith("/telemetry")) page = <TelemetryPage path={path} />;
   else if (path.startsWith("/advanced")) page = <AdvancedPage />;
   else page = <Home />;
 
