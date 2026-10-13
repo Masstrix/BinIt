@@ -6,9 +6,10 @@ import { Modal } from "./Modal";
 /**
  * Puts a driver in the seat. In the desktop app (and the in-game switcher) that is one step, as it
  * always was. From a phone or any other browser it asks first, so nobody changes who is driving by
- * accident while they're just looking at the standings. Render `dialog` once next to the buttons.
+ * accident while they're just looking at the standings. `quick` (a phone's own "Start driving" button)
+ * skips that question unless a lap is in progress. Render `dialog` once next to the buttons.
  */
-export function useSeatSwitcher(): { choose: (driver: Driver | null) => void; dialog: ReactNode } {
+export function useSeatSwitcher(): { choose: (driver: Driver | null, quick?: boolean) => void; dialog: ReactNode } {
   const { status, drivers } = useAppState();
   const [pending, setPending] = useState<{ driver: Driver | null } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -17,9 +18,9 @@ export function useSeatSwitcher(): { choose: (driver: Driver | null) => void; di
   // A lap is in progress: swapping now voids it.
   const onTrack = !!(status?.live && (status.live.phase === "driving" || status.live.phase === "paused") && !status.live.outLap);
 
-  const choose = (driver: Driver | null) => {
+  const choose = (driver: Driver | null, quick = false) => {
     if ((driver?.id ?? null) === (status?.seat ?? null)) return;
-    if (isTauri) api.setSeat(driver?.id ?? null).catch(() => {});
+    if (isTauri || (quick && !onTrack)) api.setSeat(driver?.id ?? null).catch(() => {});
     else setPending({ driver });
   };
 
