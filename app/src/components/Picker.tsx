@@ -51,6 +51,8 @@ export function Picker({
   variant = "field",
   tagLabel,
   visualOf,
+  children,
+  className,
 }: {
   label: string;
   /** Dialog heading; defaults to "Choose <label>". */
@@ -65,6 +67,10 @@ export function Picker({
   tagLabel?: string;
   /** Thumbnail for the selected value (and the "any" option) on the trigger. */
   visualOf?: (value: string) => ReactNode;
+  /** Custom button content (e.g. a lap card): replaces the default trigger and its label. */
+  children?: ReactNode;
+  /** Class for the custom trigger button. */
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
@@ -73,22 +79,26 @@ export function Picker({
 
   return (
     <div className={`dropdown ${variant}`}>
-      {variant === "field" && <span className="dropdown-label">{label}</span>}
+      {variant === "field" && !children && <span className="dropdown-label">{label}</span>}
       <button
         ref={button}
         type="button"
-        className="dropdown-trigger"
+        className={children ? className : "dropdown-trigger"}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={variant === "pill" ? `${label}: ${selected?.label ?? ""}` : undefined}
+        aria-label={variant === "pill" || children ? `${label}: ${selected?.label ?? ""}` : undefined}
         onClick={() => setOpen(true)}
       >
-        {visualOf && <span className="picker-thumb sm">{visualOf(value)}</span>}
-        <span className="dropdown-value" style={{ flex: 1 }}>{selected?.label ?? "Choose…"}</span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true" style={{ flex: "none" }}>
-          <circle cx="11" cy="11" r="6" />
-          <path d="M16 16l4 4" />
-        </svg>
+        {children ?? (
+          <>
+            {visualOf && <span className="picker-thumb sm">{visualOf(value)}</span>}
+            <span className="dropdown-value" style={{ flex: 1 }}>{selected?.label ?? "Choose…"}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true" style={{ flex: "none" }}>
+              <circle cx="11" cy="11" r="6" />
+              <path d="M16 16l4 4" />
+            </svg>
+          </>
+        )}
       </button>
       {open && (
         <Modal title={title ?? `Choose ${label.toLowerCase()}`} onClose={() => { setOpen(false); button.current?.focus(); }}>
@@ -116,8 +126,12 @@ function PickerBody({ items, value, tagLabel, onPick }: { items: PickerItem[]; v
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Type-to-search straight away with a keyboard. Not on touch screens: focusing the box raises the
+  // on-screen keyboard, which covers most of the list you came to tap. Tap the box to search there.
+  const typeFirst = !window.matchMedia?.("(pointer: coarse)").matches;
   // The dialog opens after this mounts, so autoFocus would run too early.
   useEffect(() => {
+    if (!typeFirst) return;
     const t = setTimeout(() => inputRef.current?.focus(), 0);
     return () => clearTimeout(t);
   }, []);
@@ -153,7 +167,7 @@ function PickerBody({ items, value, tagLabel, onPick }: { items: PickerItem[]; v
           className="input"
           type="search"
           ref={inputRef}
-          data-autofocus
+          data-autofocus={typeFirst || undefined}
           inputMode="search"
           enterKeyHint="go"
           value={query}
