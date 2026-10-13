@@ -4,7 +4,9 @@ import { usePersistedState } from "../persist";
 import { api, useDriverMap, useFetch, useTrackMaps, type Challenge, type ReplayEntry } from "../api";
 import { findMap } from "../catalogueItems";
 import { lapTime } from "../format";
-import { TrackMap } from "./TrackMap";
+import { Helmet } from "./Helmet";
+import { cameraAt, MapViewControls, TrackMap, useMapView } from "./TrackMap";
+import { GapLadder, initials } from "./GapLadder";
 
 /** Seconds to linger on the finished picture before the replay starts over. */
 const HOLD_MS = 2000;
@@ -49,6 +51,19 @@ function pointAt(points: [number, number][], progress: number): [number, number]
 type Racer = ReplayEntry & { profile: number[] };
 
 /**
+ * How far behind the car in front on track each racer is at time `t` (ms): the time since the front
+ * car went through the point they're at. A finished racer's gap is its lap time against the front's.
+ */
+function gapsAt(racers: Racer[], t: number): number[] {
+  const p = racers.map((r) => progressAt(r.profile, t));
+  let front = 0;
+  for (let i = 1; i < racers.length; i++) {
+    if (p[i] > p[front] || (p[i] === p[front] && racers[i].timeMs < racers[front].timeMs)) front = i;
+  }
+  return racers.map((r, i) => Math.max(0, elapsedAt(r.profile, p[i]) - elapsedAt(racers[front].profile, p[i])));
+}
+
+/**
  * Every driver's best lap run side by side on the track map, from the same start line, so the
  * gaps between them show up as distance on the track. Uses the timing trace saved with each lap.
  */
@@ -66,6 +81,10 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
   const [playing, setPlaying] = useState(!reduceMotion);
   const [speed, setSpeed] = usePersistedState<(typeof SPEEDS)[number]>("replay.speed", 1, (v) => SPEEDS.some((s) => s === v));
   const [t, setT] = useState(0);
+  // Zoom and turn the map as the viewer chose (shared with the telemetry map), following one car:
+  // whoever is in front on track, unless the viewer picked someone in the legend.
+  const mapView = useMapView();
+  const [followed, setFollowed] = useState<number | null>(null);
   const clock = useRef({ last: 0, t: 0 });
 
   // One clock for everyone: advance by real elapsed time x speed, hold at the end, then loop.
@@ -104,6 +123,11 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
     const gap = !leader || r === leader ? 0 : finished ? r.timeMs - leader.timeMs : Math.max(0, t - elapsedAt(leader.profile, p));
     return { r, p, finished, gap };
   });
+  const ladder = gapsAt(racers, t);
+  const front = state.reduce<(typeof state)[number] | undefined>((best, x) => (!best || x.p > best.p || (x.p === best.p && x.r.timeMs < best.r.timeMs) ? x : best), undefined);
+  const follow = state.find((x) => x.r.lapId === followed) ?? front;
+  const following = mapView.zoom > 1 || mapView.carUp;
+  const camera = map && follow ? cameraAt(map.points, map.closed, follow.p, mapView) : undefined;
 
   return (
     <section className="card replay" aria-label="Race replay">
@@ -121,17 +145,28 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
         <div className="empty">Bin It hasn't learned this {words(challenge.game).track}'s map yet. Finish one clean {words(challenge.game).lap} on it and the replay appears here.</div>
       ) : (
         <>
-          <div className="livemap-frame">
-            <TrackMap
-              points={map.points}
-              rotate={map.rotate}
-              mirror={map.mirror}
-              closed={map.closed}
-              stroke={4}
-              label="Race replay"
-              // Back of the pack first so the leader is drawn on top.
-              markers={[...state].reverse().map(({ r, p, finished }) => ({ position: pointAt(map.points, p), color: colorOf(r), faded: finished }))}
-            />
+          <div className={`livemap-frame${racers.length > 1 ? " with-ladder" : ""}`}>
+            {racers.length > 1 && (
+              <GapLadder
+                cars={state.map(({ r, finished }, i) => ({ key: r.lapId, color: colorOf(r), name: nameOf(r), short: initials(nameOf(r)), icon: <Helmet color={colorOf(r)} size={26} tile={false} seed={r.driverId ?? undefined} />, gapMs: ladder[i], faded: finished }))}
+              />
+            )}
+            <div className="ladder-map">
+              {/* The controls float over the top right; the map keeps the track clear of them. */}
+              <MapViewControls view={mapView} />
+              <TrackMap
+                camera={camera}
+                corner={{ w: 250, h: 48 }}
+                points={map.points}
+                rotate={map.rotate}
+                mirror={map.mirror}
+                closed={map.closed}
+                stroke={4}
+                label="Race replay"
+                // Back of the pack first so the leader is drawn on top.
+                markers={[...state].reverse().map(({ r, p, finished }) => ({ position: pointAt(map.points, p), color: colorOf(r), faded: finished }))}
+              />
+            </div>
           </div>
 
           <div className="replay-controls">
@@ -161,14 +196,22 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
 
           <div className="replay-legend">
             {state.map(({ r, finished, gap }) => (
-              <div className="replay-row" key={r.lapId}>
+              <button
+                type="button"
+                className="replay-row"
+                key={r.lapId}
+                aria-pressed={followed === r.lapId}
+                data-followed={(following && follow?.r === r) || undefined}
+                title={followed === r.lapId ? "Following (tap to follow whoever is in front)" : "Follow on the map"}
+                onClick={() => setFollowed(followed === r.lapId ? null : r.lapId)}
+              >
                 <i style={{ background: colorOf(r) }} />
                 <span className="replay-name">{nameOf(r)}</span>
                 <span className="mono muted">{lapTime(r.timeMs)}</span>
                 <span className="mono replay-gap" style={{ color: r === leader ? "var(--gold)" : gap > 0 ? "var(--red)" : "var(--muted)" }}>
                   {r === leader ? (finished ? "P1" : "leader") : `+${(gap / 1000).toFixed(3)}`}
                 </span>
-              </div>
+              </button>
             ))}
           </div>
         </>
