@@ -54,6 +54,13 @@ AC EVO can't be enumerated from the install (everything is in the unreadable `co
 - **Telemetry page** (`#/telemetry`): the live map with sector colours next to gear, speed, rpm, pedal bars, a steering bar and a rolling 10 s trace. Works on phones.
 - **Not done yet:** comparing two laps' traces (speed / throttle / brake against distance with a delta), an overlay widget version, (gear numbers: the game reports 0 = reverse, 1 = neutral, 2 = first, and the adapter shifts them down by one so Bin It uses -1 = reverse, 0 = neutral, 1 = first).
 
+### Future: which way the car is facing (noted 2026-10-14)
+- **Goal:** draw cars on the track maps (live map, telemetry minimap, challenge race replay) as arrows pointing where the car is actually facing, so spins and big slides show up in replays.
+- **Today:** nothing records it. Lap traces hold progress, time, speed, inputs and gear; live data has world position only. No adapter reads heading or yaw.
+- **To do:** read the car's heading wherever a game publishes it (AC EVO's physics page has it; check AC, ACC, DiRT Rally 2.0 and EA WRC telemetry too), carry it in the live event and add it to `LapTrace` as a new blob version, so older laps still read.
+- **Watch for:** the angle must go through the same rotate and mirror as the map (AC EVO's map axes are mirrored); interpolate between samples the short way round across ±180°.
+- **Fallback:** laps and games without a heading point the arrow along the track outline at the car's position (the same direction the map's "turn with the car" view uses). That arrow can ship first on its own; the recorded heading then just swaps its angle source.
+
 ### Performance constraints
 - Keep the adapter's 20 Hz polling. Recording a trace must not add game-thread work: copy the few fields we need, then batch-write to SQLite off the poll thread.
 - Store traces compactly (e.g. one blob per lap); expect around 100 KB per lap at 20 Hz.
