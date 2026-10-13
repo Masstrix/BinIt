@@ -7,6 +7,7 @@ import { cap, words, type Words } from "../vocab";
 import { Dropdown, type DropdownOption } from "./Dropdown";
 import { Helmet } from "./Helmet";
 import { TrackFilters, trackKey, useTrackSelection } from "./TrackFilters";
+import { GapLadder } from "./GapLadder";
 import { cameraAt, MapViewControls, pointAlong, TrackMap, useMapView } from "./TrackMap";
 
 const THROTTLE = "#4BE3A6";
@@ -1069,6 +1070,12 @@ function MiniMap({
   const pA = progressAt(a, clockMs);
   const pB = b ? progressAt(b, clockMs) : null;
 
+  // The gap between the two cars: whoever is further round is in front, and the other is behind by
+  // how long ago the front car was where it is now.
+  const timeAt = (pts: Pt[], p: number) => lookup(pts, "p", p, (q) => q.t);
+  const gapA = b && pB !== null && pB > pA ? Math.max(0, clockMs - timeAt(b, pA)) : 0;
+  const gapB = b && pB !== null && pA > pB ? Math.max(0, clockMs - timeAt(a, pB)) : 0;
+
   // Light up the part in view; elsewhere dim. Sector ends are marked as dots by the map.
   const outline = useMemo(() => {
     const cuts = [...new Set([0, ...sectorMarks, span.lo, span.hi, 1].map((x) => Math.round(x * 10000) / 10000))].sort((x, y) => x - y);
@@ -1087,23 +1094,33 @@ function MiniMap({
     <section className="card la-map" aria-label={`${cap(w.track)} map`}>
       {map ? (
         <div className="la-map-frame">
-          {/* The controls float over the top right; the map keeps the track clear of them. */}
-          <MapViewControls view={mapView} />
-          <TrackMap
-            camera={camera}
-            corner={{ w: 250, h: 48 }}
-            points={map.points}
-            rotate={map.rotate}
-            mirror={map.mirror}
-            closed={map.closed}
-            stroke={3}
-            label={`${cap(w.track)} map`}
-            sectors={outline}
-            markers={[
-              { at: b && pB !== null ? pointAlong(map.points, map.closed, pB) : null, color: LAP_B },
-              { at: pointAlong(map.points, map.closed, pA), color: LAP_A },
-            ].flatMap((m) => (m.at ? [{ position: m.at, color: m.color }] : []))}
-          />
+          {b && (
+            <GapLadder
+              cars={[
+                { key: "b", color: LAP_B, name: "Comparison", gapMs: gapB },
+                { key: "a", color: LAP_A, name: `This ${w.lap}`, gapMs: gapA },
+              ]}
+            />
+          )}
+          <div className="la-map-view">
+            {/* The controls float over the top right; the map keeps the track clear of them. */}
+            <MapViewControls view={mapView} />
+            <TrackMap
+              camera={camera}
+              corner={{ w: 250, h: 48 }}
+              points={map.points}
+              rotate={map.rotate}
+              mirror={map.mirror}
+              closed={map.closed}
+              stroke={3}
+              label={`${cap(w.track)} map`}
+              sectors={outline}
+              markers={[
+                { at: b && pB !== null ? pointAlong(map.points, map.closed, pB) : null, color: LAP_B },
+                { at: pointAlong(map.points, map.closed, pA), color: LAP_A },
+              ].flatMap((m) => (m.at ? [{ position: m.at, color: m.color }] : []))}
+            />
+          </div>
         </div>
       ) : (
         <div className="empty" style={{ minHeight: 0 }}>Bin It hasn't learned this {w.track}'s map yet.</div>
