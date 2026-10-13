@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, isTauri, useAppState, useFetch } from "./api";
 import { GameIcon } from "./components/GameIcon";
 import { Logo } from "./components/Helmet";
@@ -79,9 +79,24 @@ function Sidebar({ path }: { path: string }) {
   const { status, online } = useAppState();
   const server = useFetch(() => api.server(), [online]);
   const lanUrl = server?.urls[0];
+  // On phones the menu is a bar fixed to the bottom; its height (--dock-h) lets sticky things sit above it.
+  const aside = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = aside.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const set = () => document.documentElement.style.setProperty("--dock-h", `${el.offsetHeight}px`);
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    window.addEventListener("resize", set);
+    set();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", set);
+    };
+  }, []);
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" ref={aside}>
       <a className="brand" href="#/">
         <Logo />
         <span>bin it</span>

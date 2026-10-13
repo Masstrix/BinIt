@@ -7,8 +7,8 @@ import { carName, trackName } from "../format";
 
 /**
  * Live: the track map with sector colours and what the driver is doing right now.
- * Lap analysis: any recorded lap's inputs, laid over another. It opens on Live while someone is
- * driving and on Lap analysis otherwise (or when a lap is linked: #/telemetry/lap/<id>); the
+ * Analysis: any recorded lap (or rally run)'s inputs, laid over another. It opens on Live while someone is
+ * driving and on Analysis otherwise (or when a lap is linked: #/telemetry/lap/<id>); the
  * switch at the top moves between them either way.
  */
 export function TelemetryPage({ path }: { path: string }) {
@@ -17,8 +17,9 @@ export function TelemetryPage({ path }: { path: string }) {
   const driving = !!(status?.live?.driving && session);
   const linked = /^\/telemetry\/lap\/(\d+)/.exec(path);
   const lapId = linked ? Number(linked[1]) : null;
-  const [picked, setPicked] = useState<"live" | "laps" | null>(null);
-  const view = lapId != null && picked === null ? "laps" : (picked ?? (driving ? "live" : "laps"));
+  // Arriving on a linked lap counts as choosing Analysis, so it stays put after the link is let go.
+  const [picked, setPicked] = useState<"live" | "laps" | null>(lapId != null ? "laps" : null);
+  const view = picked ?? (lapId != null || !driving ? "laps" : "live");
 
   return (
     <>
@@ -28,7 +29,7 @@ export function TelemetryPage({ path }: { path: string }) {
           <button aria-pressed={view === "live"} onClick={() => setPicked("live")}>
             {driving && <span className="dot on" style={{ marginRight: 8 }} aria-label="Someone is driving" />}Live
           </button>
-          <button aria-pressed={view === "laps"} onClick={() => setPicked("laps")}>Lap analysis</button>
+          <button aria-pressed={view === "laps"} onClick={() => setPicked("laps")}>Analysis</button>
         </div>
       </div>
       {view === "laps" ? (
@@ -45,7 +46,7 @@ export function TelemetryPage({ path }: { path: string }) {
             <div className="empty">
               {status?.connected ? "Waiting for you to get on track…" : "Start a game and get on track to see live telemetry."}
               <div style={{ marginTop: 12 }}>
-                <button className="btn ghost" onClick={() => setPicked("laps")}>Look through recorded laps</button>
+                <button className="btn ghost" onClick={() => setPicked("laps")}>Look back at a recorded lap or run</button>
               </div>
             </div>
           )}
