@@ -400,6 +400,40 @@ fn a_run_with_a_time_penalty_teaches_no_map() {
 }
 
 #[test]
+fn a_runs_penalties_are_kept_with_it_and_come_back_in_order_with_the_replay() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
+    let pen = |at_ms, progress, x| tt_games::Penalty { at_ms, added_ms: 4_000, progress, position: Some([x, 2.0]) };
+
+    let clean = tt.record_lap(&lap(100_000, true)).unwrap().lap;
+    let penalised = tt.record_lap(&CompletedLap { penalties: vec![pen(8_000, 0.1, 10.0), pen(90_000, 0.9, 20.0)], ..lap(104_000, true) }).unwrap().lap;
+
+    assert!(tt.lap_penalties(clean.id).unwrap().is_empty(), "a clean run has none");
+    let kept = tt.lap_penalties(penalised.id).unwrap();
+    assert_eq!(kept.len(), 2);
+    assert_eq!((kept[0].at_ms, kept[0].added_ms, kept[0].position), (8_000, 4_000, Some([10.0, 2.0])));
+    assert_eq!((kept[1].progress, kept[1].position), (0.9, Some([20.0, 2.0])));
+}
+
+#[test]
+fn penalties_survive_merging_another_database_in() {
+    let dir = tempfile::tempdir().unwrap();
+    let other_path = dir.path().join("other.db");
+    {
+        let other = BinIt::open(&other_path).unwrap();
+        other.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
+        let pen = tt_games::Penalty { at_ms: 5_000, added_ms: 10_000, progress: 0.0, position: None };
+        other.record_lap(&CompletedLap { penalties: vec![pen], ..lap(120_000, true) }).unwrap();
+    }
+    let tt = BinIt::in_memory().unwrap();
+    tt.store().merge_from(&other_path).unwrap();
+    let laps = tt.recent_laps(10).unwrap();
+    assert_eq!(laps.len(), 1);
+    let kept = tt.lap_penalties(laps[0].id).unwrap();
+    assert_eq!((kept.len(), kept[0].added_ms, kept[0].position), (1, 10_000, None));
+}
+
+#[test]
 fn the_live_view_says_why_a_run_cant_teach_the_map() {
     let live = |t: u32, valid: bool, penalties: u32| {
         let penalties = (0..penalties).map(|i| tt_games::Penalty { at_ms: t, added_ms: 4_000, progress: 0.1, position: Some([i as f32, 0.0]) }).collect();

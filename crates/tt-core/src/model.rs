@@ -133,8 +133,28 @@ pub struct LeaderboardEntry {
     pub best_sectors_ms: Vec<Option<u32>>,
 }
 
+/// A time penalty to pin on a map: where the car was when the game added it, and how much it added.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PenaltyPin {
+    /// The stage clock just before it landed, ms.
+    pub at_ms: u32,
+    /// How much time it added, ms.
+    pub added_ms: u32,
+    /// How far along the stage the car was, 0..1.
+    pub progress: f32,
+    /// World position (x, z) in the same space as the track map; `None` if the game didn't report one.
+    pub position: Option<[f32; 2]>,
+}
+
+impl From<&tt_games::Penalty> for PenaltyPin {
+    fn from(p: &tt_games::Penalty) -> Self {
+        Self { at_ms: p.at_ms, added_ms: p.added_ms, progress: p.progress, position: p.position }
+    }
+}
+
 /// One driver's best lap in a challenge, with enough to replay it against the others.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReplayEntry {
     pub position: u32,
@@ -143,6 +163,9 @@ pub struct ReplayEntry {
     pub time_ms: u32,
     /// Elapsed ms at each 0.5% of the lap; `None` for laps recorded before timing traces existed.
     pub profile: Option<Vec<u32>>,
+    /// Time penalties taken in that run, for pinning on the map.
+    #[serde(default)]
+    pub penalties: Vec<PenaltyPin>,
 }
 
 /// Everything the overlay and home screen need about the person driving.

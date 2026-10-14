@@ -206,6 +206,17 @@ export interface LiveInputs {
 export type OverlayShow = "always" | "drivingPaused" | "driving";
 export type GamePhase = "menu" | "driving" | "paused" | "replay";
 
+/** A time penalty to pin on a map: where the car was when the game added it, and how much it added. */
+export interface PenaltyPin {
+  /** The stage clock just before it landed, ms. */
+  atMs: number;
+  addedMs: number;
+  /** How far along the stage, 0..1. */
+  progress: number;
+  /** World position (x, z) in the map's coordinates; null when the game didn't report one. */
+  position: [number, number] | null;
+}
+
 export interface LiveView {
   driving: boolean;
   /** What the game is doing: in a menu, driving, paused on track, or watching a replay. */
@@ -216,6 +227,8 @@ export interface LiveView {
   outLap: boolean;
   /** Why this lap won't be timed apart from a cut: "driverChange" (the seat changed hands mid-lap). */
   voidReason: string | null;
+  /** Time penalties the game has added so far in this stage run, to pin on the live map. */
+  penalties: PenaltyPin[];
   /** Why this lap or stage can't teach the track's map while one is being learned, if it can't. */
   mapSpoiled: "penalty" | "joinedLate" | "invalid" | null;
   lapProgress: number;
@@ -264,6 +277,8 @@ export interface ReplayEntry {
   timeMs: number;
   /** Elapsed ms at each 0.5% of the lap; null for laps recorded before timing traces existed. */
   profile: number[] | null;
+  /** Time penalties taken in that run, to pin on the map. */
+  penalties: PenaltyPin[];
 }
 
 export interface LapResult {
@@ -335,6 +350,7 @@ export const api = {
   combos: (game?: string) => request<Combo[]>("GET", `/combos${game ? `?game=${encodeURIComponent(game)}` : ""}`),
   catalogue: (game: string) => request<Catalogue>("GET", `/catalogue?game=${encodeURIComponent(game)}`),
   /** Rows of [progress, elapsedMs, speedKmh, throttle, brake, clutch, steering, gear], or null. */
+  lapPenalties: (lapId: number) => request<PenaltyPin[]>("GET", `/laps/${lapId}/penalties`),
   lapTrace: (lapId: number) => request<{ lapId: number; points: number[][] } | null>("GET", `/laps/${lapId}/trace`),
   /** Version, data folder and database counts. Desktop app only. */
   about: () => request<About>("GET", "/admin/about"),

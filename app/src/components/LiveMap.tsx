@@ -5,7 +5,7 @@ import { carName, lapTime, trackName } from "../format";
 import type { SectorStatus } from "../api";
 import { Helmet } from "./Helmet";
 import { words } from "../vocab";
-import { TrackMap } from "./TrackMap";
+import { penaltyPins, TrackMap } from "./TrackMap";
 
 /**
  * Where the car is on track right now. Shown to anyone watching (including office
@@ -77,13 +77,13 @@ export function LiveMap() {
       </div>
       <div className="livemap-frame">
         {map ? (
-          <TrackMap points={map.points} position={live.position} rotate={map.rotate} mirror={map.mirror} closed={map.closed} stroke={5}
+          <TrackMap points={map.points} position={live.position} rotate={map.rotate} mirror={map.mirror} closed={map.closed} stroke={5} pins={penaltyPins(live.penalties, map)}
             sectors={session.boundaries.length > 2 ? { boundaries: session.boundaries, colors: sectorColours, active: timing?.currentSector } : undefined} label={`${trackName(session.track, session.layout)} live map`} />
         ) : (
           <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 10, width: "min(320px, 100%)", height: "100%", minHeight: 0 }}>
             {learned.length > 8 && (
               <div style={{ flex: 1, minHeight: 0 }}>
-                <TrackMap points={learned} position={live.position} closed={false} stroke={5} label={`${trackName(session.track, session.layout)} map being drawn`} />
+                <TrackMap points={learned} position={live.position} closed={false} stroke={5} pins={penaltyPins(live.penalties, { points: learned, closed: false })} label={`${trackName(session.track, session.layout)} map being drawn`} />
               </div>
             )}
             {live.mapSpoiled ? (

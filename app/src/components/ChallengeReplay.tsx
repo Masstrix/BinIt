@@ -5,7 +5,7 @@ import { api, useDriverMap, useFetch, useTrackMaps, type Challenge, type ReplayE
 import { findMap } from "../catalogueItems";
 import { lapTime } from "../format";
 import { Helmet } from "./Helmet";
-import { cameraAt, MapViewControls, TrackMap, useMapView } from "./TrackMap";
+import { cameraAt, MapViewControls, penaltyPins, TrackMap, useMapView } from "./TrackMap";
 import { GapLadder, initials } from "./GapLadder";
 
 /** Seconds to linger on the finished picture before the replay starts over. */
@@ -165,6 +165,8 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
                 label="Race replay"
                 // Back of the pack first so the leader is drawn on top.
                 markers={[...state].reverse().map(({ r, p, finished }) => ({ position: pointAt(map.points, p), color: colorOf(r), faded: finished }))}
+                // A penalty is pinned once its driver has taken it, and stays.
+                pins={racers.flatMap((r) => penaltyPins(r.penalties, map, colorOf(r), t))}
               />
             </div>
           </div>

@@ -8,7 +8,7 @@ import { Dropdown, type DropdownOption } from "./Dropdown";
 import { Helmet } from "./Helmet";
 import { TrackFilters, trackKey, useTrackSelection } from "./TrackFilters";
 import { GapLadder } from "./GapLadder";
-import { cameraAt, MapViewControls, pointAlong, TrackMap, useMapView } from "./TrackMap";
+import { cameraAt, MapViewControls, penaltyPins, pointAlong, TrackMap, useMapView } from "./TrackMap";
 
 const THROTTLE = "#4BE3A6";
 const BRAKE = "#FF6B8A";
@@ -790,6 +790,7 @@ function Traces({
         w={w}
         a={a}
         b={hasB ? b : null}
+        lapIds={{ a: lapA.id, b: lapB?.id ?? null }}
         clockMs={nowMs}
         span={{ lo: clamp01(span.lo), hi: clamp01(span.hi) }}
         sectorMarks={sectorMarks}
@@ -1051,6 +1052,7 @@ function MiniMap({
   w,
   a,
   b,
+  lapIds,
   clockMs,
   span,
   sectorMarks,
@@ -1059,6 +1061,8 @@ function MiniMap({
   w: Words;
   a: Pt[];
   b: Pt[] | null;
+  /** The two laps, to look up the penalties each took (pinned on the map in its colour). */
+  lapIds: { a: number; b: number | null };
   clockMs: number;
   span: Span;
   sectorMarks: number[];
@@ -1069,6 +1073,8 @@ function MiniMap({
   const map = found && found.points.length >= 2 ? found : undefined;
   const pA = progressAt(a, clockMs);
   const pB = b ? progressAt(b, clockMs) : null;
+  const penaltiesA = useFetch(() => api.lapPenalties(lapIds.a), [lapIds.a]);
+  const penaltiesB = useFetch(lapIds.b !== null && b ? () => api.lapPenalties(lapIds.b!) : null, [lapIds.b, !!b]);
 
   // The gap between the two cars: whoever is further round is in front, and the other is behind by
   // how long ago the front car was where it is now.
@@ -1115,6 +1121,7 @@ function MiniMap({
               stroke={3}
               label={`${cap(w.track)} map`}
               sectors={outline}
+              pins={[...penaltyPins(penaltiesB ?? undefined, map, LAP_B), ...penaltyPins(penaltiesA ?? undefined, map, LAP_A)]}
               markers={[
                 { at: b && pB !== null ? pointAlong(map.points, map.closed, pB) : null, color: LAP_B },
                 { at: pointAlong(map.points, map.closed, pA), color: LAP_A },

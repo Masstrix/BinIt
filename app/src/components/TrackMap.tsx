@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { PenaltyPin } from "../api";
 import { usePersistedState } from "../persist";
 
 /**
@@ -26,6 +27,7 @@ export function TrackMap({
   label,
   sectors,
   markers,
+  pins,
   camera,
   corner,
 }: {
@@ -43,6 +45,8 @@ export function TrackMap({
   sectors?: { boundaries: number[]; colors: string[]; active?: number };
   /** Extra cars to draw (drawn in order, so put the one that should sit on top last). */
   markers?: { position: [number, number]; color: string; faded?: boolean }[];
+  /** Time penalties to pin on the map, in the same world coordinates: a pin where it happened, with how much it added. */
+  pins?: { position: [number, number]; addedMs: number; color?: string }[];
   /**
    * How to frame the map (world coordinates, like the markers). `zoom` above 1 follows `at` (a car)
    * that much closer, filling the frame. `heading` turns the map so travel from `from` to `to` points
@@ -117,7 +121,7 @@ export function TrackMap({
   }, [!camera]);
 
   const view = useMemo(() => {
-    const plain = { box: geo.box, turn: undefined as string | undefined, fit: "xMidYMid meet", u: geo.unit, line: stroke };
+    const plain = { box: geo.box, turn: undefined as string | undefined, deg: 0, fit: "xMidYMid meet", u: geo.unit, line: stroke };
     if (!camera) return plain;
     let deg = 0;
     if (camera.heading) {
@@ -155,6 +159,7 @@ export function TrackMap({
     return {
       box: `${x0} ${z0} ${frame.w / scale} ${frame.h / scale}`,
       turn: deg ? `rotate(${deg} ${mx} ${mz})` : undefined,
+      deg,
       fit: "xMidYMid meet",
       u,
       line,
@@ -198,6 +203,39 @@ export function TrackMap({
           </g>
         );
       })}
+      {pins?.map((pin, i) => {
+        const [px, pz] = orient(pin.position, rotate, mirror);
+        const r = u * 2.8;
+        const colour = pin.color ?? "var(--red)";
+        // A teardrop pin with its tip on the spot, kept upright whatever way the map is turned.
+        return (
+          <g key={`pin${i}`} transform={view.deg ? `rotate(${-view.deg} ${px} ${pz})` : undefined}>
+            <path
+              d={`M${px} ${pz} L${px - r * 0.78} ${pz - r * 1.55} A${r} ${r} 0 1 1 ${px + r * 0.78} ${pz - r * 1.55} Z`}
+              fill={colour}
+              stroke="#fff"
+              strokeWidth={1.5}
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+            <circle cx={px} cy={pz - r * 2.1} r={r * 0.34} fill="#fff" />
+            <text
+              x={px + r * 1.35}
+              y={pz - r * 1.6}
+              fontSize={u * 6.2}
+              fontWeight={700}
+              fill="#fff"
+              stroke="#0B1020"
+              strokeWidth={3}
+              paintOrder="stroke"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            >
+              {`+${Number.isInteger(pin.addedMs / 1000) ? pin.addedMs / 1000 : (pin.addedMs / 1000).toFixed(1)}s`}
+            </text>
+          </g>
+        );
+      })}
       {position && (
         <>
           <circle cx={position[0]} cy={position[1]} r={u * 4.5} fill="var(--peach)" opacity={0.3} />
@@ -207,6 +245,19 @@ export function TrackMap({
       </g>
     </svg>
   );
+}
+
+/**
+ * Penalty pins for a run, ready for `TrackMap`'s `pins`: each where the car was when it was given (or, if the
+ * game gave no position, where its progress puts it on the outline). With `until` only those given by that
+ * stage clock (ms), so a replay drops them as it reaches them and they stay once dropped.
+ */
+export function penaltyPins(penalties: PenaltyPin[] | undefined, map: { points: [number, number][]; closed: boolean } | undefined, color?: string, until?: number) {
+  return (penalties ?? []).flatMap((p) => {
+    if (until !== undefined && p.atMs > until) return [];
+    const position = p.position ?? (map ? pointAlong(map.points, map.closed, p.progress) : null);
+    return position ? [{ position, addedMs: p.addedMs, color }] : [];
+  });
 }
 
 /** A position on a map's evenly spaced outline (a point per 1/N of the lap), `p` from 0 to 1. */

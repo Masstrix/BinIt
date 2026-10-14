@@ -57,6 +57,7 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/laps/recent", get(recent_laps))
         .route("/laps/{id}/claim", post(claim_lap))
         .route("/laps/{id}/trace", get(lap_trace))
+        .route("/laps/{id}/penalties", get(lap_penalties))
         .route("/combos", get(combos))
         .route("/catalogue", get(catalogue))
         .route("/maps", get(track_maps))
@@ -318,6 +319,11 @@ async fn lap_trace(State(c): State<Ctx>, Path(id): Path<LapId>) -> ApiResult<Opt
             .collect();
         serde_json::json!({ "lapId": id, "points": rows })
     })))
+}
+
+/// The time penalties a run took (empty for one that took none), to pin on its map.
+async fn lap_penalties(State(c): State<Ctx>, Path(id): Path<LapId>) -> ApiResult<Vec<tt_core::PenaltyPin>> {
+    Ok(Json(c.tt.lap_penalties(id)?))
 }
 
 async fn claim_lap(State(c): State<Ctx>, Path(id): Path<LapId>, Json(body): Json<SetSeat>) -> ApiResult<()> {

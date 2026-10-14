@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 6;
+const SCHEMA_VERSION: i32 = 7;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -130,6 +130,10 @@ impl Store {
             // A rally stage's path is open (start and finish are different places); circuits stay closed.
             conn.execute_batch("ALTER TABLE track_maps ADD COLUMN closed INTEGER NOT NULL DEFAULT 1;")?;
         }
+        if version < 7 {
+            // Time penalties a stage run took (JSON, see PenaltyPin), for pinning on the map. NULL = none.
+            conn.execute_batch("ALTER TABLE laps ADD COLUMN penalties TEXT;")?;
+        }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         Ok(Self { conn })
     }
@@ -240,6 +244,24 @@ impl Store {
         Ok(bytes.and_then(|b| LapTrace::from_bytes(&b)))
     }
 
+    /// Keeps the time penalties a run took.
+    pub fn set_lap_penalties(&self, id: LapId, penalties: &[PenaltyPin]) -> Result<()> {
+        let json = (!penalties.is_empty()).then(|| serde_json::to_string(penalties)).transpose()?;
+        self.conn.execute("UPDATE laps SET penalties = ?1 WHERE id = ?2", params![json, id])?;
+        Ok(())
+    }
+
+    /// The time penalties a run took, in the order they happened (none for a run that took none, or one
+    /// recorded before penalties were kept).
+    pub fn lap_penalties(&self, id: LapId) -> Result<Vec<PenaltyPin>> {
+        let json: Option<String> = self
+            .conn
+            .query_row("SELECT penalties FROM laps WHERE id = ?1", [id], |r| r.get(0))
+            .optional()?
+            .flatten();
+        Ok(json.and_then(|j| serde_json::from_str(&j).ok()).unwrap_or_default())
+    }
+
     pub fn lap(&self, id: LapId) -> Result<Option<Lap>> {
         Ok(self.conn.query_row(&format!("{LAP_SELECT} WHERE id = ?1"), [id], lap_from_row).optional()?)
     }
@@ -293,10 +315,10 @@ impl Store {
             )?;
             let laps = tx.execute(
                 "INSERT INTO main.laps (driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid,
-                                        sectors_ms, recorded_at, untimed_reason, profile, trace)
+                                        sectors_ms, recorded_at, untimed_reason, profile, trace, penalties)
                  SELECT (SELECT d.id FROM main.drivers d JOIN other.drivers od ON d.name = od.name WHERE od.id = o.driver_id),
                         o.game, o.track, o.layout, o.car, o.session_kind, o.lap_number, o.time_ms, o.valid,
-                        o.sectors_ms, o.recorded_at, o.untimed_reason, o.profile, o.trace
+                        o.sectors_ms, o.recorded_at, o.untimed_reason, o.profile, o.trace, o.penalties
                  FROM other.laps o
                  WHERE NOT EXISTS (
                      SELECT 1 FROM main.laps l

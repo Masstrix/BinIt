@@ -101,6 +101,8 @@ pub struct LiveView {
     pub out_lap: bool,
     /// Why the lap in progress won't be timed, besides a cut: "driverChange".
     pub void_reason: Option<&'static str>,
+    /// Time penalties the game has added so far in this stage run, to pin on the live map.
+    pub penalties: Vec<PenaltyPin>,
     /// Why the lap or stage in progress can't teach the track's map, if it can't (shown while a map is being
     /// learned): "penalty", "joinedLate" (Bin It began watching part-way through) or "invalid".
     pub map_spoiled: Option<&'static str>,
@@ -450,6 +452,11 @@ impl BinIt {
         self.store().driver_laps(driver_id)
     }
 
+    /// The time penalties a run took, for pinning on its map.
+    pub fn lap_penalties(&self, id: LapId) -> Result<Vec<PenaltyPin>> {
+        self.store().lap_penalties(id)
+    }
+
     pub fn recent_laps(&self, limit: u32) -> Result<Vec<Lap>> {
         self.store().recent_laps(limit)
     }
@@ -616,6 +623,10 @@ impl BinIt {
             recorded_at: now,
         };
         lap.id = store.insert_lap(&lap, completed.profile.as_ref(), completed.trace.as_ref())?;
+        if !completed.penalties.is_empty() {
+            let pins: Vec<PenaltyPin> = completed.penalties.iter().map(PenaltyPin::from).collect();
+            store.set_lap_penalties(lap.id, &pins)?;
+        }
 
         // Purple / green / yellow per sector, against every other valid lap on this combo.
         let sector_status = if lap.valid || completed.untimed == Some(UntimedReason::Cut) {
@@ -706,7 +717,8 @@ impl BinIt {
             .into_iter()
             .map(|e| {
                 let profile = store.lap_profile(e.lap_id)?.map(|p| p.0);
-                Ok(ReplayEntry { position: e.position, driver_id: e.driver_id, lap_id: e.lap_id, time_ms: e.time_ms, profile })
+                let penalties = store.lap_penalties(e.lap_id)?;
+                Ok(ReplayEntry { position: e.position, driver_id: e.driver_id, lap_id: e.lap_id, time_ms: e.time_ms, profile, penalties })
             })
             .collect()
     }
@@ -819,7 +831,7 @@ impl BinIt {
                 } else {
                     None
                 };
-                let live = LiveView { driving, phase: phase.key(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), map_spoiled, lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
+                let live = LiveView { driving, phase: phase.key(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), penalties: penalties.iter().map(PenaltyPin::from).collect(), map_spoiled, lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
                 rt.live = Some(live.clone());
                 drop(rt);
                 self.emit(AppEvent::Live { live });
