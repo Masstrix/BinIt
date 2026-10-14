@@ -6,6 +6,17 @@ export function lapTime(ms: number | null | undefined): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}.${String(millis).padStart(3, "0")}`;
 }
 
+/** The time the penalties taken so far have added, in ms. */
+export function penaltyTotalMs(penalties: { addedMs: number }[] | null | undefined): number {
+  return (penalties ?? []).reduce((sum, p) => sum + p.addedMs, 0);
+}
+
+/** "+12s" for whole seconds, "+12.5s" otherwise. */
+export function penaltyText(ms: number): string {
+  const s = ms / 1000;
+  return `+${Number.isInteger(s) ? s : s.toFixed(1)}s`;
+}
+
 export function gap(ms: number): string {
   if (ms === 0) return "—";
   return `+${(ms / 1000).toFixed(3)}`;

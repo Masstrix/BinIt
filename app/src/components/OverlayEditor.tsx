@@ -17,7 +17,8 @@ import { OverlayFocusToggle, OverlayShowPicker, OverlayToggle } from "./OverlayT
 import {
   LeaderboardCard,
   QrCard,
-  MOCK_DATA,
+  previewData,
+  type OverlayData,
   MOCK_TOAST,
   SectionWidgets,
   StandingsCard,
@@ -95,6 +96,8 @@ export function OverlayEditor() {
   const overlayOn = status?.overlayEnabled ?? true;
   const [game, setGame] = useState(status?.game ?? "acevo");
   const { layout, save, reset, custom, profile } = useOverlayLayout(game);
+  // Example data, worded for the game being edited (a rally game also shows a time penalty).
+  const preview = previewData(game);
 
   const [selected, setSelected] = useState<WidgetId | null>(null);
   const [dragging, setDragging] = useState<WidgetId | null>(null);
@@ -366,7 +369,7 @@ export function OverlayEditor() {
             if (!items?.length) return null;
             return (
               <div key={a} data-anchor={a} style={{ ...anchorStyle(a, profile), pointerEvents: "auto" }}>
-                <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={itemProps} />
+                <SectionWidgets items={items} data={preview} toast={null} preview itemProps={itemProps} />
               </div>
             );
           })}
@@ -439,7 +442,7 @@ export function OverlayEditor() {
               </div>
               <div className="ed-preview" style={{ pointerEvents: "none" }}>
                 <div style={{ zoom: compact ? (w === "leaderboard" ? 0.9 : w === "standings" ? 0.95 : 0.85) : w === "leaderboard" ? 0.42 : w === "standings" ? 0.5 : 0.62 }}>
-                  <WidgetPreview w={w} />
+                  <WidgetPreview w={w} data={preview} />
                 </div>
               </div>
               <span className="muted" style={{ fontSize: 12 }}>{WIDGETS[w].description}</span>
@@ -506,12 +509,12 @@ export function OverlayEditor() {
 }
 
 /** One widget on its own, with example data, for the tray. */
-function WidgetPreview({ w }: { w: WidgetId }) {
-  if (WIDGETS[w].compact) return <StripCard items={[w]} data={MOCK_DATA} />;
-  if (w === "standings") return <StandingsCard data={MOCK_DATA} />;
-  if (w === "timing") return <TimingCard data={MOCK_DATA} />;
-  if (w === "leaderboard") return <LeaderboardCard data={MOCK_DATA} />;
-  if (w === "qr") return <QrCard data={MOCK_DATA} />;
+function WidgetPreview({ w, data }: { w: WidgetId; data: OverlayData }) {
+  if (WIDGETS[w].compact) return <StripCard items={[w]} data={data} />;
+  if (w === "standings") return <StandingsCard data={data} />;
+  if (w === "timing") return <TimingCard data={data} />;
+  if (w === "leaderboard") return <LeaderboardCard data={data} />;
+  if (w === "qr") return <QrCard data={data} />;
   return <ToastCard toast={MOCK_TOAST} animate={false} />;
 }
 

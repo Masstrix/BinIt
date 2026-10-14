@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { api, useAppState, useDriverMap, useTrackMaps } from "../api";
 import { findMap } from "../catalogueItems";
-import { carName, lapTime, trackName } from "../format";
+import { carName, lapTime, penaltyText, penaltyTotalMs, trackName } from "../format";
 import type { SectorStatus } from "../api";
 import { Helmet } from "./Helmet";
 import { words } from "../vocab";
+import { PenaltyIcon } from "./PenaltyIcon";
 import { penaltyPins, TrackMap } from "./TrackMap";
 
 /**
@@ -60,6 +61,8 @@ export function LiveMap() {
   const timing = live.timing;
   const sectorColours = timing ? timing.sectors.map((x) => SECTOR_COLOURS[x.status]) : session.boundaries.slice(1).map(() => SECTOR_COLOURS.pending);
   const driver = status?.seat != null ? drivers.get(status.seat) : undefined;
+  // What the game's penalties have added to this run so far (already inside the clock).
+  const penalty = penaltyTotalMs(live.penalties);
 
   return (
     <section className="card livemap" aria-label="Live map">
@@ -71,8 +74,16 @@ export function LiveMap() {
             <h2 style={{ marginTop: 2, overflowWrap: "anywhere" }}>{driver?.name ?? "Guest"}</h2>
           </div>
         </div>
+        <span style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
+        {penalty > 0 && (
+          <span className="chip penalty mono" style={{ fontSize: 14 }} title={`${live.penalties.length} time ${live.penalties.length === 1 ? "penalty" : "penalties"} so far this ${w.lap}`}>
+            <PenaltyIcon size={14} />
+            {penaltyText(penalty)}
+          </span>
+        )}
         <span className="chip plain mono" style={{ fontSize: 16, ...(!live.outLap && !live.lapValid ? { background: "rgba(255,107,138,0.18)", color: "#FF8BA3" } : {}) }}>
           {live.outLap ? `Out ${w.lap}` : !live.lapValid ? <><s style={{ opacity: 0.7 }}>{lapTime(live.currentLapMs)}</s>&nbsp;{live.voidReason === "driverChange" ? "Driver changed" : "Invalid"}</> : lapTime(live.currentLapMs)}
+        </span>
         </span>
       </div>
       <div className="livemap-frame">

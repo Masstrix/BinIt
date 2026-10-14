@@ -3,9 +3,10 @@ import { api, isTauri, openDownload, useAppState, useCurrentChallenge, useDriver
 import { Helmet, Sparkle } from "../components/Helmet";
 import { LiveMap } from "../components/LiveMap";
 import { useSeatSwitcher } from "../components/SeatSwitcher";
+import { PenaltyIcon } from "../components/PenaltyIcon";
 import { Podium } from "../components/Podium";
 import { cap, words } from "../vocab";
-import { ago, carName, countdown, gap, LAP_BADGE, lapKind, lapTime, trackName } from "../format";
+import { ago, carName, countdown, gap, LAP_BADGE, lapKind, lapTime, penaltyText, penaltyTotalMs, trackName } from "../format";
 
 export function Home() {
   const { status, drivers, recentLaps } = useAppState();
@@ -16,6 +17,8 @@ export function Home() {
   // Cut / off the track: the game has invalidated this lap (not just an out lap from the pits).
   const cutLap = !!(status?.live?.driving && !status.live.outLap && !status.live.lapValid);
   const swapped = cutLap && status?.live?.voidReason === "driverChange";
+  // Time the game's penalties have added to the run in progress (it is already inside the clock).
+  const penalty = status?.live?.driving ? penaltyTotalMs(status.live.penalties) : 0;
   const { challenge, board } = useCurrentChallenge();
 
   const comboBoard = useFetch(
@@ -64,6 +67,12 @@ export function Home() {
           <div className={`stat${cutLap ? " invalid" : ""}`}>
             <div className="label" style={{ color: "#fff", opacity: 0.85 }}>{swapped ? "Driver changed" : cutLap ? `${cap(w.lap)} invalid` : `Current ${w.lap}`}</div>
             <span className="mono">{status?.live?.driving ? lapTime(status.live.currentLapMs) : "--:--.---"}</span>
+            {penalty > 0 && (
+              <span className="stat-penalty mono" title="Time penalties this run, already in the clock">
+                <PenaltyIcon size={13} />
+                {penaltyText(penalty)} penalty
+              </span>
+            )}
           </div>
           <div className="stat">
             <div className="label" style={{ color: "#fff", opacity: 0.85 }}>Last {w.lap}</div>

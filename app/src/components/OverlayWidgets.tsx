@@ -3,10 +3,11 @@
 
 import { useCallback, useEffect, useState, type HTMLAttributes, type ReactNode } from "react";
 import { api, type LiveTiming, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
-import { lapKind, lapTime, trackName } from "../format";
+import { lapKind, lapTime, penaltyText, penaltyTotalMs, trackName } from "../format";
 import { words } from "../vocab";
 import { WIDGETS, type WidgetId } from "../overlayLayout";
 import { Crown, Helmet } from "./Helmet";
+import { PenaltyIcon } from "./PenaltyIcon";
 import { QrCode } from "./QrCode";
 
 const card = {
@@ -36,6 +37,8 @@ export interface OverlayData {
   lapInvalid: boolean;
   /** "driverChange" when the seat changed hands mid-lap. */
   lapVoidReason: string | null;
+  /** Time the game's penalties have added to the run in progress, ms (already inside the clock). */
+  penaltyMs: number;
   outLap: boolean;
   /** Address phones on the network can open (null when sharing is off or there is no network). */
   url: string | null;
@@ -86,6 +89,7 @@ export function useOverlayData(): OverlayData {
     lapMs: status?.live?.currentLapMs ?? 0,
     lapInvalid: !!(status?.live?.driving && !status.live.outLap && !status.live.lapValid),
     lapVoidReason: status?.live?.voidReason ?? null,
+    penaltyMs: status?.live?.driving ? penaltyTotalMs(status.live.penalties) : 0,
     outLap: !!(status?.live?.driving && status.live.outLap),
     url,
   };
@@ -126,9 +130,19 @@ export const MOCK_DATA: OverlayData = {
   lapMs: 71500,
   lapInvalid: false,
   lapVoidReason: null,
+  penaltyMs: 0,
   outLap: false,
   url: "http://192.168.0.20:7878",
 };
+
+/**
+ * The example data for a game's preview: the same example run, worded for the game (stages and runs for a
+ * rally game), and for a rally game one time penalty already taken, so the penalty row shows in the preview.
+ */
+export function previewData(game: string): OverlayData {
+  const rally = words(game).rally;
+  return { ...MOCK_DATA, game, penaltyMs: rally ? 4000 : 0 };
+}
 
 export const MOCK_TOAST: Toast = { id: 0, tone: "pb", title: "New PB 1:42.318", detail: "Up to P2 in Imola Hot Lap Week" };
 
@@ -248,6 +262,27 @@ export function TimingCard({ data }: { data: OverlayData }) {
         <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, color: "#FF6B8A" }}>{data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : `${words(data.game).lap.toUpperCase()} INVALID`}</span>
           <span style={{ fontSize: 11, color: "#FF8BA3", fontWeight: 600 }}>WON'T BE TIMED</span>
+        </span>
+      )}
+      {data.penaltyMs > 0 && (
+        <span
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 12,
+            padding: "6px 10px",
+            borderRadius: 10,
+            color: "var(--gold)",
+            background: "rgba(255,201,60,0.12)",
+            border: "1px solid rgba(255,201,60,0.35)",
+          }}
+        >
+          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 800, letterSpacing: 1 }}>
+            <PenaltyIcon size={15} />
+            PENALTY
+          </span>
+          <span className="mono" style={{ fontSize: 15, fontWeight: 700 }}>{penaltyText(data.penaltyMs)}</span>
         </span>
       )}
       <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, ...(cut ? { opacity: 0.55, textDecoration: "line-through" } : {}) }}>
