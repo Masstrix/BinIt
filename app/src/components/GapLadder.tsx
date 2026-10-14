@@ -17,12 +17,12 @@ export interface LadderCar {
  * The room a gap between two neighbours takes: grows with the gap but less than in step with it, so
  * a 0.2 s fight mid-pack still shows when someone else is 15 s back.
  */
-const room = (ms: number) => Math.sqrt(Math.max(ms, 0) / 1000);
+export const room = (ms: number) => Math.sqrt(Math.max(ms, 0) / 1000);
 /**
  * The ladder's smallest size, in `room` units: a field with less room between it than this sits
  * near the top instead of being stretched to fill the ladder. 2 is one 4 s gap, or two 1 s gaps.
  */
-const BASE = 2;
+export const BASE = 2;
 /** The closest two cars get (fraction of the ladder), so each keeps room for its letters and the gap between them. */
 const MIN_SPACING = 0.14;
 /** How quickly (ms, time constant) the ladder grows to fit a field spreading out, and shrinks as it closes up. */
@@ -31,7 +31,7 @@ const SHRINK_MS = 1500;
 /** Longer than this between frames is a jump (paused, a click on the timeline): the ladder snaps to size. */
 const JUMP_MS = 200;
 
-function gapText(ms: number): string {
+export function gapText(ms: number): string {
   return ms < 60000 ? `+${(ms / 1000).toFixed(ms < 10000 ? 2 : 1)}` : `+${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
 }
 
@@ -45,7 +45,7 @@ export function initials(name: string): string {
  * Where each car sits (0..1 down the ladder), front first: each one below the car ahead by the room
  * its gap takes out of `size`, never closer than `MIN_SPACING`, squeezed back up if that runs off the bottom.
  */
-function place(intervals: number[], size: number): number[] {
+export function place(intervals: number[], size: number): number[] {
   const y = [0];
   for (const ms of intervals) y.push(y[y.length - 1] + room(ms) / size);
   const min = Math.min(MIN_SPACING, intervals.length ? 1 / intervals.length : 1);
