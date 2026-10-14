@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState, type HTMLAttributes, type ReactNode }
 import { api, type LiveTiming, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
 import { lapKind, lapTime, trackName } from "../format";
 import { words } from "../vocab";
-import { WIDGETS, type WidgetId } from "../overlayLayout";
+import { orientationFor, WIDGETS, type Anchor, type Orientation, type WidgetId } from "../overlayLayout";
 import { Crown, Helmet } from "./Helmet";
 import { QrCode } from "./QrCode";
 
@@ -141,6 +141,7 @@ export function hasContent(w: WidgetId, data: OverlayData): boolean {
     case "standings":
       return data.challengeName !== null;
     case "leaderboard":
+    case "tower":
       return data.comboTop.length > 0;
     case "timing":
       return data.timing !== null || data.outLap;
@@ -287,6 +288,74 @@ function deltaColour(ms: number | null) {
 
 function deltaText(ms: number | null) {
   return ms === null ? "--.---" : `${ms <= 0 ? "-" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
+}
+
+/**
+ * The top few drivers on what's being driven, in the style of Gran Turismo's race monitor: a position tag,
+ * the driver's colour, their name and the gap to the leader (the leader shows the time to beat). In a
+ * column it is the tower down the side of the screen; in a row it runs along the top or bottom edge.
+ * The seated driver is picked out, and appended after a break when outside the top few.
+ */
+export function GapTowerCard({ data, orientation = "vertical" }: { data: OverlayData; orientation?: Orientation }) {
+  const rows = data.comboTop;
+  const row = orientation === "horizontal";
+  const gapText = (r: (typeof rows)[number]) => (r.position === 1 ? lapTime(r.timeMs) : `+${(r.gapMs / 1000).toFixed(3)}`);
+  const tag = (r: (typeof rows)[number]) => (
+    <span
+      className="mono"
+      style={{
+        flex: "none",
+        minWidth: 30,
+        padding: "3px 10px 3px 7px",
+        textAlign: "center",
+        fontSize: 15,
+        fontWeight: 800,
+        clipPath: "polygon(0 0, 100% 0, 82% 100%, 0 100%)",
+        background: r.position === 1 ? "var(--gold)" : "rgba(169,174,255,0.22)",
+        color: r.position === 1 ? "#1B1530" : "var(--text)",
+      }}
+    >
+      {r.position}
+    </span>
+  );
+  const seatStyle = (r: (typeof rows)[number]) => (r.isSeat ? { background: "rgba(255,159,107,0.2)", boxShadow: "inset 0 0 0 1px rgba(255,159,107,0.55)" } : {});
+  return (
+    <div
+      style={{
+        ...card,
+        padding: 6,
+        display: "flex",
+        flexDirection: row ? "row" : "column",
+        alignItems: "stretch",
+        gap: 4,
+        minWidth: row ? undefined : 190,
+      }}
+    >
+      {rows.length === 0 && <span className="muted" style={{ fontSize: 13, padding: "4px 8px" }}>No {words(data.game).laps} yet</span>}
+      {rows.map((r, i) => (
+        <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
+          {i === 5 && <span style={row ? { width: 1, background: "var(--line)", margin: "2px 2px" } : { height: 1, background: "var(--line)", margin: "1px 4px" }} />}
+          {row ? (
+            <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 92, padding: "5px 8px", borderRadius: 12, ...seatStyle(r) }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {tag(r)}
+                <span style={{ flex: 1, height: 4, borderRadius: 2, background: r.color }} />
+              </span>
+              <span style={{ fontSize: 14, fontWeight: r.isSeat ? 800 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 110 }}>{r.name}</span>
+              <span className="mono" style={{ fontSize: 13, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}>{gapText(r)}</span>
+            </span>
+          ) : (
+            <span style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 8px 3px 3px", borderRadius: 12, ...seatStyle(r) }}>
+              {tag(r)}
+              <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: r.color, flex: "none" }} />
+              <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: r.isSeat ? 800 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
+              <span className="mono" style={{ fontSize: 13, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}>{gapText(r)}</span>
+            </span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 /** Always-visible QR code so anyone in the room can scan it to open Bin It on their phone. */
@@ -437,12 +506,15 @@ export function SectionWidgets({
   toast,
   preview = false,
   itemProps,
+  anchor,
 }: {
   items: WidgetId[];
   data: OverlayData;
   toast: Toast | null;
   preview?: boolean;
   itemProps?: ItemProps;
+  /** The section these sit in, for a widget (the gap tower) that lays itself out to suit its place. */
+  anchor?: Anchor;
 }) {
   const visible = preview ? items : items.filter((w) => hasContent(w, data));
   const groups: (WidgetId[] | WidgetId)[] = [];
@@ -463,6 +535,7 @@ export function SectionWidgets({
         if (g === "standings") return wrap(g, <StandingsCard data={data} />);
         if (g === "timing") return wrap(g, <TimingCard data={data} />);
         if (g === "leaderboard") return wrap(g, <LeaderboardCard data={data} />);
+        if (g === "tower") return wrap(g, <GapTowerCard data={data} orientation={orientationFor(anchor)} />);
         if (g === "qr") return wrap(g, <QrCard data={data} />);
         const shown = toast ?? (preview ? MOCK_TOAST : null);
         return shown ? wrap(g, <ToastCard toast={shown} animate={!preview} />) : null;

@@ -15,6 +15,7 @@ import {
 import { GameLabel } from "./GameIcon";
 import { OverlayFocusToggle, OverlayShowPicker, OverlayToggle } from "./OverlayToggle";
 import {
+  GapTowerCard,
   LeaderboardCard,
   QrCard,
   MOCK_DATA,
@@ -366,7 +367,7 @@ export function OverlayEditor() {
             if (!items?.length) return null;
             return (
               <div key={a} data-anchor={a} style={{ ...anchorStyle(a, profile), pointerEvents: "auto" }}>
-                <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={itemProps} />
+                <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={itemProps} anchor={a} />
               </div>
             );
           })}
@@ -511,6 +512,7 @@ function WidgetPreview({ w }: { w: WidgetId }) {
   if (w === "standings") return <StandingsCard data={MOCK_DATA} />;
   if (w === "timing") return <TimingCard data={MOCK_DATA} />;
   if (w === "leaderboard") return <LeaderboardCard data={MOCK_DATA} />;
+  if (w === "tower") return <GapTowerCard data={MOCK_DATA} />;
   if (w === "qr") return <QrCard data={MOCK_DATA} />;
   return <ToastCard toast={MOCK_TOAST} animate={false} />;
 }
