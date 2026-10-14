@@ -257,6 +257,7 @@ impl GameAdapter for AcAdapter {
                 sectors_ms: Vec::new(),
                 profile: lap.profile,
                 trace: lap.trace,
+                penalties: Vec::new(),
             }));
         }
 
@@ -277,6 +278,7 @@ impl GameAdapter for AcAdapter {
                 lap_progress: g.progress.clamp(0.0, 1.0),
                 position: player_position(&g),
                 inputs: s.inputs,
+                penalties: Vec::new(),
             }));
         }
 

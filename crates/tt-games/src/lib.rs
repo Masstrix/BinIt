@@ -43,11 +43,13 @@ pub enum GameId {
     AssettoCorsaEvo,
     AssettoCorsa,
     AssettoCorsaRally,
+    DirtRally2,
 }
 
 impl GameId {
     /// Every game that has an adapter.
-    pub const ALL: [GameId; 3] = [GameId::AssettoCorsaEvo, GameId::AssettoCorsa, GameId::AssettoCorsaRally];
+    pub const ALL: [GameId; 4] =
+        [GameId::AssettoCorsaEvo, GameId::AssettoCorsa, GameId::AssettoCorsaRally, GameId::DirtRally2];
 
     /// The id stored with laps, challenges and maps. Never change one once data exists under it.
     pub fn key(self) -> &'static str {
@@ -55,6 +57,7 @@ impl GameId {
             GameId::AssettoCorsaEvo => "acevo",
             GameId::AssettoCorsa => "ac",
             GameId::AssettoCorsaRally => "acr",
+            GameId::DirtRally2 => "dr2",
         }
     }
 
@@ -63,6 +66,7 @@ impl GameId {
             GameId::AssettoCorsaEvo => "Assetto Corsa EVO",
             GameId::AssettoCorsa => "Assetto Corsa",
             GameId::AssettoCorsaRally => "Assetto Corsa Rally",
+            GameId::DirtRally2 => "DiRT Rally 2.0",
         }
     }
 }
@@ -108,6 +112,22 @@ pub struct CompletedLap {
     pub profile: Option<timing::TimingProfile>,
     /// What the driver did through the lap (pedals, steering, gear, speed), for comparing laps.
     pub trace: Option<timing::LapTrace>,
+    /// Time penalties the game added during a stage run (empty for circuit laps and for games whose data
+    /// doesn't show them). Their seconds are already inside `time_ms`.
+    pub penalties: Vec<Penalty>,
+}
+
+/// A time penalty the game added to a stage run.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Penalty {
+    /// The stage clock just before the penalty landed, in ms.
+    pub at_ms: u32,
+    /// How much time it added, in ms.
+    pub added_ms: u32,
+    /// How far along the stage the car was, 0.0..1.0.
+    pub progress: f32,
+    /// Where the car was (world x, z), when the game reports it.
+    pub position: Option<[f32; 2]>,
 }
 
 /// Why a completed lap isn't a timed lap.
@@ -199,6 +219,8 @@ pub struct LiveState {
     pub position: Option<[f32; 2]>,
     /// Pedals, steering and gear, when the game reports them.
     pub inputs: Option<Inputs>,
+    /// Time penalties the game has added so far in this stage run (none for games that don't show them).
+    pub penalties: Vec<Penalty>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -229,7 +251,12 @@ pub trait GameAdapter: Send {
 
 /// One adapter per supported game. This is the single place a new game is registered.
 pub fn adapters() -> Vec<Box<dyn GameAdapter>> {
-    vec![Box::new(acevo::AcEvoAdapter::new()), Box::new(ac::AcAdapter::new()), Box::new(acr::AcrAdapter::new())]
+    vec![
+        Box::new(acevo::AcEvoAdapter::new()),
+        Box::new(ac::AcAdapter::new()),
+        Box::new(acr::AcrAdapter::new()),
+        Box::new(dr2::Dr2Adapter::new()),
+    ]
 }
 
 /// Runs every game's adapter, one game at a time.
@@ -365,7 +392,7 @@ mod watcher_tests {
     #[test]
     fn every_game_has_a_distinct_key_and_an_adapter() {
         let keys: Vec<_> = GameId::ALL.iter().map(|g| g.key()).collect();
-        assert_eq!(keys, vec!["acevo", "ac", "acr"]);
+        assert_eq!(keys, vec!["acevo", "ac", "acr", "dr2"]);
         let adapter_games: Vec<_> = adapters().iter().map(|a| a.game()).collect();
         assert_eq!(adapter_games, GameId::ALL.to_vec());
         for game in GameId::ALL {

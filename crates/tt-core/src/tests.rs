@@ -15,7 +15,7 @@ fn session(car: &str) -> SessionInfo {
 
 fn lap(time_ms: u32, valid: bool) -> CompletedLap {
     let untimed = (!valid).then_some(UntimedReason::Cut);
-    CompletedLap { session: session("Porsche 992 GT3 R"), lap_number: 1, time_ms, valid, untimed, sectors_ms: vec![], profile: None, trace: None }
+    CompletedLap { session: session("Porsche 992 GT3 R"), lap_number: 1, time_ms, valid, untimed, sectors_ms: vec![], profile: None, trace: None, penalties: vec![] }
 }
 
 fn untimed_lap(time_ms: u32, reason: UntimedReason) -> CompletedLap {
@@ -298,7 +298,7 @@ fn live_timing_compares_against_the_seated_drivers_pb() {
     tt.record_lap(&profiled_lap(100_000)).unwrap();
 
     let mut rx = tt.subscribe();
-    let live = |p: f32, t: u32| GameEvent::Live(tt_games::LiveState { driving: true, phase: tt_games::GamePhase::Driving, current_lap_ms: t, lap_valid: true, out_lap: false, lap_progress: p, position: None, inputs: None });
+    let live = |p: f32, t: u32| GameEvent::Live(tt_games::LiveState { driving: true, phase: tt_games::GamePhase::Driving, current_lap_ms: t, lap_valid: true, out_lap: false, lap_progress: p, position: None, inputs: None, penalties: vec![] });
     tt.handle_game_event(live(0.0, 0)).unwrap();
     tt.handle_game_event(live(0.25, 24_000)).unwrap();
     tt.handle_game_event(live(0.40, 38_500)).unwrap();
@@ -334,6 +334,7 @@ fn a_clean_lap_teaches_the_track_map_once_and_flags_the_catalogue() {
                 lap_progress: p,
                 position: Some([a.cos() * radius, a.sin() * radius]),
                 inputs: None,
+                penalties: vec![],
             }))
             .unwrap();
         }
@@ -384,11 +385,11 @@ fn simulate_widget(laps_after_out: u32, counted_out_lap: bool) -> Vec<(String, b
             let cur = if from_pits && !counted { 0 } else { (p * lap_ms as f32 - start * lap_ms as f32).max(0.0) as i32 };
             let s = Sample { status: tt_games::acevo::layout::STATUS_LIVE, lap_count: *lap_count, last_lap_ms: *last_lap, current_lap_ms: cur, lap_valid: true, in_pit_lane: from_pits && p < 0.55, progress: p, inputs: None };
             if let Some(l) = tr.update(s) {
-                tt.handle_game_event(GameEvent::LapCompleted(CompletedLap { session: session("Porsche 992 GT3 R"), lap_number: l.lap_number, time_ms: l.time_ms, valid: l.untimed.is_none(), untimed: l.untimed, sectors_ms: vec![], profile: l.profile, trace: l.trace })).unwrap();
+                tt.handle_game_event(GameEvent::LapCompleted(CompletedLap { session: session("Porsche 992 GT3 R"), lap_number: l.lap_number, time_ms: l.time_ms, valid: l.untimed.is_none(), untimed: l.untimed, sectors_ms: vec![], profile: l.profile, trace: l.trace, penalties: vec![] })).unwrap();
             }
             step += 1;
             if step % 2 == 0 {
-                tt.handle_game_event(GameEvent::Live(tt_games::LiveState { driving: true, phase: tt_games::GamePhase::Driving, current_lap_ms: cur.max(0) as u32, lap_valid: true, out_lap: tr.on_out_lap(), lap_progress: p, position: None, inputs: None })).unwrap();
+                tt.handle_game_event(GameEvent::Live(tt_games::LiveState { driving: true, phase: tt_games::GamePhase::Driving, current_lap_ms: cur.max(0) as u32, lap_valid: true, out_lap: tr.on_out_lap(), lap_progress: p, position: None, inputs: None, penalties: vec![] })).unwrap();
                 while let Ok(ev) = rx.try_recv() {
                     if let AppEvent::Live { live } = ev && (((p * 100.0) as u32) % 20 == 10 || (p * 100.0) as u32 == 1) && out.last().is_none_or(|r| r.0 != format!("{lap_label}@{}%", (p * 100.0) as u32)) {
                         out.push((format!("{lap_label}@{}%", (p * 100.0) as u32), live.out_lap, live.timing.is_some(), live.timing.as_ref().and_then(|t| t.delta_ms), live.timing.as_ref().map_or(0, |t| t.sectors.iter().filter(|s| s.time_ms.is_some()).count())));
@@ -481,7 +482,7 @@ fn the_reference_is_only_called_pb_when_it_is_the_pb() {
     tt.record_lap(&profiled_lap(55_668)).unwrap();
 
     let mut rx = tt.subscribe();
-    let live = |p: f32, t: u32| GameEvent::Live(tt_games::LiveState { driving: true, phase: tt_games::GamePhase::Driving, current_lap_ms: t, lap_valid: true, out_lap: false, lap_progress: p, position: None, inputs: None });
+    let live = |p: f32, t: u32| GameEvent::Live(tt_games::LiveState { driving: true, phase: tt_games::GamePhase::Driving, current_lap_ms: t, lap_valid: true, out_lap: false, lap_progress: p, position: None, inputs: None, penalties: vec![] });
     tt.handle_game_event(live(0.0, 0)).unwrap();
     tt.handle_game_event(live(0.3, 16_000)).unwrap();
     let mut label = None;
@@ -600,6 +601,7 @@ fn the_overlay_knows_whether_the_game_is_driving_paused_or_in_a_menu() {
             lap_progress: 0.0,
             position: None,
             inputs: None,
+            penalties: vec![],
         }))
         .unwrap();
     }
@@ -659,6 +661,7 @@ fn driving(p: f32) -> GameEvent {
         lap_progress: p,
         position: None,
         inputs: None,
+        penalties: vec![],
     })
 }
 
@@ -735,6 +738,7 @@ fn out_lap_at(p: f32) -> GameEvent {
         lap_progress: p,
         position: None,
         inputs: None,
+        penalties: vec![],
     })
 }
 

@@ -227,6 +227,7 @@ impl GameAdapter for AcrAdapter {
             length_m: (s.length_m > 0.0).then_some(s.length_m),
             updating,
             inputs: Some(inputs(&p)),
+            position: player_position(&g),
         };
         if let Some(done) = self.tracker.update(stage)
             && let Some(session) = self.session.clone()
@@ -240,6 +241,7 @@ impl GameAdapter for AcrAdapter {
                 sectors_ms: Vec::new(),
                 profile: done.profile,
                 trace: done.trace,
+                penalties: done.penalties,
             }));
         }
 
@@ -258,6 +260,7 @@ impl GameAdapter for AcrAdapter {
                 lap_progress: progress(&g, &s),
                 position: player_position(&g),
                 inputs: Some(inputs(&p)),
+                penalties: Vec::new(),
             }));
         }
 
@@ -330,6 +333,7 @@ mod tests {
                 length_m: Some(12_077.0),
                 updating: last_packet != Some(packet),
                 inputs: None,
+                position: None,
             };
             last_packet = Some(packet);
             if let Some(done) = tracker.update(sample) {
@@ -365,6 +369,7 @@ mod tests {
                 length_m: Some(5_600.0),
                 updating: last_packet != Some(packet),
                 inputs: None,
+                position: None,
             };
             last_packet = Some(packet);
             found.extend(tracker.update(sample));

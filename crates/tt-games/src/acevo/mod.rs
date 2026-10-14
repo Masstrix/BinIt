@@ -272,6 +272,7 @@ impl GameAdapter for AcEvoAdapter {
                 sectors_ms: Vec::new(),
                 profile: lap.profile,
                 trace: lap.trace,
+                penalties: Vec::new(),
             }));
         }
 
@@ -292,6 +293,7 @@ impl GameAdapter for AcEvoAdapter {
                 lap_progress: g.npos.clamp(0.0, 1.0),
                 position: player_position(&g),
                 inputs: Some(inputs(&g)),
+                penalties: Vec::new(),
             }));
         }
 

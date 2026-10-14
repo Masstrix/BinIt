@@ -15,8 +15,9 @@ crates/tt-games/src/<game>/
 ```
 
 `ac/` (Assetto Corsa) is the model to copy for another shared-memory circuit game; `acevo/` is the
-first one; `acr/` (Assetto Corsa Rally) is the model for a rally game. `dr2/` holds only a catalogue so
-far.
+first one; `acr/` (Assetto Corsa Rally) is the model for a rally game; `dr2/` (DiRT Rally 2.0) is the model for
+a game read over UDP. What each game's data contains is tabulated in `telemetry-data.md`: add the new game's
+table there.
 
 ## The shared parts a circuit game reuses
 
@@ -78,6 +79,25 @@ meant to be drawn. To check on a machine: list windows top to bottom (`EnumWindo
 confirm the "Bin It overlay" window comes before the game's. A game in true exclusive fullscreen
 can't be drawn over at all; it needs borderless or windowed.
 
+## UDP games (DiRT Rally 2.0)
+
+A game that pushes its telemetry over UDP differs from a shared-memory one in four ways (`dr2/` has each):
+
+* **The port is owned by whoever binds it.** A wheel's software or a dashboard is usually bound already, and
+  unicast UDP reaches only one socket, so Bin It must not share a port. The game has to be told to send a
+  second copy to a port of Bin It's own: `dr2/config.rs` adds a `<udp>` entry to the game's settings file
+  (with a backup) and the adapter binds the first free port from `FIRST_PORT`.
+* **The game may only read that setting at start-up** (DiRT Rally 2.0 does), so adding it while the game runs
+  needs one restart: the adapter reports `ConfigStatus::RestartNeeded` for the UI to say so.
+* **Data is pushed, not polled**: every poll drains the socket and feeds each packet to the tracker, with the
+  receiver (`Receiver`, sockets) kept apart from `Dr2Stream` (packets in, events out) so a recording can be
+  replayed in a test (`dr2/fixtures/penalty_run.csv`).
+* **Names may be missing.** DiRT Rally 2.0 sends no stage or car name: a stage is told apart by its length and
+  a car by its engine, and `dr2/known.json` maps those to names as they are read from the game.
+
+A probe like `examples/dr2_probe.rs` (binds a port, prints the parsed fields, `--raw` records every packet) is how
+the layout was read.
+
 ## Rally games (stages)
 
 A rally game has no laps. A run is a stage: it starts when the clock starts, ends at a finish line, and the
@@ -103,6 +123,11 @@ driven, stage length, whether the game's data is still changing) and reports fin
   progress still finds its place, and the stored map has `closed = false`, which the UI draws without joining
   the end to the start and with a finish marker. Positions are only recorded while the stage clock is above
   zero (not on the drive-up) and the recorder is reset when the clock jumps back (a restart).
+* **Penalties:** a game whose stage clock jumps forward in one step when it adds a penalty can build its tracker
+  with `StageTracker::with_penalties()`: each jump over 0.5 s is recorded (size, stage clock, progress and world
+  position) and arrives on `CompletedLap::penalties`, ready for a map icon. Leave it off for a game read at a
+  coarse rate, where a hiccup would look like a penalty. A game that says outright when a stage is finished can
+  call `StageTracker::finish_now` with its own time.
 * **Wording:** `app/src/vocab.ts` says what a game's things are called (`words(game)`): a rally game has
   stages and runs, not tracks and laps. Add a rally game's key to `RALLY_GAMES` there; pages that know their
   game use `words(...)`.

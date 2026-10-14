@@ -1,0 +1,5 @@
+{
+  "_comment": "DiRT Rally 2.0's telemetry has no stage or car names. A stage is told apart by its length in metres (matched within 2 m), a car by its engine: max and idle rpm (within 15 rpm) and gear count. Add an entry once you have read one from the game and know what it is.",
+  "stages": [],
+  "cars": []
+}

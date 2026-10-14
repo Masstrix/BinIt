@@ -772,7 +772,7 @@ impl BinIt {
                 self.learn_map(&lap)?;
                 self.record_lap(&lap)?;
             }
-            GameEvent::Live(LiveState { driving, phase, current_lap_ms, lap_valid, out_lap, lap_progress, position, inputs }) => {
+            GameEvent::Live(LiveState { driving, phase, current_lap_ms, lap_valid, out_lap, lap_progress, position, inputs, penalties: _ }) => {
                 let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
                 let timing = if out_lap {
                     rt.timing.pause();

@@ -14,7 +14,7 @@
 //!
 //! Kept free of any I/O so it can be tested with synthetic samples.
 
-use crate::UntimedReason;
+use crate::{Penalty, UntimedReason};
 use crate::timing::{LapTrace, ProfileRecorder, TimingProfile};
 
 /// One reading of the game's stage data.
@@ -32,6 +32,8 @@ pub struct StageSample {
     pub updating: bool,
     /// What the driver is doing, for the run's trace.
     pub inputs: Option<crate::Inputs>,
+    /// Where the car is (world x, z), kept with a penalty so it can be shown on the map.
+    pub position: Option<[f32; 2]>,
 }
 
 /// A stage run that reached the finish line.
@@ -47,6 +49,8 @@ pub struct DetectedStage {
     pub finish_distance_m: f32,
     pub profile: Option<TimingProfile>,
     pub trace: Option<LapTrace>,
+    /// Penalties noticed during the run (only when the tracker was built to look for them).
+    pub penalties: Vec<Penalty>,
 }
 
 /// A run starts with the clock this close to zero. The distance says nothing here: games where the driver
@@ -59,6 +63,11 @@ const MIN_FINISH_PROGRESS: f32 = 0.9;
 /// The clock jumping back by more than this, or the distance by more than this, is a restart.
 const RESTART_CLOCK_MS: u32 = 1_000;
 const RESTART_DISTANCE_M: f32 = 200.0;
+/// A stage clock that moves forward by more than this between two readings is a time penalty: the game
+/// adds the seconds in one step (a normal reading is ~17 ms on, and a missed one ~33 ms).
+const PENALTY_MIN_MS: u32 = 500;
+/// Penalty sizes are whole tenths of a second (the game adds a 4.000 s penalty on top of an ordinary tick).
+const PENALTY_ROUND_MS: u32 = 100;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum Phase {
@@ -82,11 +91,34 @@ pub struct StageTracker {
     last_distance: f32,
     /// When the clock last changed value.
     clock_changed_at: u64,
+    /// Look for time penalties (a game whose data shows them as jumps in the stage clock).
+    detect_penalties: bool,
+    penalties: Vec<Penalty>,
+    last_position: Option<[f32; 2]>,
+    last_progress: f32,
 }
 
 impl StageTracker {
+    /// A tracker that also records time penalties, seen as one-step jumps in the stage clock. Only for a
+    /// game whose clock is read at every tick: with a slower reader a hiccup would look like a penalty.
+    pub fn with_penalties() -> Self {
+        Self { detect_penalties: true, ..Self::default() }
+    }
+
+    /// Forgets the run in progress. Keeps whether penalties are looked for.
     pub fn reset(&mut self) {
-        *self = Self::default();
+        *self = Self { detect_penalties: self.detect_penalties, ..Self::default() };
+    }
+
+    /// Ends the run now, for a game that says outright when the stage is finished (with the time it
+    /// counts, so nothing is inferred from the clock). Does nothing unless a run is in progress.
+    pub fn finish_now(&mut self, time_ms: u32, distance_m: f32) -> Option<DetectedStage> {
+        (self.phase == Phase::Running).then(|| self.finish(time_ms, distance_m))
+    }
+
+    /// Penalties noticed so far in the run in progress.
+    pub fn penalties(&self) -> &[Penalty] {
+        &self.penalties
     }
 
     /// Past the finish line: the run is over even though the game is still updating while the car rolls.
@@ -122,6 +154,17 @@ impl StageTracker {
                     return None;
                 }
                 let progress = self.progress(&s);
+                if self.detect_penalties && clock > self.last_clock + PENALTY_MIN_MS {
+                    let jump = clock - self.last_clock;
+                    self.penalties.push(Penalty {
+                        at_ms: self.last_clock,
+                        added_ms: (jump + PENALTY_ROUND_MS / 2) / PENALTY_ROUND_MS * PENALTY_ROUND_MS,
+                        progress: self.last_progress,
+                        position: self.last_position,
+                    });
+                }
+                self.last_progress = progress.unwrap_or(self.last_progress);
+                self.last_position = s.position.or(self.last_position);
                 if clock != self.last_clock {
                     self.last_clock = clock;
                     self.clock_changed_at = s.at_ms;
@@ -153,6 +196,9 @@ impl StageTracker {
         // Joining a run that is already under way can't be vouched for.
         self.partial = clock > START_CLOCK_MS;
         self.recorder.reset();
+        self.penalties.clear();
+        self.last_progress = self.progress(s).unwrap_or(0.0);
+        self.last_position = s.position;
         self.last_clock = clock;
         self.last_distance = s.distance_m;
         self.clock_changed_at = s.at_ms;
@@ -168,7 +214,8 @@ impl StageTracker {
         let profile = if self.partial { None } else { self.recorder.finish(time_ms) };
         let trace = if untimed.is_none() { self.recorder.finish_trace(time_ms) } else { None };
         self.recorder.reset();
-        DetectedStage { attempt: self.finished, time_ms, untimed, finish_distance_m, profile, trace }
+        let penalties = std::mem::take(&mut self.penalties);
+        DetectedStage { attempt: self.finished, time_ms, untimed, finish_distance_m, profile, trace, penalties }
     }
 }
 
@@ -202,6 +249,7 @@ mod tests {
                 length_m: Some(LENGTH),
                 updating: true,
                 inputs: None,
+                position: None,
             });
             t += 50;
         }
@@ -258,7 +306,7 @@ mod tests {
         // The countdown before the start: clock at zero, car stationary.
         let mut t = StageTracker::default();
         let waiting: Vec<_> = (0..200)
-            .map(|i| StageSample { at_ms: i * 50, clock_ms: Some(0), distance_m: 0.0, length_m: Some(LENGTH), updating: true, inputs: None })
+            .map(|i| StageSample { at_ms: i * 50, clock_ms: Some(0), distance_m: 0.0, length_m: Some(LENGTH), updating: true, inputs: None, position: None })
             .collect();
         assert!(feed(&mut t, &waiting).is_empty());
         assert!(!t.is_finished());
@@ -281,7 +329,7 @@ mod tests {
     fn going_back_to_the_menus_ends_the_run_without_a_result() {
         let mut t = StageTracker::default();
         feed(&mut t, &run(0, 500.0, FINISH, 0));
-        assert_eq!(t.update(StageSample { at_ms: 99_999, clock_ms: None, distance_m: 0.0, length_m: None, updating: true, inputs: None }), None);
+        assert_eq!(t.update(StageSample { at_ms: 99_999, clock_ms: None, distance_m: 0.0, length_m: None, updating: true, inputs: None, position: None }), None);
         // A fresh run afterwards starts cleanly.
         let done = feed(&mut t, &run(0, LENGTH, FINISH, 200_000));
         assert_eq!((done.len(), done[0].untimed), (1, None));
