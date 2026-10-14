@@ -1087,7 +1087,7 @@ function MiniMap({
   }, [sectorMarks.join(","), span.lo, span.hi]);
 
   // Zoom and turn the map as the viewer chose, following this lap's car.
-  const mapView = useMapView();
+  const mapView = useMapView("analysis");
   const camera = map ? cameraAt(map.points, map.closed, pA, mapView) : undefined;
 
   return (

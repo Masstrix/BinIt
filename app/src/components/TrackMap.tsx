@@ -232,13 +232,22 @@ export const MAP_ZOOMS = [1, 2, 4, 8] as const;
 export type MapZoom = (typeof MAP_ZOOMS)[number];
 
 /**
- * How the viewer likes replay maps framed: zoom (the whole track, or following the car) and whether
- * the map turns so the car heads up the screen. Remembered by this browser and shared by every replay map.
+ * How the viewer likes a map framed: zoom (the whole track, or following the car) and whether the map turns
+ * so the car heads up the screen. Remembered by this browser.
+ *
+ * Each map widget (`scope`: "analysis", "challenge") keeps its own choice, so framing one doesn't change the
+ * others. A widget can be set to follow the shared view instead (`linked`), which every linked widget reads
+ * and writes together.
  */
-export function useMapView() {
-  const [zoom, setZoom] = usePersistedState<MapZoom>("map.zoom", 1, (v) => MAP_ZOOMS.some((z) => z === v));
-  const [carUp, setCarUp] = usePersistedState("map.carUp", false, (v) => typeof v === "boolean");
-  return { zoom, setZoom, carUp, setCarUp };
+export function useMapView(scope: string) {
+  const [linked, setLinked] = usePersistedState(`map.${scope}.linked`, false, (v) => typeof v === "boolean");
+  const [ownZoom, setOwnZoom] = usePersistedState<MapZoom>(`map.${scope}.zoom`, 1, (v) => MAP_ZOOMS.some((z) => z === v));
+  const [ownCarUp, setOwnCarUp] = usePersistedState(`map.${scope}.carUp`, false, (v) => typeof v === "boolean");
+  const [sharedZoom, setSharedZoom] = usePersistedState<MapZoom>("map.zoom", 1, (v) => MAP_ZOOMS.some((z) => z === v));
+  const [sharedCarUp, setSharedCarUp] = usePersistedState("map.carUp", false, (v) => typeof v === "boolean");
+  return linked
+    ? { zoom: sharedZoom, setZoom: setSharedZoom, carUp: sharedCarUp, setCarUp: setSharedCarUp, linked, setLinked }
+    : { zoom: ownZoom, setZoom: setOwnZoom, carUp: ownCarUp, setCarUp: setOwnCarUp, linked, setLinked };
 }
 
 /**
@@ -265,6 +274,20 @@ export function MapViewControls({ view }: { view: ReturnType<typeof useMapView> 
           </button>
         ))}
       </div>
+      <button
+        type="button"
+        className="icon-btn map-view-turn"
+        aria-pressed={view.linked}
+        onClick={() => view.setLinked(!view.linked)}
+        title={view.linked ? "Using the view shared with other maps (tap for this map's own)" : "This map's own view (tap to share one view across maps)"}
+        aria-label={view.linked ? "Map view is shared with other maps" : "Map view is just for this map"}
+      >
+        {/* Two chain links: joined when the view is shared. */}
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+          <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+          <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+        </svg>
+      </button>
       <button
         type="button"
         className="icon-btn map-view-turn"

@@ -83,7 +83,7 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
   const [t, setT] = useState(0);
   // Zoom and turn the map as the viewer chose (shared with the telemetry map), following one car:
   // whoever is in front on track, unless the viewer picked someone in the legend.
-  const mapView = useMapView();
+  const mapView = useMapView("challenge");
   const [followed, setFollowed] = useState<number | null>(null);
   const clock = useRef({ last: 0, t: 0 });
 
