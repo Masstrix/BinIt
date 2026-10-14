@@ -23,26 +23,49 @@ pub struct TrackMap {
     pub closed: bool,
 }
 
+/// A run is seen from its start if recording began with the lap or stage clock this close to zero (ms). Later
+/// than that the recording joined a run already under way, and the stretch before it was never seen.
+const START_CLOCK_MS: u32 = 3_000;
+
 /// Collects positions for the lap in progress.
 pub struct MapRecorder {
     bins: Vec<Option<[f32; 2]>>,
+    /// Recording began part-way through the run (see [`START_CLOCK_MS`]): what it holds is not the whole path.
+    joined_late: bool,
 }
 
 impl Default for MapRecorder {
     fn default() -> Self {
-        Self { bins: vec![None; MAP_POINTS] }
+        Self { bins: vec![None; MAP_POINTS], joined_late: false }
     }
 }
 
 impl MapRecorder {
     pub fn reset(&mut self) {
         self.bins.iter_mut().for_each(|b| *b = None);
+        self.joined_late = false;
     }
 
+    /// A position with no clock to say how far into the run it is (taken as the start of one).
     pub fn record(&mut self, progress: f32, position: [f32; 2]) {
+        self.record_at(progress, position, 0);
+    }
+
+    /// A position `clock_ms` into the lap or stage. The first one after a reset says whether the recording
+    /// began with the run: one that began part-way can never become a map, however well the rest is sampled
+    /// (the part before it is missing, and for a stage the game may have moved the car meanwhile).
+    pub fn record_at(&mut self, progress: f32, position: [f32; 2], clock_ms: u32) {
         if (0.0..1.0).contains(&progress) {
+            if self.bins.iter().all(Option::is_none) {
+                self.joined_late = clock_ms > START_CLOCK_MS;
+            }
             self.bins[(progress * MAP_POINTS as f32) as usize] = Some(position);
         }
+    }
+
+    /// Whether what has been recorded began with the run, and so may still become a map.
+    pub fn is_from_the_start(&self) -> bool {
+        !self.joined_late
     }
 
     /// What has been recorded so far, in driving order, for drawing a map while it is being learned.
@@ -55,7 +78,11 @@ impl MapRecorder {
     /// after bin 0 (a drive-up) and end before the last bin (the stretch past the finish), and the bins
     /// outside that repeat the end points, so the path starts and ends where the stage does.
     pub fn finish_open(&mut self) -> Option<Vec<[f32; 2]>> {
+        let late = std::mem::take(&mut self.joined_late);
         let bins = std::mem::replace(&mut self.bins, vec![None; MAP_POINTS]);
+        if late {
+            return None;
+        }
         let filled: Vec<usize> = (0..MAP_POINTS).filter(|&i| bins[i].is_some()).collect();
         let (&first, &last) = (filled.first()?, filled.last()?);
         let span = last - first;
@@ -91,7 +118,11 @@ impl MapRecorder {
     /// The finished outline, if the lap was sampled well enough (at least 90% of bins and no
     /// long blind stretch). Gaps are filled by straight lines. The recorder is reset.
     pub fn finish(&mut self) -> Option<Vec<[f32; 2]>> {
+        let late = std::mem::take(&mut self.joined_late);
         let bins = std::mem::replace(&mut self.bins, vec![None; MAP_POINTS]);
+        if late {
+            return None;
+        }
         let filled: Vec<usize> = (0..MAP_POINTS).filter(|&i| bins[i].is_some()).collect();
         if filled.len() * 10 < MAP_POINTS * 9 {
             return None;
@@ -189,6 +220,52 @@ mod tests {
             r.record(i as f32 / 400.0, [i as f32 * 10.0, 0.0]);
         }
         assert!(r.finish_open().is_none());
+    }
+
+    #[test]
+    fn a_recording_that_began_part_way_through_the_run_is_never_a_map() {
+        // Joined 40 s in, then every bin from there to the end sampled perfectly: still not the whole path.
+        let mut r = MapRecorder::default();
+        for i in 20..394 {
+            let p = i as f32 / 400.0;
+            r.record_at(p, [p * 5000.0, (p * 12.0).sin() * 300.0], 40_000 + i * 100);
+        }
+        assert!(!r.is_from_the_start());
+        assert!(r.finish_open().is_none());
+
+        // The same path recorded from the start (clock near zero at the first sample) is fine, and the next
+        // recording is judged on its own.
+        for i in 17..394 {
+            let p = i as f32 / 400.0;
+            r.record_at(p, [p * 5000.0, (p * 12.0).sin() * 300.0], 500 + i * 100);
+        }
+        assert!(r.is_from_the_start());
+        assert!(r.finish_open().is_some());
+    }
+
+    #[test]
+    fn a_lap_joined_part_way_is_not_a_map_either() {
+        let mut r = MapRecorder::default();
+        for i in 0..1200 {
+            let p = i as f32 / 1200.0;
+            r.record_at(p, circle(p), if i < 600 { 90_000 } else { 0 });
+        }
+        // It began at 90 s on the clock (the first sample), so it began late.
+        assert!(r.finish().is_none());
+        for i in 0..1200 {
+            let p = i as f32 / 1200.0;
+            r.record_at(p, circle(p), i * 80);
+        }
+        assert!(r.finish().is_some());
+    }
+
+    #[test]
+    fn resetting_forgets_that_the_recording_joined_late() {
+        let mut r = MapRecorder::default();
+        r.record_at(0.5, [0.0, 0.0], 60_000);
+        assert!(!r.is_from_the_start());
+        r.reset();
+        assert!(r.is_from_the_start());
     }
 
     #[test]

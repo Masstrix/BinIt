@@ -363,6 +363,81 @@ fn a_clean_lap_teaches_the_track_map_once_and_flags_the_catalogue() {
     assert!(cat.tracks.iter().any(|t| t.name == "Suzuka" && !t.seen));
 }
 
+#[test]
+fn a_run_with_a_time_penalty_teaches_no_map() {
+    // A penalty means the game moved the car or held it, and nobody knows how far off the road it had been.
+    let tt = BinIt::in_memory().unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
+    let drive = |tt: &BinIt| {
+        for i in 0..800 {
+            let p = i as f32 / 800.0;
+            let a = p * std::f32::consts::TAU;
+            tt.handle_game_event(GameEvent::Live(tt_games::LiveState {
+                driving: true,
+                phase: tt_games::GamePhase::Driving,
+                current_lap_ms: i * 100,
+                lap_valid: true,
+                out_lap: false,
+                lap_progress: p,
+                position: Some([a.cos() * 400.0, a.sin() * 400.0]),
+                inputs: None,
+                penalties: vec![],
+            }))
+            .unwrap();
+        }
+    };
+    let penalty = tt_games::Penalty { at_ms: 8_000, added_ms: 4_000, progress: 0.1, position: Some([0.0, 0.0]) };
+
+    drive(&tt);
+    tt.handle_game_event(GameEvent::LapCompleted(CompletedLap { penalties: vec![penalty], ..lap(100_000, true) })).unwrap();
+    assert!(tt.track_maps("acevo").unwrap().is_empty(), "the penalised run is a result but not a map");
+    assert_eq!(tt.recent_laps(10).unwrap().len(), 1, "and it still counts as a run");
+
+    // The next clean run teaches the map.
+    drive(&tt);
+    tt.handle_game_event(GameEvent::LapCompleted(lap(100_000, true))).unwrap();
+    assert_eq!(tt.track_maps("acevo").unwrap().len(), 1);
+}
+
+#[test]
+fn the_live_view_says_why_a_run_cant_teach_the_map() {
+    let live = |t: u32, valid: bool, penalties: u32| {
+        let penalties = (0..penalties).map(|i| tt_games::Penalty { at_ms: t, added_ms: 4_000, progress: 0.1, position: Some([i as f32, 0.0]) }).collect();
+        GameEvent::Live(tt_games::LiveState {
+            driving: true,
+            phase: tt_games::GamePhase::Driving,
+            current_lap_ms: t,
+            lap_valid: valid,
+            out_lap: false,
+            lap_progress: t as f32 / 100_000.0,
+            position: Some([t as f32, 0.0]),
+            inputs: None,
+            penalties,
+        })
+    };
+    let spoiled = |events: Vec<GameEvent>| {
+        let tt = BinIt::in_memory().unwrap();
+        tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
+        let mut rx = tt.subscribe();
+        for e in events {
+            tt.handle_game_event(e).unwrap();
+        }
+        let mut last = None;
+        while let Ok(ev) = rx.try_recv() {
+            if let AppEvent::Live { live } = ev {
+                last = Some(live.map_spoiled);
+            }
+        }
+        last.expect("a live view")
+    };
+
+    assert_eq!(spoiled(vec![live(1_000, true, 0), live(2_000, true, 0)]), None, "a clean run so far");
+    assert_eq!(spoiled(vec![live(1_000, true, 0), live(9_000, true, 1)]), Some("penalty"));
+    assert_eq!(spoiled(vec![live(60_000, true, 0), live(61_000, true, 0)]), Some("joinedLate"), "first seen a minute in");
+    assert_eq!(spoiled(vec![live(1_000, true, 0), live(2_000, false, 0)]), Some("invalid"));
+    assert_eq!(spoiled(vec![live(60_000, true, 2)]), Some("penalty"), "the penalty is the more useful thing to say");
+}
+
 /// Drives the real AC EVO lap tracker into core like the adapter does, and returns what the
 /// timing widget would show at a few moments of each lap: (label, out_lap, timing?, delta?, sector times).
 fn simulate_widget(laps_after_out: u32, counted_out_lap: bool) -> Vec<(String, bool, bool, Option<i32>, usize)> {

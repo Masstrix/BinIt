@@ -533,6 +533,9 @@ h2 { font-size: 22px; }
 .livemap { display: flex; flex-direction: column; gap: 10px; }
 /* One definite cell, so a child sized `height: 100%` (a map) fits the frame instead of taking its own shape's height. */
 .livemap-frame { aspect-ratio: 4 / 3; width: 100%; max-height: 360px; border-radius: 20px; background: var(--bg); padding: 12px; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; }
+/* Said under a map that is being learned when this run can no longer become the map. */
+.map-spoiled { padding: 8px 12px; border-radius: 12px; background: rgba(255, 201, 60, 0.14); color: #FFD76A; font-size: 13px; line-height: 1.35; }
+.map-spoiled strong { color: #FFE39A; }
 /* A gap ladder down the left, the map beside it. */
 .livemap-frame.with-ladder { grid-template-columns: auto minmax(0, 1fr); place-items: stretch; gap: 8px; }
 /* The map's own box, filling the frame, so a camera has a size to fit to and its controls a corner to float in. */

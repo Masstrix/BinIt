@@ -216,6 +216,8 @@ export interface LiveView {
   outLap: boolean;
   /** Why this lap won't be timed apart from a cut: "driverChange" (the seat changed hands mid-lap). */
   voidReason: string | null;
+  /** Why this lap or stage can't teach the track's map while one is being learned, if it can't. */
+  mapSpoiled: "penalty" | "joinedLate" | "invalid" | null;
   lapProgress: number;
   /** Car position in world metres [x, z]; null when the game doesn't report it. */
   position: [number, number] | null;

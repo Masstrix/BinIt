@@ -86,7 +86,19 @@ export function LiveMap() {
                 <TrackMap points={learned} position={live.position} closed={false} stroke={5} label={`${trackName(session.track, session.layout)} map being drawn`} />
               </div>
             )}
-            <span className="muted">Learning this {w.track}. Finish one clean {w.lap} and its map is kept.</span>
+            {live.mapSpoiled ? (
+              <span className="map-spoiled" role="status">
+                <strong>This {w.lap} won't teach the map.</strong>{" "}
+                {live.mapSpoiled === "penalty"
+                  ? `A penalty was taken, so we can't tell how far off the ${w.track} the car went.`
+                  : live.mapSpoiled === "joinedLate"
+                    ? `It was already under way when Bin It started watching.`
+                    : `It isn't a valid ${w.lap}.`}{" "}
+                Start a clean {w.lap} from the beginning to learn it.
+              </span>
+            ) : (
+              <span className="muted">Learning this {w.track}. Finish one clean {w.lap} and its map is kept.</span>
+            )}
             <div style={{ height: 10, borderRadius: 5, background: "var(--panel-3)", overflow: "hidden" }}>
               <div style={{ width: `${Math.round(live.lapProgress * 100)}%`, height: "100%", background: "var(--violet)" }} />
             </div>

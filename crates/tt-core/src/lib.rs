@@ -101,6 +101,9 @@ pub struct LiveView {
     pub out_lap: bool,
     /// Why the lap in progress won't be timed, besides a cut: "driverChange".
     pub void_reason: Option<&'static str>,
+    /// Why the lap or stage in progress can't teach the track's map, if it can't (shown while a map is being
+    /// learned): "penalty", "joinedLate" (Bin It began watching part-way through) or "invalid".
+    pub map_spoiled: Option<&'static str>,
     pub lap_progress: f32,
     /// Car position in world metres (x, z), for the live map.
     pub position: Option<[f32; 2]>,
@@ -772,7 +775,7 @@ impl BinIt {
                 self.learn_map(&lap)?;
                 self.record_lap(&lap)?;
             }
-            GameEvent::Live(LiveState { driving, phase, current_lap_ms, lap_valid, out_lap, lap_progress, position, inputs, penalties: _ }) => {
+            GameEvent::Live(LiveState { driving, phase, current_lap_ms, lap_valid, out_lap, lap_progress, position, inputs, penalties }) => {
                 let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
                 let timing = if out_lap {
                     rt.timing.pause();
@@ -791,7 +794,7 @@ impl BinIt {
                 // On a stage the path starts when the clock does, not at the drive-up to the line.
                 let on_course = !stage || current_lap_ms > 0;
                 if let (true, false, true, true, Some(pos)) = (driving, out_lap, rt.session_info.is_some(), on_course, position) {
-                    rt.map.record(lap_progress, pos);
+                    rt.map.record_at(lap_progress, pos, current_lap_ms);
                 }
                 // Crossing the line starts a new lap. A swap during an out lap (a handover in the pits) is
                 // fine: that lap isn't timed. A swap during a timed lap voids it when its result arrives.
@@ -807,7 +810,16 @@ impl BinIt {
                 rt.last_out_lap = out_lap;
                 let changed = rt.lap_driver_changed && !out_lap;
                 let lap_valid = lap_valid && !changed;
-                let live = LiveView { driving, phase: phase.key(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
+                let map_spoiled = if !penalties.is_empty() {
+                    Some("penalty")
+                } else if !rt.map.is_from_the_start() {
+                    Some("joinedLate")
+                } else if !lap_valid && !out_lap {
+                    Some("invalid")
+                } else {
+                    None
+                };
+                let live = LiveView { driving, phase: phase.key(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), map_spoiled, lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
                 rt.live = Some(live.clone());
                 drop(rt);
                 self.emit(AppEvent::Live { live });
@@ -823,7 +835,7 @@ impl BinIt {
         self.runtime.lock().expect("runtime mutex poisoned").map.partial()
     }
 
-    /// Keeps the outline of a clean lap as the track's map, if the track has none yet.
+    /// Keeps the outline of a clean lap (no cut, no penalty) as the track's map, if the track has none yet.
     fn learn_map(&self, lap: &CompletedLap) -> Result<()> {
         let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
         // A circuit's outline is a closed loop; a rally stage runs from one place to another and is kept
@@ -831,7 +843,9 @@ impl BinIt {
         let closed = lap.session.timing != TimingKind::RallyStage;
         let points = if closed { rt.map.finish() } else { rt.map.finish_open() };
         drop(rt);
-        let (true, Some(points)) = (lap.valid && lap.untimed.is_none(), points) else { return Ok(()) };
+        // A penalised run teaches nothing either: the game puts the car back on the road (or holds it) when it
+        // adds one, and we can't tell how far off the track it had gone, so the path may not be the track.
+        let (true, Some(points)) = (lap.valid && lap.untimed.is_none() && lap.penalties.is_empty(), points) else { return Ok(()) };
         let c = combo_of(&lap.session);
         let store = self.store();
         if store.track_map(&c.game, &c.track, &c.layout)?.is_some() {
