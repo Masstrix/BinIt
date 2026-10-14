@@ -18,6 +18,8 @@ export function Dropdown<T extends string>({
   onChange,
   label,
   variant = "field",
+  children,
+  className,
 }: {
   value: T;
   options: DropdownOption<T>[];
@@ -25,6 +27,10 @@ export function Dropdown<T extends string>({
   /** Accessible name; also shown above `field` dropdowns. */
   label: string;
   variant?: "pill" | "field";
+  /** Custom button content (e.g. a lap time): replaces the default trigger and its label. */
+  children?: ReactNode;
+  /** Class for the custom trigger button. */
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -74,25 +80,29 @@ export function Dropdown<T extends string>({
 
   return (
     <div ref={root} className={`dropdown ${variant}`}>
-      {variant === "field" && <span className="dropdown-label">{label}</span>}
+      {variant === "field" && !children && <span className="dropdown-label">{label}</span>}
       <button
         ref={button}
         type="button"
-        className="dropdown-trigger"
+        className={children ? className : "dropdown-trigger"}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listId}
-        aria-label={variant === "pill" ? `${label}: ${selected?.label ?? ""}` : undefined}
+        aria-label={variant === "pill" || children ? `${label}: ${selected?.label ?? ""}` : undefined}
         onClick={() => (open ? setOpen(false) : openMenu())}
         onKeyDown={onKeyDown}
       >
-        <span className="dropdown-value">
-          {selected?.icon}
-          <span className="dropdown-value-text">{selected?.label ?? "Choose…"}</span>
-        </span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true" style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform .15s", flex: "none" }}>
-          <path d="M6 9l6 6 6-6" />
-        </svg>
+        {children ?? (
+          <>
+            <span className="dropdown-value">
+              {selected?.icon}
+              <span className="dropdown-value-text">{selected?.label ?? "Choose…"}</span>
+            </span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true" style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform .15s", flex: "none" }}>
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </>
+        )}
       </button>
       {open && (
         <ul id={listId} role="listbox" aria-label={label} className={`dropdown-menu${upward ? " up" : ""}`}>

@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, isTauri, useAppState, useFetch } from "./api";
 import { GameIcon } from "./components/GameIcon";
 import { Logo } from "./components/Helmet";
 import { readStored, writeStored } from "./persist";
 import { OverlayToggle } from "./components/OverlayToggle";
 import { UpdateButton } from "./components/Update";
+import { MeBar } from "./components/MeBar";
 import { Home } from "./pages/Home";
 import { ConnectionGate } from "./components/ConnectionGate";
 import { LeaderboardPage } from "./pages/Leaderboard";
@@ -61,7 +62,7 @@ export function App() {
   else if (path.startsWith("/challenges")) page = <ChallengesPage path={path} />;
   else if (path.startsWith("/drivers")) page = <DriversPage path={path} />;
   else if (path.startsWith("/games")) page = <GamesPage />;
-  else if (path.startsWith("/telemetry")) page = <TelemetryPage />;
+  else if (path.startsWith("/telemetry")) page = <TelemetryPage path={path} />;
   else if (path.startsWith("/advanced")) page = <AdvancedPage />;
   else page = <Home />;
 
@@ -78,9 +79,24 @@ function Sidebar({ path }: { path: string }) {
   const { status, online } = useAppState();
   const server = useFetch(() => api.server(), [online]);
   const lanUrl = server?.urls[0];
+  // On phones the menu is a bar fixed to the bottom; its height (--dock-h) lets sticky things sit above it.
+  const aside = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = aside.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const set = () => document.documentElement.style.setProperty("--dock-h", `${el.offsetHeight}px`);
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    window.addEventListener("resize", set);
+    set();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", set);
+    };
+  }, []);
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" ref={aside}>
       <a className="brand" href="#/">
         <Logo />
         <span>bin it</span>
@@ -93,6 +109,7 @@ function Sidebar({ path }: { path: string }) {
       </div>
       <OverlayToggle compact />
       <UpdateButton />
+      {!isTauri && <MeBar />}
       <nav className="nav" aria-label="Main">
         {ROUTES.map((r) => {
           const current = r.path === "/" ? path === "/" : path.startsWith(r.path);
