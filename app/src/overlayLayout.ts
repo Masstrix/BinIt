@@ -17,6 +17,8 @@ export type Anchor =
 export interface OverlayLayout {
   version: 1;
   sections: Partial<Record<Anchor, WidgetId[]>>;
+  /** For a widget that comes in more than one style (see `WIDGET_STYLES`), the one chosen; absent = the first. */
+  styles?: Partial<Record<WidgetId, string>>;
   /** Say "Sam is driving" when the driver changes (works even when the overlay can't be seen). */
   voice: boolean;
 }
@@ -32,6 +34,21 @@ export const WIDGETS: Record<WidgetId, { label: string; description: string; com
   qr: { label: "Phone QR code", description: "Scan to open Bin It on a phone: pick the driver, see the standings", compact: false },
   toasts: { label: "Pop-ups", description: "New PB, record, new leader, cut lap. Shows for 4s", compact: false },
 };
+
+/** The styles a widget comes in, first one the default. A widget not listed has just one. */
+export const WIDGET_STYLES: Partial<Record<WidgetId, { id: string; label: string; hint: string }[]>> = {
+  tower: [
+    { id: "list", label: "List", hint: "Position, name and gap to the leader, one line each" },
+    { id: "gaps", label: "Gaps", hint: "Drivers spaced by their gaps, with the gap between neighbours, like Gran Turismo's B-spec monitor" },
+  ],
+};
+
+/** The style a widget is shown in under a layout: the one chosen if it exists, else the widget's first. */
+export function styleOf(layout: Pick<OverlayLayout, "styles"> | undefined, widget: WidgetId): string | undefined {
+  const options = WIDGET_STYLES[widget];
+  const chosen = layout?.styles?.[widget];
+  return options?.some((o) => o.id === chosen) ? chosen : options?.[0].id;
+}
 
 export const ANCHORS: Anchor[] = [
   "top-left",
@@ -204,7 +221,12 @@ function sanitize(raw: unknown, fallback: OverlayLayout): OverlayLayout {
     const items = (r.sections?.[a] ?? []).filter((w): w is WidgetId => w in WIDGETS && !seen.has(w) && !!seen.add(w));
     if (items.length) sections[a] = items;
   }
-  return { version: 1, sections, voice: r.voice ?? fallback.voice };
+  const styles: NonNullable<OverlayLayout["styles"]> = {};
+  for (const w of Object.keys(WIDGET_STYLES) as WidgetId[]) {
+    const chosen = r.styles?.[w];
+    if (WIDGET_STYLES[w]?.some((o) => o.id === chosen)) styles[w] = chosen;
+  }
+  return { version: 1, sections, voice: r.voice ?? fallback.voice, ...(Object.keys(styles).length ? { styles } : {}) };
 }
 
 /** The saved layout for a game (or its default), kept live across windows. */

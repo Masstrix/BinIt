@@ -5,7 +5,8 @@ import { useCallback, useEffect, useState, type HTMLAttributes, type ReactNode }
 import { api, type LiveTiming, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
 import { lapKind, lapTime, trackName } from "../format";
 import { words } from "../vocab";
-import { orientationFor, WIDGETS, type Anchor, type Orientation, type WidgetId } from "../overlayLayout";
+import { orientationFor, styleOf, WIDGETS, type Anchor, type Orientation, type OverlayLayout, type WidgetId } from "../overlayLayout";
+import { BASE, gapText as ladderGap, place, room } from "./GapLadder";
 import { Crown, Helmet } from "./Helmet";
 import { QrCode } from "./QrCode";
 
@@ -28,7 +29,7 @@ export interface OverlayData {
   /** The game being played, so the wording can follow it (laps or stages). */
   game: string | null;
   /** Top 5 on the current track + car, plus the seated driver's row if outside it. */
-  comboTop: { position: number; name: string; color: string; timeMs: number; gapMs: number; isSeat: boolean }[];
+  comboTop: { position: number; name: string; color: string; timeMs: number; gapMs: number; isSeat: boolean; driverId?: number | null }[];
   timing: LiveTiming | null;
   /** The running lap clock, for when there's no reference lap to show a delta against. */
   lapMs: number;
@@ -61,7 +62,7 @@ export function useOverlayData(): OverlayData {
   const standing = seat ? board.find((e) => e.driverId === seat.id) : undefined;
   const named = (e: LeaderboardEntry) => {
     const d = e.driverId != null ? drivers.get(e.driverId) : undefined;
-    return { name: d?.name ?? "Guest", color: d?.color ?? "#9AA3C7", timeMs: e.timeMs };
+    return { name: d?.name ?? "Guest", color: d?.color ?? "#9AA3C7", timeMs: e.timeMs, driverId: e.driverId };
   };
   const ranked = (e: LeaderboardEntry) => ({
     ...named(e),
@@ -358,6 +359,122 @@ export function GapTowerCard({ data, orientation = "vertical" }: { data: Overlay
   );
 }
 
+/**
+ * The same drivers as the tower, laid out by their gaps like the race monitor in Gran Turismo's B-spec: the
+ * leader first, everyone else along a rail the gap they are behind takes (so a close fight is close and a
+ * driver far back is far), with the gap to the driver ahead written between each pair. In a column it runs
+ * down the rail; in a row it runs along it.
+ */
+export function GapMonitorCard({ data, orientation = "vertical" }: { data: OverlayData; orientation?: Orientation }) {
+  const cars = [...data.comboTop].sort((a, b) => a.gapMs - b.gapMs);
+  const row = orientation === "horizontal";
+  const intervals = cars.slice(1).map((c, i) => c.gapMs - cars[i].gapMs);
+  const size = Math.max(BASE, intervals.reduce((sum, ms) => sum + room(ms), 0));
+  const at = place(intervals, size);
+  const short = (name: string) => name.replace(/\s+/g, "").slice(0, 3).toUpperCase();
+  // The rail is a fixed length, so the spacing is the same wherever the widget sits. The box round it is
+  // measured to the edges of what is drawn (a helmet and its ring, the tags above or beside it, the gaps
+  // below or beside), so the card's one padding is the same on every side whichever way the widget runs.
+  const length = row ? 440 : 250;
+  const along = row ? "left" : "top";
+  const avatar = (c: (typeof cars)[number]) => (c.isSeat ? 32 : 28);
+  // How far a helmet and its ring reach from its place on the rail, and how tall a tag is.
+  const reachOf = (c: (typeof cars)[number]) => avatar(c) / 2 + (c.isSeat ? 4 : 2);
+  const TAG_H = 17;
+  const first = cars[0];
+  const last = cars[cars.length - 1];
+  // Along the rail the box ends at the helmets at its two ends (each its own reach: the seated driver's is
+  // bigger); across it at the widest helmet, and in a row at the tallest tag above and the gap labels below.
+  const startReach = first ? reachOf(first) : 0;
+  const endReach = last ? reachOf(last) : 0;
+  const sideReach = Math.max(0, ...cars.map(reachOf));
+  const above = Math.max(0, ...cars.map((c) => avatar(c) / 2 + 6 + TAG_H));
+  const mid = (i: number) => (at[i] + at[i + 1]) / 2;
+  const px = (f: number) => startReach + f * length;
+  // Where the rail runs across the box, and how big the box is. (A tag is about 34px wide: "5 ALE".)
+  const railAt = row ? above : sideReach;
+  const box = row
+    ? { width: startReach + length + endReach, height: above + Math.max(sideReach, 20 + 14) }
+    : { width: sideReach + Math.max(0, ...cars.map((c) => avatar(c) / 2)) + 8 + 34, height: startReach + length + endReach };
+  return (
+    <div style={{ ...card, padding: 16, display: "flex" }}>
+      <div style={{ position: "relative", ...box }}>
+        {/* The rail. */}
+        <span
+          style={
+            row
+              ? { position: "absolute", left: startReach, width: length, top: railAt - 1, height: 2, background: "var(--line)" }
+              : { position: "absolute", top: startReach, height: length, left: railAt - 1, width: 2, background: "var(--line)" }
+          }
+        />
+        {cars.slice(1).map((c, i) => (
+          <span
+            key={`gap-${c.position}-${c.name}`}
+            className="mono"
+            style={{
+              position: "absolute",
+              [along]: px(mid(i)),
+              ...(row ? { top: railAt + 20, transform: "translateX(-50%)" } : { left: railAt + 20, transform: "translateY(-50%)" }),
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--muted)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {ladderGap(intervals[i])}
+          </span>
+        ))}
+        {/* Back of the pack first so the front is drawn on top. */}
+        {[...cars].reverse().map((c) => {
+          const f = at[cars.indexOf(c)];
+          const s = avatar(c);
+          return (
+            <span
+              key={`${c.position}-${c.name}`}
+              title={`${c.position}. ${c.name}`}
+              style={{
+                position: "absolute",
+                [along]: px(f),
+                ...(row ? { top: railAt, transform: "translate(-50%, -50%)" } : { left: railAt, transform: "translate(-50%, -50%)" }),
+                width: s,
+                height: s,
+              }}
+            >
+              {/* The driver's own helmet, ringed in peach when it's the driver in the seat. */}
+              <span
+                style={{
+                  display: "block",
+                  borderRadius: s * 0.3,
+                  boxShadow: c.isSeat ? "0 0 0 2px #0D1224, 0 0 0 4px var(--peach)" : "0 0 0 2px #0D1224",
+                }}
+              >
+                <Helmet color={c.color} size={s} seed={c.driverId ?? c.name} />
+              </span>
+              <span
+                className="mono"
+                style={{
+                  position: "absolute",
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: 5,
+                  fontSize: 13,
+                  fontWeight: 800,
+                  color: c.isSeat ? "var(--peach)" : c.color,
+                  whiteSpace: "nowrap",
+                  ...(row ? { bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 6 } : { left: "100%", top: "50%", transform: "translateY(-50%)", marginLeft: 8 }),
+                }}
+              >
+                <span style={{ fontSize: 11, color: c.position === 1 ? "var(--gold)" : "var(--muted)" }}>{c.position}</span>
+                {short(c.name)}
+              </span>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** Always-visible QR code so anyone in the room can scan it to open Bin It on their phone. */
 export function QrCard({ data }: { data: OverlayData }) {
   return (
@@ -507,6 +624,7 @@ export function SectionWidgets({
   preview = false,
   itemProps,
   anchor,
+  styles,
 }: {
   items: WidgetId[];
   data: OverlayData;
@@ -515,6 +633,8 @@ export function SectionWidgets({
   itemProps?: ItemProps;
   /** The section these sit in, for a widget (the gap tower) that lays itself out to suit its place. */
   anchor?: Anchor;
+  /** The layout's chosen styles, for a widget that comes in more than one. */
+  styles?: OverlayLayout["styles"];
 }) {
   const visible = preview ? items : items.filter((w) => hasContent(w, data));
   const groups: (WidgetId[] | WidgetId)[] = [];
@@ -535,7 +655,10 @@ export function SectionWidgets({
         if (g === "standings") return wrap(g, <StandingsCard data={data} />);
         if (g === "timing") return wrap(g, <TimingCard data={data} />);
         if (g === "leaderboard") return wrap(g, <LeaderboardCard data={data} />);
-        if (g === "tower") return wrap(g, <GapTowerCard data={data} orientation={orientationFor(anchor)} />);
+        if (g === "tower") {
+          const Tower = styleOf({ styles }, "tower") === "gaps" ? GapMonitorCard : GapTowerCard;
+          return wrap(g, <Tower data={data} orientation={orientationFor(anchor)} />);
+        }
         if (g === "qr") return wrap(g, <QrCard data={data} />);
         const shown = toast ?? (preview ? MOCK_TOAST : null);
         return shown ? wrap(g, <ToastCard toast={shown} animate={!preview} />) : null;
