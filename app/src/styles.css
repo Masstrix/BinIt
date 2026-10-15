@@ -223,6 +223,9 @@ h2 { font-size: 22px; }
 .segmented { display: flex; gap: 4px; padding: 4px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); }
 .segmented button { min-height: 40px; padding: 0 16px; border-radius: 12px; border: none; background: transparent; color: var(--text-2); font-weight: 600; }
 .segmented button[aria-pressed="true"] { background: var(--violet); color: #fff; }
+/* The small switcher on a widget's card in the overlay editor: the same padding all round, and each choice the same width. */
+.segmented.compact { padding: 3px; gap: 3px; border-radius: 12px; align-self: stretch; }
+.segmented.compact button { flex: 1; min-height: 30px; padding: 0 12px; border-radius: 9px; font-size: 13px; }
 
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; }
 .chip.pb { background: rgba(75, 227, 166, 0.16); color: var(--mint); }

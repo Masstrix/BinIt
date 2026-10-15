@@ -4,20 +4,26 @@ import {
   ANCHORS,
   GAME_PROFILES,
   WIDGETS,
+  WIDGET_STYLES,
   anchorBox,
   anchorStyle,
   hudConflict,
   moveWidget,
+  styleOf,
   useOverlayLayout,
   type Anchor,
+  type OverlayLayout,
   type WidgetId,
 } from "../overlayLayout";
 import { GameLabel } from "./GameIcon";
 import { OverlayFocusToggle, OverlayShowPicker, OverlayToggle } from "./OverlayToggle";
 import {
+  GapMonitorCard,
+  GapTowerCard,
   LeaderboardCard,
   QrCard,
   MOCK_DATA,
+  type OverlayData,
   MOCK_TOAST,
   SectionWidgets,
   StandingsCard,
@@ -366,7 +372,7 @@ export function OverlayEditor() {
             if (!items?.length) return null;
             return (
               <div key={a} data-anchor={a} style={{ ...anchorStyle(a, profile), pointerEvents: "auto" }}>
-                <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={itemProps} />
+                <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={itemProps} anchor={a} styles={layout.styles} />
               </div>
             );
           })}
@@ -438,10 +444,25 @@ export function OverlayEditor() {
                 </button>
               </div>
               <div className="ed-preview" style={{ pointerEvents: "none" }}>
-                <div style={{ zoom: compact ? (w === "leaderboard" ? 0.9 : w === "standings" ? 0.95 : 0.85) : w === "leaderboard" ? 0.42 : w === "standings" ? 0.5 : 0.62 }}>
-                  <WidgetPreview w={w} />
+                <div style={{ zoom: compact ? (w === "leaderboard" ? 0.9 : w === "standings" ? 0.95 : 0.85) : w === "leaderboard" ? 0.42 : w === "standings" ? 0.5 : w === "tower" ? 0.46 : 0.62 }}>
+                  <WidgetPreview w={w} data={MOCK_DATA} styles={layout.styles} />
                 </div>
               </div>
+              {WIDGET_STYLES[w] && (
+                <div className="segmented compact" role="group" aria-label={`${WIDGETS[w].label} style`}>
+                  {WIDGET_STYLES[w]!.map((o) => (
+                    <button
+                      key={o.id}
+                      type="button"
+                      aria-pressed={styleOf(layout, w) === o.id}
+                      title={o.hint}
+                      onClick={() => save({ ...layout, styles: { ...layout.styles, [w]: o.id } })}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <span className="muted" style={{ fontSize: 12 }}>{WIDGETS[w].description}</span>
               {touch && <PositionPicker widget={w} at={at} onPick={(to) => place(w, to)} />}
             </div>
@@ -506,12 +527,14 @@ export function OverlayEditor() {
 }
 
 /** One widget on its own, with example data, for the tray. */
-function WidgetPreview({ w }: { w: WidgetId }) {
-  if (WIDGETS[w].compact) return <StripCard items={[w]} data={MOCK_DATA} />;
-  if (w === "standings") return <StandingsCard data={MOCK_DATA} />;
-  if (w === "timing") return <TimingCard data={MOCK_DATA} />;
-  if (w === "leaderboard") return <LeaderboardCard data={MOCK_DATA} />;
-  if (w === "qr") return <QrCard data={MOCK_DATA} />;
+function WidgetPreview({ w, data, styles }: { w: WidgetId; data: OverlayData; styles?: OverlayLayout["styles"] }) {
+  if (WIDGETS[w].compact) return <StripCard items={[w]} data={data} />;
+  if (w === "standings") return <StandingsCard data={data} />;
+  if (w === "timing") return <TimingCard data={data} />;
+  if (w === "leaderboard") return <LeaderboardCard data={data} />;
+  // As a row, so the whole of it fits the tray's small preview whichever style it is in.
+  if (w === "tower") return styleOf({ styles }, "tower") === "gaps" ? <GapMonitorCard data={data} orientation="horizontal" /> : <GapTowerCard data={data} orientation="horizontal" />;
+  if (w === "qr") return <QrCard data={data} />;
   return <ToastCard toast={MOCK_TOAST} animate={false} />;
 }
 

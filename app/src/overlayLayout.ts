@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { api, useAppEvent, type AppEvent } from "./api";
 
-export type WidgetId = "driver" | "pb" | "challenge" | "timing" | "standings" | "leaderboard" | "qr" | "toasts";
+export type WidgetId = "driver" | "pb" | "challenge" | "timing" | "standings" | "leaderboard" | "tower" | "qr" | "toasts";
 export type Anchor =
   | "top-left"
   | "top-center"
@@ -17,6 +17,8 @@ export type Anchor =
 export interface OverlayLayout {
   version: 1;
   sections: Partial<Record<Anchor, WidgetId[]>>;
+  /** For a widget that comes in more than one style (see `WIDGET_STYLES`), the one chosen; absent = the first. */
+  styles?: Partial<Record<WidgetId, string>>;
   /** Say "Sam is driving" when the driver changes (works even when the overlay can't be seen). */
   voice: boolean;
 }
@@ -28,9 +30,25 @@ export const WIDGETS: Record<WidgetId, { label: string; description: string; com
   timing: { label: "Live timing", description: "Delta to PB and a purple / green / yellow bar per sector", compact: false },
   standings: { label: "Challenge top 3", description: "Mini podium for the running challenge", compact: false },
   leaderboard: { label: "Track leaderboard", description: "Top 5 on this track and car, plus where the driver is", compact: false },
+  tower: { label: "Gap tower", description: "The top few drivers and their gaps, in a column or a row depending on where it sits", compact: false },
   qr: { label: "Phone QR code", description: "Scan to open Bin It on a phone: pick the driver, see the standings", compact: false },
   toasts: { label: "Pop-ups", description: "New PB, record, new leader, cut lap. Shows for 4s", compact: false },
 };
+
+/** The styles a widget comes in, first one the default. A widget not listed has just one. */
+export const WIDGET_STYLES: Partial<Record<WidgetId, { id: string; label: string; hint: string }[]>> = {
+  tower: [
+    { id: "list", label: "List", hint: "Position, name and gap to the leader, one line each" },
+    { id: "gaps", label: "Gaps", hint: "Drivers spaced by their gaps, with the gap between neighbours, like Gran Turismo's B-spec monitor" },
+  ],
+};
+
+/** The style a widget is shown in under a layout: the one chosen if it exists, else the widget's first. */
+export function styleOf(layout: Pick<OverlayLayout, "styles"> | undefined, widget: WidgetId): string | undefined {
+  const options = WIDGET_STYLES[widget];
+  const chosen = layout?.styles?.[widget];
+  return options?.some((o) => o.id === chosen) ? chosen : options?.[0].id;
+}
 
 export const ANCHORS: Anchor[] = [
   "top-left",
@@ -42,6 +60,18 @@ export const ANCHORS: Anchor[] = [
   "bottom-center",
   "bottom-right",
 ];
+
+/** Which way a widget that adapts to its place lays itself out. */
+export type Orientation = "horizontal" | "vertical";
+
+/**
+ * How a widget that follows its place (the gap tower) is drawn in a section: along the top and bottom
+ * edges, in the centre, it runs as a row; in the side columns, at the corners and down the middle, it
+ * runs as a column.
+ */
+export function orientationFor(anchor: Anchor | null | undefined): Orientation {
+  return anchor === "top-center" || anchor === "bottom-center" ? "horizontal" : "vertical";
+}
 
 /** Rectangle in % of the screen. */
 export interface Box {
@@ -155,7 +185,7 @@ export function overlaps(a: Box, b: Box): boolean {
 }
 
 /** Rough height (% of screen) of a section's content, for HUD-overlap warnings. */
-function contentHeight(items: WidgetId[]): number {
+function contentHeight(items: WidgetId[], anchor: Anchor): number {
   let h = 0;
   let inStrip = false;
   for (const w of items) {
@@ -163,7 +193,8 @@ function contentHeight(items: WidgetId[]): number {
       if (!inStrip) h += 6.5;
       inStrip = true;
     } else {
-      h += w === "timing" ? 11 : w === "standings" ? 13 : w === "leaderboard" ? 18 : 7.5;
+      const tower = orientationFor(anchor) === "horizontal" ? 8 : 20;
+      h += w === "timing" ? 11 : w === "standings" ? 13 : w === "leaderboard" ? 18 : w === "tower" ? tower : 7.5;
       inStrip = false;
     }
   }
@@ -174,7 +205,7 @@ function contentHeight(items: WidgetId[]): number {
 export function hudConflict(profile: GameProfile, anchor: Anchor, items: WidgetId[] = []): string | null {
   const box = anchorBox(anchor, profile);
   const v = anchor.split("-")[0];
-  const h = items.length ? contentHeight(items) : box.h;
+  const h = items.length ? contentHeight(items, anchor) : box.h;
   const content: Box =
     v === "bottom" ? { ...box, y: box.y + box.h - h, h } : v === "middle" ? { ...box, y: 50 - h / 2, h } : { ...box, h };
   const zone = profile.hud.find((z) => overlaps(z.box, content));
@@ -190,7 +221,12 @@ function sanitize(raw: unknown, fallback: OverlayLayout): OverlayLayout {
     const items = (r.sections?.[a] ?? []).filter((w): w is WidgetId => w in WIDGETS && !seen.has(w) && !!seen.add(w));
     if (items.length) sections[a] = items;
   }
-  return { version: 1, sections, voice: r.voice ?? fallback.voice };
+  const styles: NonNullable<OverlayLayout["styles"]> = {};
+  for (const w of Object.keys(WIDGET_STYLES) as WidgetId[]) {
+    const chosen = r.styles?.[w];
+    if (WIDGET_STYLES[w]?.some((o) => o.id === chosen)) styles[w] = chosen;
+  }
+  return { version: 1, sections, voice: r.voice ?? fallback.voice, ...(Object.keys(styles).length ? { styles } : {}) };
 }
 
 /** The saved layout for a game (or its default), kept live across windows. */

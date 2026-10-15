@@ -75,7 +75,7 @@ export function Overlay() {
           if (!items?.length) return null;
           return (
             <div key={a} style={anchorStyle(a, profile)}>
-              <SectionWidgets items={items} data={data} toast={toast} />
+              <SectionWidgets items={items} data={data} toast={toast} anchor={a} styles={layout.styles} />
             </div>
           );
         })}
