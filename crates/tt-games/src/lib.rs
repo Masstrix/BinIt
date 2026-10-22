@@ -92,6 +92,9 @@ pub struct SessionInfo {
     pub timing: TimingKind,
     /// Lap / stage length in metres, when the game reports it.
     pub length_m: Option<u32>,
+    /// For a game whose data names nothing (DiRT Rally 2.0): what the stage and car were told apart by, as JSON,
+    /// so a name can be recorded against it (see the dev tools). `None` for every game that names its own.
+    pub identity: Option<String>,
 }
 
 /// One finished lap (or stage run).
@@ -247,6 +250,64 @@ pub trait GameAdapter: Send {
     /// Read the latest telemetry and return any events since the last call.
     /// Must be cheap: no blocking, no allocation-heavy work on the happy path.
     fn poll(&mut self) -> Vec<GameEvent>;
+}
+
+/// A name recorded for a stage or car a game's data doesn't name.
+#[derive(Debug, Clone, PartialEq)]
+pub struct KnownEntry {
+    /// "stage" or "car".
+    pub kind: &'static str,
+    /// The ids it answers to: its own first, then the neighbouring cell's when it was recorded beside a cell edge.
+    pub ids: Vec<String>,
+    pub name: String,
+    /// What it was recorded from (a stage's length and start, a car's engine), as JSON: written back to the list.
+    pub detail: serde_json::Value,
+    /// A picture of it, as a path under the app's assets.
+    pub image: Option<String>,
+}
+
+/// The names shipped with Bin It for a game whose data names nothing.
+pub fn known_entries(game: &str) -> Vec<KnownEntry> {
+    match game {
+        "dr2" => dr2::known::Known::bundled().entries(),
+        _ => Vec::new(),
+    }
+}
+
+/// The ids a recorded stage or car answers to, from what it was recorded from.
+pub fn ids_for(game: &str, kind: &str, detail: &serde_json::Value) -> Option<Vec<String>> {
+    match game {
+        "dr2" => dr2::known::ids_for(kind, detail),
+        _ => None,
+    }
+}
+
+/// What an unnamed stage or car is called: the id is in the label, so stored data can be found by it.
+pub fn unknown_label(game: &str, kind: &str, id: &str) -> Option<String> {
+    match (game, kind) {
+        ("dr2", "stage") => Some(dr2::known::unknown_stage(id)),
+        ("dr2", "car") => Some(dr2::known::unknown_car(id)),
+        _ => None,
+    }
+}
+
+/// The kind and id an "Unknown ..." label stands for, if it is one.
+pub fn id_in_unknown_label(game: &str, label: &str) -> Option<(&'static str, String)> {
+    match game {
+        "dr2" => {
+            let id = dr2::known::id_in_label(label)?.to_string();
+            Some((if label.starts_with("Unknown stage") { "stage" } else { "car" }, id))
+        }
+        _ => None,
+    }
+}
+
+/// A game's list of names as the file in its source folder (path relative to the repository root, and contents).
+pub fn export_known(game: &str, entries: &[KnownEntry]) -> Option<(&'static str, String)> {
+    match game {
+        "dr2" => Some(("crates/tt-games/src/dr2/known.json", dr2::known::export(entries))),
+        _ => None,
+    }
 }
 
 /// One adapter per supported game. This is the single place a new game is registered.

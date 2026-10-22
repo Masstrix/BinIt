@@ -13,8 +13,9 @@
 //! * there are no stage or car names in the data (see `known.rs`).
 
 pub mod config;
-pub mod layout;
+pub mod identity;
 pub mod known;
+pub mod layout;
 
 use std::time::{Duration, Instant};
 
@@ -33,6 +34,8 @@ const DISCONNECTED_POLL: Duration = Duration::from_secs(2);
 const LIVE_EVERY: Duration = Duration::from_millis(100);
 /// The data counts as moving if the game's session clock changed within this long.
 const ALIVE_MS: u64 = 1_000;
+/// The car is on the start line (not yet over it) while its distance is no more than this, metres.
+const START_LINE_M: f32 = 0.5;
 /// While the game is not running its settings are checked this often (it rewrites them on exit).
 const CONFIG_CHECK_EVERY: Duration = Duration::from_secs(30);
 
@@ -40,18 +43,39 @@ pub fn is_running() -> bool {
     crate::is_process_running(PROCESS_NAME)
 }
 
-/// The game-agnostic description of the stage being driven, from a packet.
-pub fn session_info(p: &Packet) -> SessionInfo {
+/// The game-agnostic description of the stage being driven, from a packet and where the stage's start line
+/// is (`None` when the stage was joined after the start, so the start was never seen).
+pub fn session_info(p: &Packet, start: Option<[f32; 2]>) -> SessionInfo {
     let known = known::Known::bundled();
     SessionInfo {
         game: GameId::DirtRally2,
-        track: known.stage_name(p.length_m),
+        track: known.stage_name(p.length_m, start),
         layout: p.has_stage().then(|| stage_variant(p.length_m)),
         car: known.car_name(p.max_rpm, p.idle_rpm, p.gears),
         session_kind: "Stage".to_string(),
         timing: TimingKind::RallyStage,
         length_m: p.has_stage().then(|| p.length_m.round() as u32),
+        identity: p.has_stage().then(|| identity_json(p, start)),
     }
+}
+
+/// What the stage and car were told apart by, with their ids, for the dev tools to record a name against.
+fn identity_json(p: &Packet, start: Option<[f32; 2]>) -> String {
+    let round = |v: f32, places: f64| (v as f64 * places).round() / places;
+    serde_json::json!({
+        "stage": {
+            "id": start.map(|s| identity::stage_id(p.length_m, s)),
+            "length_m": round(p.length_m, 100.0),
+            "start": start.map(|s| [round(s[0], 100.0), round(s[1], 100.0)]),
+        },
+        "car": {
+            "id": identity::car_id(p.max_rpm, p.idle_rpm, p.gears),
+            "max_rpm": round(p.max_rpm, 10.0),
+            "idle_rpm": round(p.idle_rpm, 10.0),
+            "gears": p.gears,
+        },
+    })
+    .to_string()
 }
 
 /// A stage's second name: its length, to the nearest 10 m (two stages of a region can share a name).
@@ -82,6 +106,9 @@ pub struct Dr2Stream {
     /// The finish was taken from a packet: the rest of the stream until the stage is left is not a run.
     finished: bool,
     last_live: Option<u64>,
+    /// The stage's length and where its start line is, read before the clock started. A stage joined later has
+    /// none, and then can't be told from the same length running the other way.
+    start: Option<(f32, [f32; 2])>,
 }
 
 impl Default for Dr2Stream {
@@ -92,7 +119,7 @@ impl Default for Dr2Stream {
 
 impl Dr2Stream {
     pub fn new() -> Self {
-        Self { tracker: StageTracker::with_penalties(), session: None, last_session_s: None, last_change_ms: 0, finished: false, last_live: None }
+        Self { tracker: StageTracker::with_penalties(), session: None, last_session_s: None, last_change_ms: 0, finished: false, last_live: None, start: None }
     }
 
     /// Forgets everything (the game closed or the socket was lost).
@@ -119,10 +146,17 @@ impl Dr2Stream {
             self.tracker.update(StageSample { at_ms: now_ms, clock_ms: None, distance_m: 0.0, length_m: None, updating, inputs: None, position: None });
             self.session = None;
             self.finished = false;
+            self.start = None;
             return events;
         }
 
-        let info = session_info(p);
+        // The start line is where the car stands before the go: the clock still at zero and not yet past the
+        // line. Each such packet restates it, so a restart (or the next stage) takes its own.
+        if p.stage_s == 0.0 && p.distance_m <= START_LINE_M {
+            self.start = Some((p.length_m, p.position()));
+        }
+        let start = self.start.filter(|(length, _)| *length == p.length_m).map(|(_, at)| at);
+        let info = session_info(p, start);
         if self.session.as_ref() != Some(&info) {
             // A different stage or car: a run in progress belongs to the old one.
             self.tracker.reset();
@@ -407,6 +441,15 @@ mod tests {
         events
     }
 
+    /// The recording's last attempt, from the packets before the go (the recording began part-way through an
+    /// earlier attempt, which was restarted), so the start line is seen.
+    fn from_the_start_line(run: &[Packet]) -> Vec<Packet> {
+        let on_line = |p: &Packet| p.stage_s == 0.0 && p.distance_m <= 0.5 && p.has_stage();
+        let last = run.iter().rposition(on_line).expect("a packet on the start line");
+        let first = (0..=last).rev().take_while(|&i| on_line(&run[i])).last().unwrap();
+        run[first..].to_vec()
+    }
+
     fn completed(events: &[GameEvent]) -> Vec<&CompletedLap> {
         events.iter().filter_map(|e| if let GameEvent::LapCompleted(l) = e { Some(l) } else { None }).collect()
     }
@@ -524,13 +567,61 @@ mod tests {
     }
 
     #[test]
-    fn the_session_names_the_stage_by_length_and_the_car_by_engine_when_nothing_is_known() {
-        let p = recorded_run()[1];
-        let info = session_info(&p);
+    fn an_unnamed_stage_and_car_are_called_unknown_with_their_stable_ids() {
+        let run = recorded_run();
+        let start = run.iter().find(|p| p.stage_s == 0.0 && p.distance_m <= 0.5).expect("a packet before the go");
+        let info = session_info(start, Some(start.position()));
         assert_eq!(info.game, GameId::DirtRally2);
         assert_eq!(info.layout.as_deref(), Some("2.85 km"));
-        assert!(info.track.contains("2.85 km") || info.track.starts_with("Unknown"), "{}", info.track);
-        assert!(info.car.starts_with("Unknown"), "{}", info.car);
+        assert_eq!(info.track, "Unknown stage 8B2484", "the id of this stage's length and start line");
+        assert!(known::id_in_label(&info.car).is_some() && info.car.starts_with("Unknown car "), "{}", info.car);
+    }
+
+    #[test]
+    fn the_stream_names_a_stage_from_where_it_started_not_from_where_the_car_is() {
+        let run = from_the_start_line(&recorded_run());
+        let events = play(&run);
+        let sessions: Vec<&SessionInfo> = events.iter().filter_map(|e| if let GameEvent::SessionChanged(i) = e { Some(i) } else { None }).collect();
+        assert_eq!(sessions.len(), 1, "one stage");
+        assert_eq!(sessions[0].track, "Unknown stage 8B2484");
+        // The run's result carries the same stage, not one labelled by wherever the car was at the finish.
+        assert_eq!(completed(&events)[0].session.track, "Unknown stage 8B2484");
+    }
+
+    #[test]
+    fn the_same_length_run_from_the_other_end_is_another_stage() {
+        let run = from_the_start_line(&recorded_run());
+        // The same stage driven the other way round starts where it finished: put the start somewhere else.
+        let elsewhere: Vec<Packet> = run.iter().map(|p| Packet { x: p.x + 1500.0, z: p.z - 600.0, ..*p }).collect();
+        let a = play(&run);
+        let b = play(&elsewhere);
+        let track = |events: &[GameEvent]| match &events[0] {
+            GameEvent::SessionChanged(i) => i.track.clone(),
+            other => panic!("{other:?}"),
+        };
+        assert_ne!(track(&a), track(&b));
+        assert_eq!(track(&b).len(), "Unknown stage 8B2484".len());
+    }
+
+    #[test]
+    fn a_stage_joined_after_the_start_has_no_start_to_name_it_by() {
+        let run = recorded_run();
+        let from = run.iter().position(|p| p.stage_s > 60.0).unwrap();
+        let events = play(&run[from..]);
+        let GameEvent::SessionChanged(info) = &events[0] else { panic!("{:?}", events[0]) };
+        assert_eq!(info.track, "Unknown stage 2.85 km (start not seen)");
+    }
+
+    #[test]
+    fn a_restart_reads_the_start_line_again_and_keeps_the_same_stage() {
+        let run = from_the_start_line(&recorded_run());
+        // Part-way in, then the clock and distance go back to the start line, then the whole run again.
+        let mut packets: Vec<Packet> = run[..400].to_vec();
+        let offset = run[399].session_s + 3.0;
+        packets.extend(run.iter().map(|p| Packet { session_s: p.session_s + offset, ..*p }));
+        let events = play(&packets);
+        let sessions = events.iter().filter(|e| matches!(e, GameEvent::SessionChanged(_))).count();
+        assert_eq!(sessions, 1, "same stage throughout: not announced twice");
     }
 
     #[test]

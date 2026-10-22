@@ -51,6 +51,7 @@ pub fn session_info(s: &Static) -> SessionInfo {
         session_kind: "Stage".to_string(),
         timing: TimingKind::RallyStage,
         length_m: (s.length_m > 0.0).then(|| s.length_m.round() as u32),
+        identity: None,
     }
 }
 

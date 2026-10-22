@@ -46,6 +46,7 @@ pub fn session_info(g: &Graphics, s: &Static) -> SessionInfo {
         session_kind: session_kind_name(s.session).to_string(),
         timing: TimingKind::CircuitLap,
         length_m: (s.track_length_m > 0.0).then(|| s.track_length_m.round() as u32),
+        identity: None,
     }
 }
 

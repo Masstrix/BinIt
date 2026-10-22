@@ -1,5 +1,476 @@
 {
-  "_comment": "DiRT Rally 2.0's telemetry has no stage or car names. A stage is told apart by its length in metres (matched within 2 m), a car by its engine: max and idle rpm (within 15 rpm) and gear count. Add an entry once you have read one from the game and know what it is.",
-  "stages": [],
-  "cars": []
+  "_comment": "Written by the dev tools' Names page, not by hand. A stage is told apart by its length and start line (world x, z), a car by its rev limit, idle speed and gear count: see identity.rs. A stage whose start is not listed here is called 'Unknown stage <id>'.",
+  "cars": [
+    {
+      "class": "H1 (FWD)",
+      "gears": 4,
+      "idle_rpm": 837.7999877929688,
+      "max_rpm": 7330.39990234375,
+      "name": "MINI Cooper S"
+    },
+    {
+      "class": "R5",
+      "gears": 5,
+      "idle_rpm": 2199.10009765625,
+      "max_rpm": 8377.599609375,
+      "name": "Mitsubishi Space Star R5"
+    },
+    {
+      "class": "R5",
+      "gears": 5,
+      "idle_rpm": 1780.199951171875,
+      "max_rpm": 7749.2998046875,
+      "name": "Skoda Fabia Rally 2005"
+    }
+  ],
+  "stages": [
+    {
+      "length_m": 8265.9501953125,
+      "name": "Argentina Camino a La Puerta",
+      "start": [
+        903.6799926757812,
+        205.25999450683594
+      ]
+    },
+    {
+      "length_m": 2845.6298828125,
+      "name": "Argentina El Rodeo",
+      "start": [
+        903.7000122070312,
+        205.6699981689453
+      ]
+    },
+    {
+      "length_m": 2779.489990234375,
+      "name": "Argentina La Merced",
+      "start": [
+        -246.36000061035156,
+        1344.969970703125
+      ]
+    },
+    {
+      "length_m": 8256.8603515625,
+      "name": "Argentina Las Juntas",
+      "start": [
+        -2962.239990234375,
+        2581.590087890625
+      ]
+    },
+    {
+      "length_m": 7052.3,
+      "name": "Australia Bondi Forest",
+      "start": [
+        -3711.89,
+        -604.65
+      ]
+    },
+    {
+      "length_m": 12341.25,
+      "name": "Australia Chandlers Creek",
+      "start": [
+        -1140.51,
+        2050.53
+      ]
+    },
+    {
+      "length_m": 12305.04,
+      "name": "Australia Chandlers Creek Reverse",
+      "start": [
+        -1645.04,
+        -1279.27
+      ]
+    },
+    {
+      "length_m": 13304.12,
+      "name": "Australia Mount Kaye Pass",
+      "start": [
+        1729.41,
+        2241.75
+      ]
+    },
+    {
+      "length_m": 13301.11,
+      "name": "Australia Mount Kaye Pass Reverse",
+      "start": [
+        -2684.92,
+        -2353.45
+      ]
+    },
+    {
+      "length_m": 5277.03,
+      "name": "Australia Noorinbee Ridge Ascent",
+      "start": [
+        -1140.51,
+        2050.54
+      ]
+    },
+    {
+      "length_m": 5236.91,
+      "name": "Australia Noorinbee Ridge Descent",
+      "start": [
+        -3735.9,
+        -564.42
+      ]
+    },
+    {
+      "length_m": 6951.16,
+      "name": "Australia Rockton Plains",
+      "start": [
+        1729.41,
+        2241.75
+      ]
+    },
+    {
+      "length_m": 7116.15,
+      "name": "Australia Rockton Plains Reverse",
+      "start": [
+        -2982.78,
+        2456.57
+      ]
+    },
+    {
+      "length_m": 7007.02,
+      "name": "Australia Taylor Farm Sprint",
+      "start": [
+        -1645.04,
+        -1279.27
+      ]
+    },
+    {
+      "length_m": 6398.91,
+      "name": "Australia Yambulla Mountain Ascent",
+      "start": [
+        -2748.82,
+        2519.05
+      ]
+    },
+    {
+      "length_m": 6221.49,
+      "name": "Australia Yambulla Mountain Descent",
+      "start": [
+        -2684.92,
+        -2353.45
+      ]
+    },
+    {
+      "length_m": 14866.09,
+      "name": "Finland Hämelahti",
+      "start": [
+        4076.6,
+        -192.48
+      ]
+    },
+    {
+      "length_m": 8042.52,
+      "name": "Finland Iso Oksajärvi",
+      "start": [
+        -1916.66,
+        3751.48
+      ]
+    },
+    {
+      "length_m": 7340.38,
+      "name": "Finland Jyrkysjärvi",
+      "start": [
+        4076.6,
+        -192.48
+      ]
+    },
+    {
+      "length_m": 8147.42,
+      "name": "Finland Järvenkylä",
+      "start": [
+        1934.83,
+        833.2
+      ]
+    },
+    {
+      "length_m": 7515.41,
+      "name": "Finland Kailajärvi",
+      "start": [
+        -4578.39,
+        39.49
+      ]
+    },
+    {
+      "length_m": 16205.19,
+      "name": "Finland Kakaristo",
+      "start": [
+        -1916.66,
+        3751.48
+      ]
+    },
+    {
+      "length_m": 14929.8,
+      "name": "Finland Kontinjärvi",
+      "start": [
+        -4578.39,
+        39.49
+      ]
+    },
+    {
+      "length_m": 8147.56,
+      "name": "Finland Kotajärvi",
+      "start": [
+        127.66,
+        -3263.25
+      ]
+    },
+    {
+      "length_m": 7310.54,
+      "name": "Finland Naarajärvi",
+      "start": [
+        77.96,
+        846.62
+      ]
+    },
+    {
+      "length_m": 8057.53,
+      "name": "Finland Oksala",
+      "start": [
+        132.54,
+        -3270.83
+      ]
+    },
+    {
+      "length_m": 7461.66,
+      "name": "Finland Paskuri",
+      "start": [
+        88.46,
+        881.09
+      ]
+    },
+    {
+      "length_m": 16205.26,
+      "name": "Finland Pitkäjärvi",
+      "start": [
+        1934.83,
+        833.2
+      ]
+    },
+    {
+      "length_m": 11551.16,
+      "name": "Germany Frauenberg",
+      "start": [
+        -567.97,
+        539.43
+      ]
+    },
+    {
+      "length_m": 10805.23,
+      "name": "Germany Hammerstein",
+      "start": [
+        -359.26,
+        513.03
+      ]
+    },
+    {
+      "length_m": 5129.04,
+      "name": "Germany Innerer Feld-Sprint",
+      "start": [
+        -703.03,
+        813.81
+      ]
+    },
+    {
+      "length_m": 4937.85,
+      "name": "Germany Innerer Feld-Sprint (umgekehrt)",
+      "start": [
+        -726.49,
+        656.5
+      ]
+    },
+    {
+      "length_m": 6121.87,
+      "name": "Germany Kreuzungsring",
+      "start": [
+        -1077.5,
+        -718.91
+      ]
+    },
+    {
+      "length_m": 5666.25,
+      "name": "Germany Kreuzungsring reverse",
+      "start": [
+        -567.97,
+        539.43
+      ]
+    },
+    {
+      "length_m": 11487.19,
+      "name": "Germany Oberstein",
+      "start": [
+        1187.75,
+        -2668.45
+      ]
+    },
+    {
+      "length_m": 10699.96,
+      "name": "Germany Ruschberg",
+      "start": [
+        -703.04,
+        813.81
+      ]
+    },
+    {
+      "length_m": 5855.68,
+      "name": "Germany Verbundsring",
+      "start": [
+        -359.26,
+        513.03
+      ]
+    },
+    {
+      "length_m": 5550.85,
+      "name": "Germany Verbundsring reverse",
+      "start": [
+        -728.72,
+        656.96
+      ]
+    },
+    {
+      "length_m": 5882.18,
+      "name": "Germany Waldabstieg",
+      "start": [
+        -633.46,
+        -947.83
+      ]
+    },
+    {
+      "length_m": 5361.91,
+      "name": "Germany Waldaufsteig",
+      "start": [
+        1187.75,
+        -2668.45
+      ]
+    },
+    {
+      "length_m": 6888.4,
+      "name": "Greece Abies Koilada",
+      "start": [
+        2820.73,
+        -1584.18
+      ]
+    },
+    {
+      "length_m": 4860.19,
+      "name": "Greece Ampelonas Ormi",
+      "start": [
+        2911.71,
+        91.58
+      ]
+    },
+    {
+      "length_m": 9666.5,
+      "name": "Greece Anodou Farmakas",
+      "start": [
+        2871.99,
+        -2033.14
+      ]
+    },
+    {
+      "length_m": 4515.4,
+      "name": "Greece Fourketa Kourva",
+      "start": [
+        1174.33,
+        457.21
+      ]
+    },
+    {
+      "length_m": 9665.99,
+      "name": "Greece Kathodo Leontiou",
+      "start": [
+        1174.33,
+        457.21
+      ]
+    },
+    {
+      "length_m": 4582.01,
+      "name": "Greece Koryfi Dafini",
+      "start": [
+        3066.95,
+        164.4
+      ]
+    },
+    {
+      "length_m": 5739.1,
+      "name": "Greece Ourea Spevsi",
+      "start": [
+        4314.85,
+        504.4
+      ]
+    },
+    {
+      "length_m": 6595.31,
+      "name": "Greece Pedines Epidaxi",
+      "start": [
+        886.72,
+        -3672.66
+      ]
+    },
+    {
+      "length_m": 10487.06,
+      "name": "Greece Perasma Platani",
+      "start": [
+        4314.85,
+        504.4
+      ]
+    },
+    {
+      "length_m": 5086.83,
+      "name": "Greece Pomona Ekrixi",
+      "start": [
+        2871.99,
+        -2033.14
+      ]
+    },
+    {
+      "length_m": 10357.88,
+      "name": "Greece Tsiristra Thea",
+      "start": [
+        886.72,
+        -3672.66
+      ]
+    },
+    {
+      "length_m": 5383.01,
+      "name": "Greece Ypsona tou Dasos",
+      "start": [
+        2370.73,
+        -2277.05
+      ]
+    },
+    {
+      "length_m": 4729.54,
+      "name": "Monte Carlo Col de Turini - Descente",
+      "start": [
+        -301.7,
+        -197.48
+      ]
+    },
+    {
+      "length_m": 5175.91,
+      "name": "Monte Carlo Col de Turini - Sprint en descente",
+      "start": [
+        -2007.45,
+        -467.22
+      ]
+    },
+    {
+      "length_m": 9831.45,
+      "name": "Monte Carlo Col de Turini Depart",
+      "start": [
+        -2007.46,
+        -467.22
+      ]
+    },
+    {
+      "length_m": 10866.86,
+      "name": "Monte Carlo Route de Turini",
+      "start": [
+        -1157.8,
+        -2345.0
+      ]
+    }
+  ]
 }

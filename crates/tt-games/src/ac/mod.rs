@@ -62,6 +62,7 @@ pub fn session_info(g: &Graphics, s: &Static) -> SessionInfo {
         timing: TimingKind::CircuitLap,
         // Anything under 100 m is a missing or bogus length, not a track.
         length_m: (s.track_length_m >= 100.0).then(|| s.track_length_m.round() as u32),
+        identity: None,
     }
 }
 
