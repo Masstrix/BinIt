@@ -83,6 +83,9 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/update/install", post(update_install))
         .route("/overlay/layout/{game}", get(overlay_layout).put(set_overlay_layout).delete(reset_overlay_layout))
         .route("/events", get(events));
+    // The developer tools exist only in a development build.
+    #[cfg(debug_assertions)]
+    let api = api.nest("/dev", dev::routes());
 
     let router = Router::new()
         .nest("/api", api)
@@ -595,4 +598,123 @@ async fn dev_proxy(uri: &Uri) -> Response {
 #[cfg(not(debug_assertions))]
 async fn dev_proxy(_uri: &Uri) -> Response {
     (StatusCode::NOT_FOUND, "Bin It UI not bundled in this build").into_response()
+}
+
+/// Developer tools: only compiled into a development build (`tauri dev`), and only for the PC itself.
+///
+/// The Names page records what a game's stages and cars are called (see `tt_core::associations`) and writes the
+/// result into the source tree, so the names ship with the next build.
+#[cfg(debug_assertions)]
+mod dev {
+    use axum::body::Bytes;
+    use axum::http::HeaderMap;
+
+    use super::*;
+
+    pub fn routes() -> Router<Ctx> {
+        Router::new()
+            .route("/associations/{game}", get(view))
+            .route("/associations/{game}/export", post(export))
+            .route("/associations/{game}/{kind}", put(save))
+            .route("/associations/{game}/{kind}/{id}", axum::routing::delete(remove))
+            .route("/associations/{game}/{kind}/{id}/image", get(image).put(set_image))
+    }
+
+    /// Only a game this build knows, so a path can't be made from anything else.
+    fn known_game(game: &str) -> Result<(), Response> {
+        if tt_games::GameId::ALL.iter().any(|g| g.key() == game) {
+            Ok(())
+        } else {
+            Err(bad_request(anyhow::anyhow!("unknown game {game}")))
+        }
+    }
+
+    fn known_kind(kind: &str) -> Result<(), Response> {
+        if matches!(kind, "stage" | "car") { Ok(()) } else { Err(bad_request(anyhow::anyhow!("unknown kind {kind}"))) }
+    }
+
+    async fn view(ConnectInfo(addr): ConnectInfo<SocketAddr>, State(c): State<Ctx>, Path(game): Path<String>) -> Result<Json<tt_core::associations::AssociationsView>, Response> {
+        local_only(addr)?;
+        known_game(&game)?;
+        Ok(Json(c.tt.associations_view(&game).map_err(bad_request)?))
+    }
+
+    #[derive(Deserialize)]
+    struct SaveBody {
+        name: String,
+        /// What it was recorded from: a stage's length and start, a car's engine.
+        detail: serde_json::Value,
+    }
+
+    async fn save(ConnectInfo(addr): ConnectInfo<SocketAddr>, State(c): State<Ctx>, Path((game, kind)): Path<(String, String)>, Json(body): Json<SaveBody>) -> Result<Json<()>, Response> {
+        local_only(addr)?;
+        known_game(&game)?;
+        known_kind(&kind)?;
+        c.tt.save_association(&game, &kind, &body.name, &body.detail, None).map_err(bad_request)?;
+        Ok(Json(()))
+    }
+
+    async fn remove(ConnectInfo(addr): ConnectInfo<SocketAddr>, State(c): State<Ctx>, Path((game, kind, id)): Path<(String, String, String)>) -> Result<Json<()>, Response> {
+        local_only(addr)?;
+        known_game(&game)?;
+        known_kind(&kind)?;
+        c.tt.delete_association(&game, &kind, &id).map_err(bad_request)?;
+        Ok(Json(()))
+    }
+
+    async fn image(ConnectInfo(addr): ConnectInfo<SocketAddr>, State(c): State<Ctx>, Path((game, kind, id)): Path<(String, String, String)>) -> Result<Response, Response> {
+        local_only(addr)?;
+        known_game(&game)?;
+        known_kind(&kind)?;
+        match c.tt.association_image(&game, &kind, &id).map_err(bad_request)? {
+            Some((bytes, media)) => Ok(([(header::CONTENT_TYPE, media)], bytes).into_response()),
+            None => Ok(StatusCode::NOT_FOUND.into_response()),
+        }
+    }
+
+    /// The picture's bytes as the body, its type as the content type.
+    async fn set_image(
+        ConnectInfo(addr): ConnectInfo<SocketAddr>,
+        State(c): State<Ctx>,
+        Path((game, kind, id)): Path<(String, String, String)>,
+        headers: HeaderMap,
+        body: Bytes,
+    ) -> Result<Json<()>, Response> {
+        local_only(addr)?;
+        known_game(&game)?;
+        known_kind(&kind)?;
+        let media = headers.get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or("image/png").to_string();
+        if !media.starts_with("image/") {
+            return Err(bad_request(anyhow::anyhow!("that isn't a picture ({media})")));
+        }
+        c.tt.set_association_image(&game, &kind, &id, body.to_vec(), &media).map_err(bad_request)?;
+        Ok(Json(()))
+    }
+
+    #[derive(Serialize)]
+    struct Exported {
+        written: Vec<String>,
+    }
+
+    /// Writes the game's list of names, and the pictures recorded here, into the source tree.
+    async fn export(ConnectInfo(addr): ConnectInfo<SocketAddr>, State(c): State<Ctx>, Path(game): Path<String>) -> Result<Json<Exported>, Response> {
+        local_only(addr)?;
+        known_game(&game)?;
+        let Some(export) = c.tt.export_associations(&game).map_err(bad_request)? else {
+            return Err(bad_request(anyhow::anyhow!("{game} names its own stages and cars: nothing to export")));
+        };
+        // This build was made from the repository it sits in.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut written = Vec::new();
+        let files = std::iter::once((export.list.0.to_string(), export.list.1.into_bytes())).chain(export.images);
+        for (relative, bytes) in files {
+            let path = root.join(&relative);
+            if let Some(dir) = path.parent() {
+                std::fs::create_dir_all(dir).map_err(|e| bad_request(e.into()))?;
+            }
+            std::fs::write(&path, bytes).map_err(|e| bad_request(e.into()))?;
+            written.push(relative);
+        }
+        Ok(Json(Exported { written }))
+    }
 }

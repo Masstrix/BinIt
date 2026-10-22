@@ -1,0 +1,1192 @@
+{
+ "_comment": "Suggestions for the dev tools' Names page, from public lists (stages: wrcsetups.com, 169 stages; cars: the launch list on GTPlanet and the DLC cars on Push Square). Not shipped data: a name only counts once it is recorded and exported.",
+ "stages": [
+  {
+   "country": "Argentina",
+   "region": "Catamarca",
+   "stage": "Camino a Coneta",
+   "km": 4.5,
+   "reverse": false
+  },
+  {
+   "country": "Argentina",
+   "region": "Catamarca",
+   "stage": "Camino a La Puerta",
+   "km": 8.3,
+   "reverse": false
+  },
+  {
+   "country": "Argentina",
+   "region": "Catamarca",
+   "stage": "Camino de acantilados y rocas",
+   "km": 5.3,
+   "reverse": false
+  },
+  {
+   "country": "Argentina",
+   "region": "Catamarca",
+   "stage": "Camino de acantilados y rocas inverso",
+   "km": 5.3,
+   "reverse": true
+  },
+  {
+   "country": "Argentina",
+   "region": "Catamarca",
+   "stage": "El Rodeo",
+   "km": 2.8,
+   "reverse": false
+  },
+  {
+   "country": "Argentina",
+   "region": "Catamarca",
+   "stage": "Huillaprima",
+   "km": 3.4,
+   "reverse": false
+  },
+  {
+   "country": "Argentina",
+   "region": "Catamarca",
+   "stage": "La Merced",
+   "km": 2.8,
+   "reverse": false
+  },
+  {
+   "country": "Argentina",
+   "region": "Catamarca",
+   "stage": "Las Juntas",
+   "km": 8.3,
+   "reverse": false
+  },
+  {
+   "country": "Argentina",
+   "region": "Catamarca",
+   "stage": "Miraflores",
+   "km": 3.4,
+   "reverse": false
+  },
+  {
+   "country": "Argentina",
+   "region": "Catamarca",
+   "stage": "San Isidro",
+   "km": 4.5,
+   "reverse": false
+  },
+  {
+   "country": "Argentina",
+   "region": "Catamarca",
+   "stage": "Valle de los puentes",
+   "km": 8.0,
+   "reverse": false
+  },
+  {
+   "country": "Argentina",
+   "region": "Catamarca",
+   "stage": "Valle de los puentes a la inversa",
+   "km": 8.0,
+   "reverse": true
+  },
+  {
+   "country": "Australia",
+   "region": "Monaro",
+   "stage": "Bondi Forest",
+   "km": 7.0,
+   "reverse": false
+  },
+  {
+   "country": "Australia",
+   "region": "Monaro",
+   "stage": "Chandlers Creek",
+   "km": 12.3,
+   "reverse": false
+  },
+  {
+   "country": "Australia",
+   "region": "Monaro",
+   "stage": "Chandlers Creek Reverse",
+   "km": 12.3,
+   "reverse": true
+  },
+  {
+   "country": "Australia",
+   "region": "Monaro",
+   "stage": "Mount Kaye Pass",
+   "km": 12.5,
+   "reverse": false
+  },
+  {
+   "country": "Australia",
+   "region": "Monaro",
+   "stage": "Mount Kaye Pass Reverse",
+   "km": 12.5,
+   "reverse": true
+  },
+  {
+   "country": "Australia",
+   "region": "Monaro",
+   "stage": "Noorinbee Ridge Ascent",
+   "km": 5.3,
+   "reverse": false
+  },
+  {
+   "country": "Australia",
+   "region": "Monaro",
+   "stage": "Noorinbee Ridge Descent",
+   "km": 5.3,
+   "reverse": false
+  },
+  {
+   "country": "Australia",
+   "region": "Monaro",
+   "stage": "Rockton Plains",
+   "km": 6.9,
+   "reverse": false
+  },
+  {
+   "country": "Australia",
+   "region": "Monaro",
+   "stage": "Rockton Plains Reverse",
+   "km": 6.9,
+   "reverse": true
+  },
+  {
+   "country": "Australia",
+   "region": "Monaro",
+   "stage": "Taylor Farm Sprint",
+   "km": 7.0,
+   "reverse": false
+  },
+  {
+   "country": "Australia",
+   "region": "Monaro",
+   "stage": "Yambulla Mountain Ascent",
+   "km": 6.8,
+   "reverse": false
+  },
+  {
+   "country": "Australia",
+   "region": "Monaro",
+   "stage": "Yambulla Mountain Descent",
+   "km": 6.6,
+   "reverse": false
+  },
+  {
+   "country": "Finland",
+   "region": "Jämsä",
+   "stage": "Hämelahti",
+   "km": 15.0,
+   "reverse": false
+  },
+  {
+   "country": "Finland",
+   "region": "Jämsä",
+   "stage": "Iso Oksajärvi",
+   "km": 8.0,
+   "reverse": false
+  },
+  {
+   "country": "Finland",
+   "region": "Jämsä",
+   "stage": "Jyrkysjärvi",
+   "km": 7.5,
+   "reverse": false
+  },
+  {
+   "country": "Finland",
+   "region": "Jämsä",
+   "stage": "Järvenkylä",
+   "km": 8.1,
+   "reverse": false
+  },
+  {
+   "country": "Finland",
+   "region": "Jämsä",
+   "stage": "Kailajärvi",
+   "km": 7.5,
+   "reverse": false
+  },
+  {
+   "country": "Finland",
+   "region": "Jämsä",
+   "stage": "Kakaristo",
+   "km": 16.2,
+   "reverse": false
+  },
+  {
+   "country": "Finland",
+   "region": "Jämsä",
+   "stage": "Kontinjärvi",
+   "km": 15.0,
+   "reverse": false
+  },
+  {
+   "country": "Finland",
+   "region": "Jämsä",
+   "stage": "Kotajärvi",
+   "km": 8.1,
+   "reverse": false
+  },
+  {
+   "country": "Finland",
+   "region": "Jämsä",
+   "stage": "Naarajärvi",
+   "km": 7.4,
+   "reverse": false
+  },
+  {
+   "country": "Finland",
+   "region": "Jämsä",
+   "stage": "Oksala",
+   "km": 8.1,
+   "reverse": false
+  },
+  {
+   "country": "Finland",
+   "region": "Jämsä",
+   "stage": "Paskuri",
+   "km": 7.3,
+   "reverse": false
+  },
+  {
+   "country": "Finland",
+   "region": "Jämsä",
+   "stage": "Pitkäjärvi",
+   "km": 16.2,
+   "reverse": false
+  },
+  {
+   "country": "Germany",
+   "region": "Baumholder",
+   "stage": "Frauenberg",
+   "km": 11.7,
+   "reverse": false
+  },
+  {
+   "country": "Germany",
+   "region": "Baumholder",
+   "stage": "Hammerstein",
+   "km": 10.8,
+   "reverse": false
+  },
+  {
+   "country": "Germany",
+   "region": "Baumholder",
+   "stage": "Innerer Feld-Sprint",
+   "km": 5.6,
+   "reverse": false
+  },
+  {
+   "country": "Germany",
+   "region": "Baumholder",
+   "stage": "Innerer Feld-Sprint (umgekehrt)",
+   "km": 5.6,
+   "reverse": true
+  },
+  {
+   "country": "Germany",
+   "region": "Baumholder",
+   "stage": "Kreuzungsring",
+   "km": 6.3,
+   "reverse": false
+  },
+  {
+   "country": "Germany",
+   "region": "Baumholder",
+   "stage": "Kreuzungsring reverse",
+   "km": 6.3,
+   "reverse": true
+  },
+  {
+   "country": "Germany",
+   "region": "Baumholder",
+   "stage": "Oberstein",
+   "km": 11.7,
+   "reverse": false
+  },
+  {
+   "country": "Germany",
+   "region": "Baumholder",
+   "stage": "Ruschberg",
+   "km": 10.7,
+   "reverse": false
+  },
+  {
+   "country": "Germany",
+   "region": "Baumholder",
+   "stage": "Verbundsring",
+   "km": 5.8,
+   "reverse": false
+  },
+  {
+   "country": "Germany",
+   "region": "Baumholder",
+   "stage": "Verbundsring reverse",
+   "km": 5.8,
+   "reverse": true
+  },
+  {
+   "country": "Germany",
+   "region": "Baumholder",
+   "stage": "Waldabstieg",
+   "km": 5.4,
+   "reverse": false
+  },
+  {
+   "country": "Germany",
+   "region": "Baumholder",
+   "stage": "Waldaufsteig",
+   "km": 5.4,
+   "reverse": false
+  },
+  {
+   "country": "Greece",
+   "region": "Argolis",
+   "stage": "Abies Koilada",
+   "km": 7.1,
+   "reverse": false
+  },
+  {
+   "country": "Greece",
+   "region": "Argolis",
+   "stage": "Ampelonas Ormi",
+   "km": 5.0,
+   "reverse": false
+  },
+  {
+   "country": "Greece",
+   "region": "Argolis",
+   "stage": "Anodou Farmakas",
+   "km": 9.6,
+   "reverse": false
+  },
+  {
+   "country": "Greece",
+   "region": "Argolis",
+   "stage": "Fourketa Kourva",
+   "km": 4.8,
+   "reverse": false
+  },
+  {
+   "country": "Greece",
+   "region": "Argolis",
+   "stage": "Kathodo Leontiou",
+   "km": 9.6,
+   "reverse": false
+  },
+  {
+   "country": "Greece",
+   "region": "Argolis",
+   "stage": "Koryfi Dafini",
+   "km": 4.5,
+   "reverse": false
+  },
+  {
+   "country": "Greece",
+   "region": "Argolis",
+   "stage": "Ourea Spevsi",
+   "km": 5.7,
+   "reverse": false
+  },
+  {
+   "country": "Greece",
+   "region": "Argolis",
+   "stage": "Pedines Epidaxi",
+   "km": 5.4,
+   "reverse": false
+  },
+  {
+   "country": "Greece",
+   "region": "Argolis",
+   "stage": "Perasma Platani",
+   "km": 10.7,
+   "reverse": false
+  },
+  {
+   "country": "Greece",
+   "region": "Argolis",
+   "stage": "Pomona Ekrixi",
+   "km": 5.1,
+   "reverse": false
+  },
+  {
+   "country": "Greece",
+   "region": "Argolis",
+   "stage": "Tsiristra Thea",
+   "km": 10.4,
+   "reverse": false
+  },
+  {
+   "country": "Greece",
+   "region": "Argolis",
+   "stage": "Ypsona tou Dasos",
+   "km": 6.6,
+   "reverse": false
+  },
+  {
+   "country": "Monte Carlo",
+   "region": "Monte Carlo",
+   "stage": "Approache du Col de Turini Montee",
+   "km": 4.0,
+   "reverse": false
+  },
+  {
+   "country": "Monte Carlo",
+   "region": "Monte Carlo",
+   "stage": "Col de Turini - Depart en descente",
+   "km": 6.8,
+   "reverse": false
+  },
+  {
+   "country": "Monte Carlo",
+   "region": "Monte Carlo",
+   "stage": "Col de Turini - Descente",
+   "km": 5.2,
+   "reverse": false
+  },
+  {
+   "country": "Monte Carlo",
+   "region": "Monte Carlo",
+   "stage": "Col de Turini - Sprint en descente",
+   "km": 4.7,
+   "reverse": false
+  },
+  {
+   "country": "Monte Carlo",
+   "region": "Monte Carlo",
+   "stage": "Col de Turini - Sprint en montee",
+   "km": 4.7,
+   "reverse": false
+  },
+  {
+   "country": "Monte Carlo",
+   "region": "Monte Carlo",
+   "stage": "Col de Turini Depart",
+   "km": 9.8,
+   "reverse": false
+  },
+  {
+   "country": "Monte Carlo",
+   "region": "Monte Carlo",
+   "stage": "Gordolon - Courte Montee",
+   "km": 5.2,
+   "reverse": false
+  },
+  {
+   "country": "Monte Carlo",
+   "region": "Monte Carlo",
+   "stage": "Pra d'Alart",
+   "km": 9.8,
+   "reverse": false
+  },
+  {
+   "country": "Monte Carlo",
+   "region": "Monte Carlo",
+   "stage": "Route de Turini",
+   "km": 10.9,
+   "reverse": false
+  },
+  {
+   "country": "Monte Carlo",
+   "region": "Monte Carlo",
+   "stage": "Route de Turini Decente",
+   "km": 4.0,
+   "reverse": false
+  },
+  {
+   "country": "Monte Carlo",
+   "region": "Monte Carlo",
+   "stage": "Route de Turini Montee",
+   "km": 6.8,
+   "reverse": false
+  },
+  {
+   "country": "Monte Carlo",
+   "region": "Monte Carlo",
+   "stage": "Vallee Descendante",
+   "km": 10.9,
+   "reverse": false
+  },
+  {
+   "country": "New Zealand",
+   "region": "Hawkes Bay",
+   "stage": "Elsthorpe Sprint Forward",
+   "km": 7.3,
+   "reverse": false
+  },
+  {
+   "country": "New Zealand",
+   "region": "Hawkes Bay",
+   "stage": "Elsthorpe Sprint Reverse",
+   "km": 7.3,
+   "reverse": true
+  },
+  {
+   "country": "New Zealand",
+   "region": "Hawkes Bay",
+   "stage": "Ocean Beach",
+   "km": 11.5,
+   "reverse": false
+  },
+  {
+   "country": "New Zealand",
+   "region": "Hawkes Bay",
+   "stage": "Ocean Beach Sprint",
+   "km": 6.6,
+   "reverse": false
+  },
+  {
+   "country": "New Zealand",
+   "region": "Hawkes Bay",
+   "stage": "Ocean Beach Sprint Reverse",
+   "km": 6.6,
+   "reverse": true
+  },
+  {
+   "country": "New Zealand",
+   "region": "Hawkes Bay",
+   "stage": "Te Awanga Forward",
+   "km": 11.5,
+   "reverse": false
+  },
+  {
+   "country": "New Zealand",
+   "region": "Hawkes Bay",
+   "stage": "Te Awanga Sprint Forward",
+   "km": 4.8,
+   "reverse": false
+  },
+  {
+   "country": "New Zealand",
+   "region": "Hawkes Bay",
+   "stage": "Te Awanga Sprint Reverse",
+   "km": 4.8,
+   "reverse": true
+  },
+  {
+   "country": "New Zealand",
+   "region": "Hawkes Bay",
+   "stage": "Waimarama Point Forward",
+   "km": 16.1,
+   "reverse": false
+  },
+  {
+   "country": "New Zealand",
+   "region": "Hawkes Bay",
+   "stage": "Waimarama Point Reverse",
+   "km": 16.1,
+   "reverse": true
+  },
+  {
+   "country": "New Zealand",
+   "region": "Hawkes Bay",
+   "stage": "Waimarama Sprint Forward",
+   "km": 8.8,
+   "reverse": false
+  },
+  {
+   "country": "New Zealand",
+   "region": "Hawkes Bay",
+   "stage": "Waimarama Sprint Reverse",
+   "km": 8.8,
+   "reverse": true
+  },
+  {
+   "country": "Poland",
+   "region": "Leczna County",
+   "stage": "Borysik",
+   "km": 9.3,
+   "reverse": false
+  },
+  {
+   "country": "Poland",
+   "region": "Leczna County",
+   "stage": "Czarny Las",
+   "km": 6.6,
+   "reverse": false
+  },
+  {
+   "country": "Poland",
+   "region": "Leczna County",
+   "stage": "Jagodno",
+   "km": 6.8,
+   "reverse": false
+  },
+  {
+   "country": "Poland",
+   "region": "Leczna County",
+   "stage": "Jezioro Lukie",
+   "km": 6.6,
+   "reverse": false
+  },
+  {
+   "country": "Poland",
+   "region": "Leczna County",
+   "stage": "Jezioro Rotcze",
+   "km": 13.4,
+   "reverse": false
+  },
+  {
+   "country": "Poland",
+   "region": "Leczna County",
+   "stage": "Józefin",
+   "km": 7.0,
+   "reverse": false
+  },
+  {
+   "country": "Poland",
+   "region": "Leczna County",
+   "stage": "Kopina",
+   "km": 7.0,
+   "reverse": false
+  },
+  {
+   "country": "Poland",
+   "region": "Leczna County",
+   "stage": "Lejno",
+   "km": 6.8,
+   "reverse": false
+  },
+  {
+   "country": "Poland",
+   "region": "Leczna County",
+   "stage": "Marynka",
+   "km": 9.3,
+   "reverse": false
+  },
+  {
+   "country": "Poland",
+   "region": "Leczna County",
+   "stage": "Zagorze",
+   "km": 16.5,
+   "reverse": false
+  },
+  {
+   "country": "Poland",
+   "region": "Leczna County",
+   "stage": "Zaróbka",
+   "km": 16.5,
+   "reverse": false
+  },
+  {
+   "country": "Poland",
+   "region": "Leczna County",
+   "stage": "Zienki",
+   "km": 13.4,
+   "reverse": false
+  },
+  {
+   "country": "Scotland",
+   "region": "Perth And Kinross",
+   "stage": "Annbank Station",
+   "km": 7.8,
+   "reverse": false
+  },
+  {
+   "country": "Scotland",
+   "region": "Perth And Kinross",
+   "stage": "Annbank Station Reverse",
+   "km": 7.6,
+   "reverse": true
+  },
+  {
+   "country": "Scotland",
+   "region": "Perth And Kinross",
+   "stage": "Glencastle Farm",
+   "km": 5.3,
+   "reverse": false
+  },
+  {
+   "country": "Scotland",
+   "region": "Perth And Kinross",
+   "stage": "Glencastle Farm Reverse",
+   "km": 5.2,
+   "reverse": true
+  },
+  {
+   "country": "Scotland",
+   "region": "Perth And Kinross",
+   "stage": "Newhouse Bridge",
+   "km": 12.9,
+   "reverse": false
+  },
+  {
+   "country": "Scotland",
+   "region": "Perth And Kinross",
+   "stage": "Newhouse Bridge Reverse",
+   "km": 13.0,
+   "reverse": true
+  },
+  {
+   "country": "Scotland",
+   "region": "Perth And Kinross",
+   "stage": "Old Butterstone Muir",
+   "km": 5.8,
+   "reverse": false
+  },
+  {
+   "country": "Scotland",
+   "region": "Perth And Kinross",
+   "stage": "Old Butterstone Muir Reverse",
+   "km": 5.7,
+   "reverse": true
+  },
+  {
+   "country": "Scotland",
+   "region": "Perth And Kinross",
+   "stage": "Rosebank Farm",
+   "km": 7.2,
+   "reverse": false
+  },
+  {
+   "country": "Scotland",
+   "region": "Perth And Kinross",
+   "stage": "Rosebank Farm Reverse",
+   "km": 7.0,
+   "reverse": true
+  },
+  {
+   "country": "Scotland",
+   "region": "Perth And Kinross",
+   "stage": "South Morningside",
+   "km": 12.6,
+   "reverse": false
+  },
+  {
+   "country": "Scotland",
+   "region": "Perth And Kinross",
+   "stage": "South Morningside Reverse",
+   "km": 12.7,
+   "reverse": true
+  },
+  {
+   "country": "Spain",
+   "region": "Ribadelles",
+   "stage": "Ascenso bosque Montevard",
+   "km": 6.8,
+   "reverse": false
+  },
+  {
+   "country": "Spain",
+   "region": "Ribadelles",
+   "stage": "Ascenso por valle el Gualet",
+   "km": 7.0,
+   "reverse": false
+  },
+  {
+   "country": "Spain",
+   "region": "Ribadelles",
+   "stage": "Camino a Centenera",
+   "km": 10.6,
+   "reverse": false
+  },
+  {
+   "country": "Spain",
+   "region": "Ribadelles",
+   "stage": "Centenera",
+   "km": 10.6,
+   "reverse": false
+  },
+  {
+   "country": "Spain",
+   "region": "Ribadelles",
+   "stage": "Comienzo en Bellriu",
+   "km": 14.3,
+   "reverse": false
+  },
+  {
+   "country": "Spain",
+   "region": "Ribadelles",
+   "stage": "Descento por carretera",
+   "km": 4.6,
+   "reverse": false
+  },
+  {
+   "country": "Spain",
+   "region": "Ribadelles",
+   "stage": "Final en Bellriu",
+   "km": 14.3,
+   "reverse": false
+  },
+  {
+   "country": "Spain",
+   "region": "Ribadelles",
+   "stage": "Salida desde Montverd",
+   "km": 7.0,
+   "reverse": false
+  },
+  {
+   "country": "Spain",
+   "region": "Ribadelles",
+   "stage": "Subida por Carretera",
+   "km": 4.6,
+   "reverse": false
+  },
+  {
+   "country": "Spain",
+   "region": "Ribadelles",
+   "stage": "Vinedos Dardenya",
+   "km": 6.5,
+   "reverse": false
+  },
+  {
+   "country": "Spain",
+   "region": "Ribadelles",
+   "stage": "Vinedos Dardenya inversa",
+   "km": 6.5,
+   "reverse": true
+  },
+  {
+   "country": "Spain",
+   "region": "Ribadelles",
+   "stage": "Vinedos dentro del valle Parra",
+   "km": 6.8,
+   "reverse": false
+  },
+  {
+   "country": "Sweden",
+   "region": "Varmland",
+   "stage": "Bjorklangen",
+   "km": 5.2,
+   "reverse": false
+  },
+  {
+   "country": "Sweden",
+   "region": "Varmland",
+   "stage": "Elgsjon",
+   "km": 7.3,
+   "reverse": false
+  },
+  {
+   "country": "Sweden",
+   "region": "Varmland",
+   "stage": "Hamra",
+   "km": 12.3,
+   "reverse": false
+  },
+  {
+   "country": "Sweden",
+   "region": "Varmland",
+   "stage": "Lysvik",
+   "km": 12.3,
+   "reverse": false
+  },
+  {
+   "country": "Sweden",
+   "region": "Varmland",
+   "stage": "Norraskoga",
+   "km": 12.0,
+   "reverse": false
+  },
+  {
+   "country": "Sweden",
+   "region": "Varmland",
+   "stage": "Ostra Hinnsjon",
+   "km": 5.2,
+   "reverse": false
+  },
+  {
+   "country": "Sweden",
+   "region": "Varmland",
+   "stage": "Ransbysater",
+   "km": 12.0,
+   "reverse": false
+  },
+  {
+   "country": "Sweden",
+   "region": "Varmland",
+   "stage": "Skogsrallyt",
+   "km": 5.3,
+   "reverse": false
+  },
+  {
+   "country": "Sweden",
+   "region": "Varmland",
+   "stage": "Stor-Jangen Sprint",
+   "km": 6.7,
+   "reverse": false
+  },
+  {
+   "country": "Sweden",
+   "region": "Varmland",
+   "stage": "Stor-Jangen sprint reverse",
+   "km": 6.7,
+   "reverse": true
+  },
+  {
+   "country": "Sweden",
+   "region": "Varmland",
+   "stage": "Älgsjön",
+   "km": 7.3,
+   "reverse": false
+  },
+  {
+   "country": "Sweden",
+   "region": "Varmland",
+   "stage": "Älgsjön Sprint",
+   "km": 5.3,
+   "reverse": false
+  },
+  {
+   "country": "USA",
+   "region": "New England",
+   "stage": "Beaver Creek Trail Reverse",
+   "km": 12.9,
+   "reverse": true
+  },
+  {
+   "country": "USA",
+   "region": "New England",
+   "stage": "Beaver Creek Trailer Forward",
+   "km": 12.9,
+   "reverse": false
+  },
+  {
+   "country": "USA",
+   "region": "New England",
+   "stage": "Fuller Mountain Ascent",
+   "km": 6.6,
+   "reverse": false
+  },
+  {
+   "country": "USA",
+   "region": "New England",
+   "stage": "Fuller Mountain Descent",
+   "km": 6.6,
+   "reverse": false
+  },
+  {
+   "country": "USA",
+   "region": "New England",
+   "stage": "Fury Lake Depart",
+   "km": 6.9,
+   "reverse": false
+  },
+  {
+   "country": "USA",
+   "region": "New England",
+   "stage": "Hancock Creek Burst",
+   "km": 6.9,
+   "reverse": false
+  },
+  {
+   "country": "USA",
+   "region": "New England",
+   "stage": "Hancock Hill Sprint Forward",
+   "km": 6.0,
+   "reverse": false
+  },
+  {
+   "country": "USA",
+   "region": "New England",
+   "stage": "Hancock Hill Sprint Reverse",
+   "km": 6.1,
+   "reverse": true
+  },
+  {
+   "country": "USA",
+   "region": "New England",
+   "stage": "North Fork Pass",
+   "km": 12.5,
+   "reverse": false
+  },
+  {
+   "country": "USA",
+   "region": "New England",
+   "stage": "North Fork Pass Reverse",
+   "km": 12.5,
+   "reverse": true
+  },
+  {
+   "country": "USA",
+   "region": "New England",
+   "stage": "Tolt Valley Sprint Forward",
+   "km": 6.1,
+   "reverse": false
+  },
+  {
+   "country": "USA",
+   "region": "New England",
+   "stage": "Tolt Valley Sprint Reverse",
+   "km": 6.0,
+   "reverse": true
+  },
+  {
+   "country": "Wales",
+   "region": "Powys",
+   "stage": "Bidno Moorland",
+   "km": 4.9,
+   "reverse": false
+  },
+  {
+   "country": "Wales",
+   "region": "Powys",
+   "stage": "Bidno Moorland Reverse",
+   "km": 4.8,
+   "reverse": true
+  },
+  {
+   "country": "Wales",
+   "region": "Powys",
+   "stage": "Bronfelen",
+   "km": 11.4,
+   "reverse": false
+  },
+  {
+   "country": "Wales",
+   "region": "Powys",
+   "stage": "Dyffryn Afon",
+   "km": 5.7,
+   "reverse": false
+  },
+  {
+   "country": "Wales",
+   "region": "Powys",
+   "stage": "Dyffryn Afon Reverse",
+   "km": 5.7,
+   "reverse": true
+  },
+  {
+   "country": "Wales",
+   "region": "Powys",
+   "stage": "Fferm Wynt",
+   "km": 5.7,
+   "reverse": false
+  },
+  {
+   "country": "Wales",
+   "region": "Powys",
+   "stage": "Fferm Wynt Reverse",
+   "km": 5.7,
+   "reverse": true
+  },
+  {
+   "country": "Wales",
+   "region": "Powys",
+   "stage": "Geufron Forest",
+   "km": 10.0,
+   "reverse": false
+  },
+  {
+   "country": "Wales",
+   "region": "Powys",
+   "stage": "Pant Mawr",
+   "km": 4.7,
+   "reverse": false
+  },
+  {
+   "country": "Wales",
+   "region": "Powys",
+   "stage": "Pant Mawr Reverse",
+   "km": 5.1,
+   "reverse": true
+  },
+  {
+   "country": "Wales",
+   "region": "Powys",
+   "stage": "River Severn Valley",
+   "km": 11.4,
+   "reverse": false
+  },
+  {
+   "country": "Wales",
+   "region": "Powys",
+   "stage": "Sweet Lamb",
+   "km": 9.9,
+   "reverse": false
+  }
+ ],
+ "cars": [
+  "Alpine Renault A110 1600 S",
+  "Aston Martin V8 Vantage GT4",
+  "Audi S1 EKS RX quattro",
+  "Audi Sport quattro S1 E2",
+  "BMW E30 M3 Evo Rally",
+  "BMW M1 Procar Rally",
+  "Chevrolet Camaro GT4.R",
+  "Citroen C3 R5",
+  "Citroen C4 Rally",
+  "Datsun 240Z",
+  "DS 21",
+  "Fiat 131 Abarth Rally",
+  "Ford Escort Mk II",
+  "Ford Escort RS Cosworth",
+  "Ford Fiesta OMSE SuperCar Lites",
+  "Ford Fiesta R2",
+  "Ford Fiesta R5",
+  "Ford Fiesta Rallycross (MK7)",
+  "Ford Fiesta Rallycross (MK8)",
+  "Ford Fiesta Rallycross (STARD)",
+  "Ford Fiesta RXS Evo 5",
+  "Ford Focus RS Rally 2001",
+  "Ford Focus RS Rally 2007",
+  "Ford Mustang GT4",
+  "Ford RS200",
+  "Ford RS200 Evolution",
+  "Ford Sierra Cosworth RS500",
+  "Lancia 037 Evo 2",
+  "Lancia Delta HF Integrale",
+  "Lancia Delta S4",
+  "Lancia Delta S4 Rallycross",
+  "Lancia Fulvia HF",
+  "Lancia Stratos",
+  "MG Metro 6R4",
+  "MG Metro 6R4 Rallycross",
+  "MINI Cooper S",
+  "Mini Cooper SX1",
+  "Mitsubishi Lancer Evolution VI",
+  "Mitsubishi Lancer Evolution X",
+  "Mitsubishi Space Star R5",
+  "Opel Adam R2",
+  "Opel Ascona 400",
+  "Opel Corsa Super 1600",
+  "Opel Kadett C GT/E",
+  "Opel Manta 400",
+  "Peugeot 205 GTI",
+  "Peugeot 205 T16 Evo 2",
+  "Peugeot 205 T16 Rallycross",
+  "Peugeot 206 Rally",
+  "Peugeot 208 R2",
+  "Peugeot 208 T16 R5",
+  "Peugeot 208 WRX",
+  "Peugeot 306 Maxi Kit Car",
+  "Porsche 911 SC RS",
+  "Renault 5 Turbo",
+  "Renault Clio R.S. S1600",
+  "Renault Clio RS RX",
+  "Renault Megane RS RX",
+  "Seat Ibiza Kit Car",
+  "Seat Ibiza RX",
+  "Skoda Fabia Rally 2005",
+  "Speedcar Xtrem",
+  "SUBARU Impreza",
+  "SUBARU Impreza 1995",
+  "SUBARU Impreza 2001",
+  "SUBARU Impreza RS",
+  "SUBARU Impreza S4 Rally 2008",
+  "SUBARU WRX STI NR4",
+  "Subaru WRX STI Rallycross",
+  "Volkswagen Golf GTI 16V",
+  "Volkswagen Golf GTI Mk 4 Kit Car",
+  "Volkswagen Polo GTI R5",
+  "Volkswagen Polo R Supercar",
+  "Volkswagen Polo S1600",
+  "ŠKODA Fabia R5"
+ ],
+ "classes": [
+  "R2",
+  "R5",
+  "NR4",
+  "Rally GT",
+  "Group A",
+  "Group B (4WD)",
+  "Group B (RWD)",
+  "F2 Kit Car",
+  "H1 (FWD)",
+  "H2 (FWD)",
+  "H2 (RWD)",
+  "H3 (RWD)",
+  "Crosskart",
+  "RX Super 1600",
+  "RX Supercar",
+  "RX Group B"
+ ]
+}

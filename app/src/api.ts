@@ -217,6 +217,43 @@ export interface PenaltyPin {
   position: [number, number] | null;
 }
 
+/** A name for a stage or car a game's data doesn't name, from the shipped list or recorded here (dev tools). */
+export interface AssociationEntry {
+  kind: "stage" | "car";
+  id: string;
+  name: string;
+  /** What it was recorded from: a stage's length and start, a car's engine. */
+  detail: Record<string, unknown>;
+  source: "dev" | "shipped";
+  hasImage: boolean;
+  /** A shipped picture, as a path under the app's assets. */
+  image: string | null;
+}
+
+/** An "Unknown stage 8B2484" label found in stored runs. */
+export interface UnknownSeen {
+  kind: "stage" | "car";
+  id: string;
+  label: string;
+  runs: number;
+}
+
+/** What the game is telling us about the stage and car being driven right now. */
+export interface NowDriving {
+  identity: {
+    stage: { id: string | null; length_m: number; start: [number, number] | null };
+    car: { id: string; max_rpm: number; idle_rpm: number; gears: number };
+  } | null;
+  stageLabel: string | null;
+  carLabel: string | null;
+}
+
+export interface AssociationsView {
+  now: NowDriving;
+  entries: AssociationEntry[];
+  unknown: UnknownSeen[];
+}
+
 export interface LiveView {
   driving: boolean;
   /** What the game is doing: in a menu, driving, paused on track, or watching a replay. */
@@ -321,6 +358,9 @@ export function openDownload(what: "installer" | "portable" | "release") {
 // http://<pc>:1420 reaches the PC's server rather than itself.
 const BASE = isTauri ? "http://127.0.0.1:7878" : location.port === "1420" ? `http://${location.hostname}:7878` : "";
 
+/** Where a recorded picture for a stage or car is served from (dev tools). */
+export const associationImageUrl = (game: string, kind: string, id: string) => `${BASE}/api/dev/associations/${game}/${kind}/${id}/image`;
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}/api${path}`, {
     method,
@@ -350,6 +390,17 @@ export const api = {
   combos: (game?: string) => request<Combo[]>("GET", `/combos${game ? `?game=${encodeURIComponent(game)}` : ""}`),
   catalogue: (game: string) => request<Catalogue>("GET", `/catalogue?game=${encodeURIComponent(game)}`),
   /** Rows of [progress, elapsedMs, speedKmh, throttle, brake, clutch, steering, gear], or null. */
+  // Developer tools (a development build only).
+  devAssociations: (game: string) => request<AssociationsView>("GET", `/dev/associations/${game}`),
+  devSaveAssociation: (game: string, kind: string, body: { name: string; detail: Record<string, unknown> }) =>
+    request<null>("PUT", `/dev/associations/${game}/${kind}`, body),
+  devDeleteAssociation: (game: string, kind: string, id: string) => request<null>("DELETE", `/dev/associations/${game}/${kind}/${id}`),
+  devSetAssociationImage: async (game: string, kind: string, id: string, file: File) => {
+    const res = await fetch(`${BASE}/api/dev/associations/${game}/${kind}/${id}/image`, { method: "PUT", headers: { "Content-Type": file.type || "image/png" }, body: file });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.error ?? `Request failed (${res.status})`);
+  },
+  devExport: (game: string) => request<{ written: string[] }>("POST", `/dev/associations/${game}/export`),
   lapPenalties: (lapId: number) => request<PenaltyPin[]>("GET", `/laps/${lapId}/penalties`),
   lapTrace: (lapId: number) => request<{ lapId: number; points: number[][] } | null>("GET", `/laps/${lapId}/trace`),
   /** Version, data folder and database counts. Desktop app only. */

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { api, isTauri, useAppState, useFetch } from "./api";
 import { GameIcon } from "./components/GameIcon";
 import { Logo } from "./components/Helmet";
@@ -13,6 +13,8 @@ import { ChallengesPage } from "./pages/Challenges";
 import { DriversPage } from "./pages/Drivers";
 import { GamesPage } from "./pages/Games";
 import { AdvancedPage } from "./pages/Advanced";
+// The developer tools are loaded only in a development build, so a release carries none of their code or data.
+const DevNamesPage = import.meta.env.DEV ? lazy(() => import("./pages/DevNames").then((m) => ({ default: m.DevNamesPage }))) : null;
 import { TelemetryPage } from "./pages/Telemetry";
 import { Overlay } from "./pages/Overlay";
 import { Updater } from "./pages/Updater";
@@ -28,6 +30,8 @@ const ROUTES = [
   ...(isTauri
     ? [{ path: "/advanced", label: "Advanced", icon: "M4 6h16M4 12h16M4 18h16M9 3v6M15 9v6M8 15v6" }]
     : []),
+  // Developer tools: only in a development build (`tauri dev`), never in a release.
+  ...(import.meta.env.DEV ? [{ path: "/dev/names", label: "Names (dev)", icon: "M4 7h16M4 12h10M4 17h6M17 14l3 3-3 3" }] : []),
 ];
 
 function useHashPath() {
@@ -64,6 +68,13 @@ export function App() {
   else if (path.startsWith("/games")) page = <GamesPage />;
   else if (path.startsWith("/telemetry")) page = <TelemetryPage path={path} />;
   else if (path.startsWith("/advanced")) page = <AdvancedPage />;
+  else if (DevNamesPage && path.startsWith("/dev/names")) {
+    page = (
+      <Suspense fallback={null}>
+        <DevNamesPage />
+      </Suspense>
+    );
+  }
   else page = <Home />;
 
   return (
