@@ -9,12 +9,64 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 6;
+const SCHEMA_VERSION: i32 = 7;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
 /// Who is in the seat: a driver id, so it means nothing in another database.
 pub const SEAT_SETTING: &str = "seat_driver_id";
+
+/// Finds laps that were given the previous lap's time and stops them counting. Returns how many.
+///
+/// Before 0.6.1 the lap tracker took the game's "last lap" time half a second after the line even if
+/// the game hadn't updated it yet, so a lap could be stored with the time of the lap before it, which
+/// after a driver swap is someone else's. Such a lap has exactly the previous lap's time (same car and
+/// track) and was recorded about one lap after it. When its input trace shows it really took that
+/// long, it's a genuine match and stays; otherwise it becomes a "noTime" lap (never ranked), with the
+/// time measured from its trace when there is one. Its trace and timing profile, cut at the wrong
+/// time, are dropped. Nothing else changes.
+fn repair_carried_over_times(conn: &Connection) -> Result<usize> {
+    struct Row {
+        id: LapId,
+        combo: (String, String, String, String),
+        time_ms: u32,
+        timed: bool,
+        recorded_at: Timestamp,
+    }
+    let rows: Vec<Row> = conn
+        .prepare(
+            "SELECT id, game, track, layout, car, time_ms, valid = 1 AND untimed_reason IS NULL, recorded_at
+             FROM laps ORDER BY game, track, layout, car, recorded_at, id",
+        )?
+        .query_map([], |r| {
+            Ok(Row { id: r.get(0)?, combo: (r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?), time_ms: r.get(5)?, timed: r.get(6)?, recorded_at: r.get(7)? })
+        })?
+        .collect::<Result<_, _>>()?;
+
+    let mut repaired = 0;
+    for pair in rows.windows(2) {
+        let (before, lap) = (&pair[0], &pair[1]);
+        // The very next lap on this car and track, with the same time, about one lap later.
+        let gap = lap.recorded_at - before.recorded_at;
+        if !lap.timed || lap.combo != before.combo || lap.time_ms != before.time_ms || lap.time_ms == 0 {
+            continue;
+        }
+        if gap < lap.time_ms as i64 / 2 || gap > lap.time_ms as i64 * 2 + 30_000 {
+            continue;
+        }
+        let trace: Option<Vec<u8>> = conn.query_row("SELECT trace FROM laps WHERE id = ?1", [lap.id], |r| r.get(0))?;
+        let measured = trace.as_deref().and_then(LapTrace::from_bytes).and_then(|t| t.measured_ms());
+        if measured.is_some_and(|m| m.abs_diff(lap.time_ms) <= 300) {
+            continue; // It really did take that long: two laps matching to the millisecond.
+        }
+        conn.execute(
+            "UPDATE laps SET valid = 0, untimed_reason = 'noTime', time_ms = ?2, trace = NULL, profile = NULL WHERE id = ?1",
+            params![lap.id, measured.unwrap_or(lap.time_ms)],
+        )?;
+        repaired += 1;
+    }
+    Ok(repaired)
+}
 
 pub struct Store {
     conn: Connection,
@@ -129,6 +181,13 @@ impl Store {
         if version < 6 {
             // A rally stage's path is open (start and finish are different places); circuits stay closed.
             conn.execute_batch("ALTER TABLE track_maps ADD COLUMN closed INTEGER NOT NULL DEFAULT 1;")?;
+        }
+        if version < 7 {
+            // Laps recorded before 0.6.1 may carry the previous lap's time (see `repair_carried_over_times`).
+            let repaired = repair_carried_over_times(&conn)?;
+            if repaired > 0 {
+                eprintln!("data: {repaired} laps had the lap before's time; they're now \"no time\" laps");
+            }
         }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         Ok(Self { conn })
@@ -690,4 +749,80 @@ fn challenge_from_row(r: &Row) -> rusqlite::Result<Challenge> {
         prizes: serde_json::from_str(&prizes).unwrap_or_default(),
         created_at: r.get(11)?,
     })
+}
+
+#[cfg(test)]
+mod repair_tests {
+    use super::*;
+    use tt_games::timing::TracePoint;
+
+    /// What the tracker kept of a lap that really took `real_ms`, stored as `stored_ms`: clock readings
+    /// every 0.5% up to the stored time.
+    fn trace(real_ms: u32, stored_ms: u32) -> LapTrace {
+        LapTrace(
+            (1..200)
+                .map(|i| TracePoint { progress: i as f32 / 200.0, elapsed_ms: real_ms * i / 200, speed_kmh: 150.0, throttle: 1.0, brake: 0.0, clutch: 0.0, steering: 0.0, gear: 4 })
+                .filter(|p| p.elapsed_ms <= stored_ms)
+                .collect(),
+        )
+    }
+
+    fn lap(store: &Store, car: &str, time_ms: u32, at: Timestamp, real_ms: Option<u32>) -> LapId {
+        let lap = Lap {
+            id: 0,
+            driver_id: None,
+            combo: Combo { game: "acevo".into(), track: "Imola".into(), layout: String::new(), car: car.into() },
+            session_kind: "Hot Stint".into(),
+            lap_number: 1,
+            time_ms,
+            valid: true,
+            untimed_reason: None,
+            sectors_ms: vec![],
+            recorded_at: at,
+        };
+        store.insert_lap(&lap, None, real_ms.map(|r| trace(r, time_ms)).as_ref()).unwrap()
+    }
+
+    fn row(store: &Store, id: LapId) -> (bool, Option<String>, u32, bool) {
+        store
+            .conn
+            .query_row("SELECT valid, untimed_reason, time_ms, trace IS NOT NULL FROM laps WHERE id = ?1", [id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap()
+    }
+
+    #[test]
+    fn a_lap_given_the_previous_laps_time_stops_counting() {
+        let store = Store::open_in_memory().unwrap();
+        let t0 = 1_000_000_000;
+        let sam = lap(&store, "gt3", 102_318, t0, Some(102_318));
+        // Jess really took 1:44.500 but was stored with Sam's 1:42.318, half a second after the line.
+        let jess = lap(&store, "gt3", 102_318, t0 + 105_000, Some(104_500));
+        // A lap with no trace, same thing.
+        let alex = lap(&store, "gt3", 102_318, t0 + 210_000, None);
+        assert_eq!(repair_carried_over_times(&store.conn).unwrap(), 2);
+
+        assert_eq!(row(&store, sam), (true, None, 102_318, true), "the original lap is untouched");
+        let (valid, reason, time, has_trace) = row(&store, jess);
+        assert_eq!((valid, reason.as_deref(), has_trace), (false, Some("noTime"), false));
+        assert!(time.abs_diff(104_500) <= 100, "measured from the trace: {time}");
+        assert_eq!(row(&store, alex), (false, Some("noTime".into()), 102_318, false), "no trace: the time stays, unranked");
+        // Running it again finds nothing more.
+        assert_eq!(repair_carried_over_times(&store.conn).unwrap(), 0);
+    }
+
+    #[test]
+    fn genuine_matches_and_unrelated_laps_are_left_alone() {
+        let store = Store::open_in_memory().unwrap();
+        let t0 = 1_000_000_000;
+        lap(&store, "gt3", 102_318, t0, Some(102_318));
+        // Really took 1:42.318 too, by its own trace.
+        let twin = lap(&store, "gt3", 102_318, t0 + 102_800, Some(102_318));
+        // The same time a day later, and the same time in another car straight after.
+        let later = lap(&store, "gt3", 102_318, t0 + 86_400_000, None);
+        let other_car = lap(&store, "gt4", 102_318, t0 + 86_500_000, None);
+        assert_eq!(repair_carried_over_times(&store.conn).unwrap(), 0);
+        for id in [twin, later, other_car] {
+            assert_eq!(row(&store, id).0, true);
+        }
+    }
 }
