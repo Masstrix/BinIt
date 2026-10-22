@@ -69,7 +69,7 @@ export const LAP_BADGE: Record<Exclude<LapKind, "timed">, { text: string; classN
   inLap: { text: "IN LAP", className: "chip plain", title: "Ended in the pit lane, not timed" },
   partial: { text: "PARTIAL", className: "chip plain", title: "Bin It joined mid-lap, not timed" },
   driverChange: { text: "DRIVER CHANGE", className: "chip plain", title: "The driver changed during this lap, so it was not timed for anyone" },
-  noTime: { text: "NO TIME", className: "chip plain", title: "The game didn't confirm this lap's time, so it isn't ranked. The time shown is Bin It's own reading" },
+  noTime: { text: "NO TIME", className: "chip plain", title: "The game didn't confirm this lap's time, so it isn't ranked. The time shown is Bin It's own measurement where it has one" },
 };
 
 /**

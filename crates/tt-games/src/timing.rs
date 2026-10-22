@@ -262,6 +262,23 @@ impl LapTrace {
         out
     }
 
+    /// How long the lap took by the game's own lap clock, as sampled: the last reading carried on
+    /// to the line at the pace of the last few percent. `None` without readings close to the line.
+    /// Good to a few hundredths; used to check a stored lap time, never as one.
+    pub fn measured_ms(&self) -> Option<u32> {
+        let last = *self.0.iter().max_by(|a, b| a.progress.total_cmp(&b.progress))?;
+        if last.progress < 0.95 {
+            return None;
+        }
+        let earlier = self
+            .0
+            .iter()
+            .filter(|p| p.progress < last.progress - 0.005 && p.progress >= last.progress - 0.05)
+            .min_by(|a, b| a.progress.total_cmp(&b.progress))?;
+        let ms_per_lap = (last.elapsed_ms as f32 - earlier.elapsed_ms as f32) / (last.progress - earlier.progress);
+        Some((last.elapsed_ms as f32 + (1.0 - last.progress) * ms_per_lap).round() as u32)
+    }
+
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         let (&version, rest) = bytes.split_first()?;
         if version != TRACE_VERSION || rest.len() % TRACE_POINT_BYTES != 0 {
