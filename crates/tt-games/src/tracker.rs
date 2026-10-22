@@ -45,17 +45,18 @@ pub struct DetectedLap {
 /// The game may update the two fields on different frames.
 const MAX_PENDING_SAMPLES: u32 = 10;
 
-/// How many samples to wait for the game to publish a lap's time after the lap counter ticks
-/// (about 5 s at AC EVO's 20 Hz polling). Until it does, `last_lap_ms` still holds the previous
-/// lap's time, which may be someone else's.
-const MAX_PUBLISH_SAMPLES: u32 = 100;
+// A lap's time is always the game's own, exact to the millisecond. After the lap counter ticks, the
+// game may take a moment to publish it; until then `last_lap_ms` still holds the previous lap's time,
+// which may be someone else's. So a finished lap waits, however long it takes, for a new time, and
+// only stops waiting when that time can no longer come: the next lap ends, or the player leaves the
+// session (replay, menu, restart). Our own reading of the lap clock (`LapState::clock_ms`) only checks
+// the game's answer, and stands in for it (as an unranked "no time" lap) when there never is one.
 
-/// How far a newly published lap time may be from the lap clock we watched (`LapState::clock_ms`,
-/// the last reading before the line, so the real time is a poll or so later). Only a sanity check:
-/// a time that changed is the game's answer.
+/// How far a newly published lap time may be from our reading of the lap clock (the last poll before
+/// the line, so the real time is a poll or so later). Only a sanity check: it's the game's answer.
 const PUBLISHED_WINDOW_MS: (i32, i32) = (-1_000, 5_000);
-/// The same for a time that didn't change from the previous lap: accepted only when our own clock
-/// says this lap really took that long too (two laps can genuinely match to the millisecond).
+/// The same for a time that never changed from the previous lap, checked once waiting is over:
+/// accepted only when our clock says this lap really took that long (two laps can match exactly).
 const UNCHANGED_WINDOW_MS: (i32, i32) = (-100, 300);
 
 /// What happened during the lap in progress.
@@ -142,7 +143,6 @@ struct Pending {
     profile: ProfileRecorder,
     /// Our own reading of the lap's length (see `LapState::clock_ms`).
     clock_ms: i32,
-    waited: u32,
 }
 
 impl Pending {
@@ -160,16 +160,22 @@ impl LapTracker {
     pub fn update(&mut self, s: Sample) -> Option<DetectedLap> {
         match s.status {
             STATUS_LIVE => {}
-            // Paused: keep all state, the lap simply hasn't progressed.
-            STATUS_PAUSE => return None,
-            // Replay / off: anything we see isn't the player driving now.
+            // Paused: keep all state, the lap simply hasn't progressed (but a finished lap's time
+            // may still arrive).
+            STATUS_PAUSE => return self.resolve_pending(s),
+            // Replay / off: anything we see isn't the player driving now. A finished lap still
+            // waiting for its time gets what the game has, or none.
             _ => {
+                let closed = self.close_pending(Some(s.last_lap_ms));
                 self.reset();
-                return None;
+                return closed;
             }
         }
 
-        let mut detected = self.resolve_pending(s);
+        // On the frame the counter ticks, a new time may already be the next lap's: that's dealt
+        // with below, not taken for the lap still waiting.
+        let ticking = self.lap_count.is_some_and(|prev| s.lap_count == prev + 1);
+        let mut detected = if ticking { None } else { self.resolve_pending(s) };
         let last = self.last.replace((s.progress, s.current_lap_ms));
         if let Some((_, _, age)) = &mut self.crossed {
             *age += 1;
@@ -184,14 +190,15 @@ impl LapTracker {
                 // This frame still belongs to the lap that just ended (e.g. crossing the
                 // line in the pit lane makes it an in lap)...
                 self.lap.observe(&s);
+                // A lap still waiting for its time: it isn't coming now.
+                detected = self.close_pending(None);
                 let just_crossed = last.is_some_and(|(p, _)| p < 0.5);
                 let (lap, profile) = match self.crossed.take().filter(|_| just_crossed) {
                     // ...unless we already saw the line a few frames ago.
                     Some((lap, profile, _)) => (lap, profile),
                     None => (self.lap, std::mem::take(&mut self.profile)),
                 };
-                self.pending =
-                    Some(Pending { lap_number: s.lap_count as u32, untimed: lap.untimed(), profile, clock_ms: lap.clock_ms, waited: 0 });
+                self.pending = Some(Pending { lap_number: s.lap_count as u32, untimed: lap.untimed(), profile, clock_ms: lap.clock_ms });
                 self.lap_count = Some(s.lap_count);
                 self.lap = LapState::starting(&s, false);
                 self.record_progress(&s);
@@ -202,7 +209,8 @@ impl LapTracker {
                 return detected;
             }
             Some(prev) if s.lap_count != prev => {
-                // Session restarted or we missed laps: resync without emitting.
+                // Session restarted or we missed laps: resync. A lap still waiting gets no new time.
+                detected = self.close_pending(None);
                 self.start_tracking(s);
             }
             Some(_) => {
@@ -245,36 +253,57 @@ impl LapTracker {
         self.lap_count.is_some() && self.lap.is_out_lap()
     }
 
+    /// While a finished lap waits: takes the game's time as soon as it publishes one that fits.
     fn resolve_pending(&mut self, s: Sample) -> Option<DetectedLap> {
-        let mut pending = self.pending.take()?;
+        let pending = self.pending.as_ref()?;
         let published = s.last_lap_ms;
         let updated = published > 0 && published != self.last_lap_ms_before;
-        // A new time is the game's answer; an unchanged one is most likely still the previous lap's.
-        let confirmed = if updated { pending.fits(published, PUBLISHED_WINDOW_MS) } else { published > 0 && pending.fits(published, UNCHANGED_WINDOW_MS) };
-        if !(updated && confirmed) && pending.waited < MAX_PUBLISH_SAMPLES {
-            pending.waited += 1;
-            self.pending = Some(pending);
+        if !(updated && pending.fits(published, PUBLISHED_WINDOW_MS)) {
             return None;
         }
-
         self.last_lap_ms_before = published;
-        let (time_ms, untimed) = if confirmed {
-            (published as u32, pending.untimed)
-        } else if pending.clock_ms > 0 {
-            // The game never gave a time that fits this lap. Keep the lap, with our own reading, but
-            // never as a timed lap: the number in `last_lap_ms` may be another driver's.
-            eprintln!(
-                "lap {}: the game published {published} ms but the lap clock read {} ms; not timed",
-                pending.lap_number, pending.clock_ms
-            );
-            let untimed = match pending.untimed {
-                None | Some(UntimedReason::Cut) => Some(UntimedReason::NoTime),
-                other => other,
-            };
-            (pending.clock_ms as u32, untimed)
-        } else {
+        let pending = self.pending.take()?;
+        let untimed = pending.untimed;
+        Self::finish(pending, published as u32, untimed)
+    }
+
+    /// The waiting is over without a new time (the next lap ended, or the player left the session).
+    /// `published`: the game's last lap time now, when a change could still belong to this lap.
+    fn close_pending(&mut self, published: Option<i32>) -> Option<DetectedLap> {
+        let pending = self.pending.take()?;
+        let before = self.last_lap_ms_before;
+        if let Some(now) = published
+            && now > 0
+            && now != before
+            && pending.fits(now, PUBLISHED_WINDOW_MS)
+        {
+            self.last_lap_ms_before = now;
+            let untimed = pending.untimed;
+            return Self::finish(pending, now as u32, untimed);
+        }
+        if before > 0 && pending.fits(before, UNCHANGED_WINDOW_MS) {
+            // Never changed, and our clock agrees: it really was the same time as the lap before.
+            let untimed = pending.untimed;
+            return Self::finish(pending, before as u32, untimed);
+        }
+        if pending.clock_ms <= 0 {
             return None;
+        }
+        // Keep the lap, with our own reading, but never as a timed lap: the game's number is
+        // someone else's (or nothing).
+        eprintln!(
+            "lap {}: the game never published its time (last lap still {before} ms, lap clock {} ms); not timed",
+            pending.lap_number, pending.clock_ms
+        );
+        let untimed = match pending.untimed {
+            None | Some(UntimedReason::Cut) => Some(UntimedReason::NoTime),
+            other => other,
         };
+        let clock = pending.clock_ms as u32;
+        Self::finish(pending, clock, untimed)
+    }
+
+    fn finish(pending: Pending, time_ms: u32, untimed: Option<UntimedReason>) -> Option<DetectedLap> {
         let profile = pending.profile.finish(time_ms);
         if profile.is_none()
             && untimed.is_none()
@@ -457,18 +486,20 @@ mod tests {
     }
 
     #[test]
-    fn identical_lap_time_still_emitted_after_timeout() {
-        // Two laps can match to the millisecond: when our clock agrees, the unchanged time is used.
+    fn a_time_identical_to_the_lap_before_is_kept_once_the_next_lap_ends() {
+        // Two laps can match to the millisecond. While the game might still publish, it waits; once
+        // the next lap ends, an unchanged time our clock agrees with is this lap's.
         let mut t = LapTracker::default();
         t.update(live(1, 100_000, 0, true));
         t.update(live(1, 100_000, 99_980, true));
-        assert_eq!(t.update(live(2, 100_000, 20, true)), None);
-        let mut out = None;
-        for i in 0..MAX_PUBLISH_SAMPLES {
-            out = out.or(t.update(live(2, 100_000, 40 + i as i32, true)));
+        for i in 0..300 {
+            assert_eq!(t.update(live(2, 100_000, 20 + i * 50, true)), None, "still waiting, however long");
         }
-        let lap = out.unwrap();
-        assert_eq!((lap.time_ms, lap.untimed), (100_000, None));
+        t.update(live(2, 100_000, 101_150, true));
+        let lap = t.update(live(3, 101_200, 20, true)).unwrap();
+        assert_eq!((lap.lap_number, lap.time_ms, lap.untimed), (2, 100_000, None));
+        // ...and the lap that just ended gets its own time on the next poll.
+        assert_eq!(t.update(live(3, 101_200, 70, true)).unwrap().time_ms, 101_200);
     }
 
     /// One lap at `lap_ms`, sampled every 1% (as the game's clock reads it), after `previous_ms`.
@@ -502,16 +533,49 @@ mod tests {
         t.update(live(1, 0, 0, true));
         drive_lap(&mut t, 1, 0, 102_318);
         t.update(at(live(2, 102_318, 20, true), 0.001));
+        // The game never updates "last lap" for this one.
         drive_lap(&mut t, 2, 102_318, 104_500);
-        let mut got = None;
-        for i in 0..=MAX_PUBLISH_SAMPLES as i32 {
-            got = got.or(t.update(at(live(3, 102_318, 20 + i * 50, true), 0.001)));
-        }
-        // Kept, with Bin It's own reading of the clock, but never as a timed lap.
-        let lap = got.unwrap();
-        assert_eq!(lap.untimed, Some(UntimedReason::NoTime));
+        assert_eq!(t.update(at(live(3, 102_318, 20, true), 0.001)), None);
+        drive_lap(&mut t, 3, 102_318, 103_900);
+        // Once the next lap ends it can't come any more: kept with our own reading, never timed.
+        let lap = t.update(at(live(4, 103_900, 20, true), 0.001)).unwrap();
+        assert_eq!((lap.lap_number, lap.untimed), (3, Some(UntimedReason::NoTime)));
         assert_eq!(lap.time_ms, 104_500 * 99 / 100);
         assert!(lap.trace.is_none());
+        // The next lap is unaffected.
+        assert_eq!(t.update(at(live(4, 103_900, 70, true), 0.002)).unwrap().time_ms, 103_900);
+    }
+
+    #[test]
+    fn a_time_published_during_a_pause_is_taken() {
+        let mut t = LapTracker::default();
+        t.update(live(1, 0, 0, true));
+        drive_lap(&mut t, 1, 0, 102_318);
+        t.update(at(live(2, 102_318, 20, true), 0.001));
+        drive_lap(&mut t, 2, 102_318, 104_500);
+        assert_eq!(t.update(at(live(3, 102_318, 20, true), 0.001)), None);
+        let mut paused = at(live(3, 104_500, 20, true), 0.001);
+        paused.status = STATUS_PAUSE;
+        assert_eq!(t.update(paused).unwrap().time_ms, 104_500);
+    }
+
+    #[test]
+    fn leaving_right_after_the_line_keeps_the_lap() {
+        let leave = |published: i32| {
+            let mut t = LapTracker::default();
+            t.update(live(1, 0, 0, true));
+            drive_lap(&mut t, 1, 0, 102_318);
+            t.update(at(live(2, 102_318, 20, true), 0.001));
+            drive_lap(&mut t, 2, 102_318, 104_500);
+            assert_eq!(t.update(at(live(3, 102_318, 20, true), 0.001)), None);
+            let mut gone = at(live(3, published, 0, true), 0.0);
+            gone.status = STATUS_REPLAY;
+            t.update(gone).unwrap()
+        };
+        // Straight into a replay: the time came with it, so it's exact.
+        assert_eq!((leave(104_500).time_ms, leave(104_500).untimed), (104_500, None));
+        // It never came: kept, not timed, not someone else's.
+        assert_eq!(leave(102_318).untimed, Some(UntimedReason::NoTime));
     }
 
     #[test]
