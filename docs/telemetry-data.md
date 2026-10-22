@@ -39,7 +39,7 @@ named index. **No stage name, no car name, no driver name.**
 | **Final time** | 62 | seconds; set in the finish packet, penalties included; the game shows it truncated to the millisecond | checked on two runs (2:36.021 and 3:12.557) |
 | Max / idle rpm, gears | 63, 64, 65 | rpm / 10, rpm / 10, count; identify the car | checked (one car) |
 | Time penalty | no field | a one-packet jump of the stage clock (4.000 s each on the runs recorded; 10.000 s on a jump start) | checked: size and position; cause of the 4 s ones not confirmed |
-| Stage / car / driver name | no | length and engine stand in (`known.json`) | no |
+| Stage / car / driver name | no | a stage is told apart by length + start line, a car by rev limit + idle + gear count: stable ids, named in `known.json` (see "Naming what a game doesn't name" in `adding-a-game.md`) | no |
 | Track limits, damage, tyres, lap validity | no | | no |
 
 Things to know:

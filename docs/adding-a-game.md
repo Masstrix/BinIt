@@ -92,8 +92,30 @@ A game that pushes its telemetry over UDP differs from a shared-memory one in fo
 * **Data is pushed, not polled**: every poll drains the socket and feeds each packet to the tracker, with the
   receiver (`Receiver`, sockets) kept apart from `Dr2Stream` (packets in, events out) so a recording can be
   replayed in a test (`dr2/fixtures/penalty_run.csv`).
-* **Names may be missing.** DiRT Rally 2.0 sends no stage or car name: a stage is told apart by its length and
-  a car by its engine, and `dr2/known.json` maps those to names as they are read from the game.
+* **Names may be missing.** DiRT Rally 2.0 sends no stage or car name, so a stage and a car each get a stable id
+  worked out from the telemetry (`dr2/identity.rs`): a stage from its length and where its start line is (snapped
+  to a 50 m grid, because the start moves about 0.1 m between starts; a reverse stage starts elsewhere and so gets
+  its own id), a car from its rev limit, idle speed and gear count (never its gearing: that can be tuned). Until
+  it has a name it is called "Unknown stage 8B2484" / "Unknown car AB77AD", the id in the label, and that is
+  what a player's runs are stored under.
+
+### Naming what a game doesn't name
+
+`dr2/known.json` says what each id is called, and is written by the **Names** page of the dev tools, not by hand
+(it exists only in `tauri dev`, and its routes only in a debug build, `/api/dev/...`, from the PC itself):
+
+1. Drive the stage and car. The page shows what the game is reporting, with its id.
+2. Name it (a stage takes a location, a name and a "reverse" flag; a car a name and a picture you supply). It is
+   saved to the database and applies at once: stored runs, challenges, maps and the session being driven are
+   relabelled (`tt-core/src/associations.rs`). Saving does not touch the source, because the dev app restarts when
+   source files change and that would drop you out of the stage.
+3. **Export** writes the list, and the pictures, into the source tree. Commit them.
+4. A release carrying the list relabels everyone's stored "Unknown ..." data to the new names when the app
+   starts (`canonicalize_history`). The table of what each id's data is currently called (`applied_names`) means a
+   name that is corrected later still finds it.
+
+A game adds this by returning a `KnownEntry` list from `tt_games::known_entries`, ids from `ids_for`, labels from
+`unknown_label` / `id_in_unknown_label`, and a file from `export_known`.
 
 A probe like `examples/dr2_probe.rs` (binds a port, prints the parsed fields, `--raw` records every packet) is how
 the layout was read.
