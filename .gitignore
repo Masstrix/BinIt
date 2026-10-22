@@ -12,3 +12,11 @@ app/src-tauri/gen/
 
 # Build counter (see app/src-tauri/build.rs): per checkout, never committed.
 /.build-number
+
+# Thumbnail capture tool: local region config and output.
+/tools/thumbnail-capture/config.json
+/tools/thumbnail-capture/captures/
+
+# DR2 stage cycler: local menu config and run results.
+/tools/dr2-stage-cycler/config.json
+/tools/dr2-stage-cycler/results.json
