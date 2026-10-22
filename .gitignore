@@ -20,3 +20,9 @@ app/src-tauri/gen/
 # DR2 stage cycler: local menu config and run results.
 /tools/dr2-stage-cycler/config.json
 /tools/dr2-stage-cycler/results.json
+
+# Tool scratch: logs, menu screenshots, compressed copies, bytecode.
+/tools/dr2-stage-cycler/cycle.log
+/tools/dr2-stage-cycler/menu-capture/
+/tools/thumbnail-capture/captures-compressed/
+__pycache__/
