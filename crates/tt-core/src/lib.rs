@@ -1,6 +1,7 @@
 //! Bin It core: who's in the seat, recording laps against them, challenges and
 //! leaderboards. UI-agnostic; the desktop app and the LAN web server both sit on top.
 
+pub mod associations;
 pub mod catalogue;
 pub mod live;
 pub mod model;
@@ -135,6 +136,9 @@ struct Runtime {
     game: Option<GameId>,
     session: Option<SessionView>,
     session_info: Option<SessionInfo>,
+    /// The session as the game adapter described it, before any name was applied: a name that is recorded or
+    /// removed later is applied to this, so the session follows it either way.
+    session_raw: Option<SessionInfo>,
     live: Option<LiveView>,
     timing: LiveTiming,
     map: MapRecorder,
@@ -481,21 +485,51 @@ impl BinIt {
         seeds
     }
 
+    /// Makes `info` the session being driven. A new session starts the map being learned again; a session that
+    /// only took a different name (`reset_map` false) carries on.
+    fn set_session(&self, info: SessionInfo, reset_map: bool) -> Result<()> {
+        let boundaries = boundaries_for(&self.store(), &info)?;
+        let view = SessionView {
+            combo: combo_of(&info),
+            game_name: info.game.display_name().to_string(),
+            session_kind: info.session_kind.clone(),
+            sector_count: boundaries.len().saturating_sub(1),
+            boundaries,
+        };
+        {
+            let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
+            rt.session = Some(view.clone());
+            rt.session_info = Some(info);
+            // The path so far belonged to the previous track.
+            if reset_map {
+                rt.map.reset();
+            }
+        }
+        self.refresh_timing()?;
+        self.emit(AppEvent::Session { session: Some(view) });
+        Ok(())
+    }
+
     /// Rewrites a session's track and car to the catalogue's names, so a lap driven in a car the
     /// game calls "Porsche 911 GT3 Cup (992)" and a challenge made from "Porsche 992 GT3 Cup" agree.
     fn canonical_session(&self, info: &mut SessionInfo) {
         let seeds = self.seeds(info.game.key());
         info.track = catalogue::canonical_track(&seeds, &info.track);
         info.car = catalogue::canonical_car(&seeds, &info.car);
+        // A stage or car the game doesn't name, called by its id, takes the name recorded for it.
+        let game = info.game.key();
+        info.track = self.resolve_unknown(game, &info.track);
+        info.car = self.resolve_unknown(game, &info.car);
     }
 
     /// Brings laps and challenges recorded before a name was in the catalogue under the catalogue's
     /// name. Safe to run any time; does nothing when everything already agrees.
     pub fn canonicalize_history(&self, game: &str) -> Result<usize> {
+        // Names recorded for stages and cars the game doesn't name come first (a no-op for every other game).
+        let mut changed = self.apply_associations(game)?;
         let seeds = self.seeds(game);
         let store = self.store();
         let (cars, tracks) = store.stored_names(game)?;
-        let mut changed = 0;
         for car in cars {
             let canon = catalogue::canonical_car(&seeds, &car);
             if canon != car {
@@ -727,6 +761,7 @@ impl BinIt {
 
     /// Feed every event from a game adapter through here.
     pub fn handle_game_event(&self, mut event: GameEvent) -> Result<()> {
+        let raw_session = if let GameEvent::SessionChanged(info) = &event { Some(info.clone()) } else { None };
         match &mut event {
             GameEvent::SessionChanged(info) => self.canonical_session(info),
             GameEvent::LapCompleted(lap) => self.canonical_session(&mut lap.session),
@@ -747,23 +782,8 @@ impl BinIt {
                 self.emit(AppEvent::Session { session: None });
             }
             GameEvent::SessionChanged(info) => {
-                let boundaries = boundaries_for(&self.store(), &info)?;
-                let view = SessionView {
-                    combo: combo_of(&info),
-                    game_name: info.game.display_name().to_string(),
-                    session_kind: info.session_kind.clone(),
-                    sector_count: boundaries.len().saturating_sub(1),
-                    boundaries,
-                };
-                {
-                    let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
-                    rt.session = Some(view.clone());
-                    rt.session_info = Some(info);
-                    // The path so far belonged to the previous track.
-                    rt.map.reset();
-                }
-                self.refresh_timing()?;
-                self.emit(AppEvent::Session { session: Some(view) });
+                self.set_session(info, true)?;
+                self.runtime.lock().expect("runtime mutex poisoned").session_raw = raw_session;
             }
             GameEvent::LapCompleted(mut lap) => {
                 let changed = {

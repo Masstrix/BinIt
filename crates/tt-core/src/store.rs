@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 7;
+const SCHEMA_VERSION: i32 = 8;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -133,6 +133,31 @@ impl Store {
         if version < 7 {
             // Time penalties a stage run took (JSON, see PenaltyPin), for pinning on the map. NULL = none.
             conn.execute_batch("ALTER TABLE laps ADD COLUMN penalties TEXT;")?;
+        }
+        if version < 8 {
+            // Names recorded in this install for stages and cars a game doesn't name (see associations.rs), and
+            // what each id's stored data is currently called, so a corrected name still finds it.
+            conn.execute_batch(
+                "
+                CREATE TABLE associations (
+                    game        TEXT NOT NULL,
+                    kind        TEXT NOT NULL,
+                    id          TEXT NOT NULL,
+                    name        TEXT NOT NULL,
+                    detail      TEXT NOT NULL,
+                    image       BLOB,
+                    image_type  TEXT,
+                    PRIMARY KEY (game, kind, id)
+                );
+                CREATE TABLE applied_names (
+                    game  TEXT NOT NULL,
+                    kind  TEXT NOT NULL,
+                    id    TEXT NOT NULL,
+                    name  TEXT NOT NULL,
+                    PRIMARY KEY (game, kind, id)
+                );
+                ",
+            )?;
         }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         Ok(Self { conn })
@@ -327,6 +352,13 @@ impl Store {
                  ORDER BY o.id",
                 [],
             )?;
+            // Names recorded elsewhere come too (where this database has none for that id).
+            tx.execute(
+                "INSERT OR IGNORE INTO main.associations (game, kind, id, name, detail, image, image_type)
+                 SELECT game, kind, id, name, detail, image, image_type FROM other.associations",
+                [],
+            )?;
+            tx.execute("INSERT OR IGNORE INTO main.applied_names (game, kind, id, name) SELECT game, kind, id, name FROM other.applied_names", [])?;
             let challenges = tx.execute(
                 "INSERT INTO main.challenges (name, game, track, layout, car, starts_at, ends_at, valid_only, max_laps, prizes, created_at)
                  SELECT o.name, o.game, o.track, o.layout, o.car, o.starts_at, o.ends_at, o.valid_only, o.max_laps, o.prizes, o.created_at
@@ -422,6 +454,90 @@ impl Store {
         self.conn.execute("UPDATE OR IGNORE track_maps SET track = ?3 WHERE game = ?1 AND track = ?2", params![game, from, to])?;
         self.conn.execute("UPDATE OR IGNORE sector_layouts SET track = ?3 WHERE game = ?1 AND track = ?2", params![game, from, to])?;
         Ok(())
+    }
+
+    // ---- names recorded for stages and cars a game doesn't name (see associations.rs) ----------------
+
+    /// Records (or changes) a name. An `image` replaces the picture; `None` keeps the one already there.
+    pub fn put_association(&self, game: &str, kind: &str, id: &str, name: &str, detail: &str, image: Option<(&[u8], &str)>) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO associations (game, kind, id, name, detail, image, image_type) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(game, kind, id) DO UPDATE SET
+                 name = excluded.name,
+                 detail = excluded.detail,
+                 image = COALESCE(excluded.image, image),
+                 image_type = COALESCE(excluded.image_type, image_type)",
+            params![game, kind, id, name, detail, image.map(|(b, _)| b), image.map(|(_, t)| t)],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_association(&self, game: &str, kind: &str, id: &str) -> Result<()> {
+        self.conn.execute("DELETE FROM associations WHERE game = ?1 AND kind = ?2 AND id = ?3", params![game, kind, id])?;
+        Ok(())
+    }
+
+    /// Every name recorded in this install for a game (pictures left out).
+    pub fn associations(&self, game: &str) -> Result<Vec<StoredAssociation>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT kind, id, name, detail, image IS NOT NULL FROM associations WHERE game = ?1 ORDER BY kind, name, id")?;
+        let rows = stmt.query_map([game], |r| {
+            Ok(StoredAssociation { kind: r.get(0)?, id: r.get(1)?, name: r.get(2)?, detail: r.get(3)?, has_image: r.get(4)? })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn association_image(&self, game: &str, kind: &str, id: &str) -> Result<Option<(Vec<u8>, String)>> {
+        let row: Option<(Option<Vec<u8>>, Option<String>)> = self
+            .conn
+            .query_row(
+                "SELECT image, image_type FROM associations WHERE game = ?1 AND kind = ?2 AND id = ?3",
+                params![game, kind, id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        Ok(row.and_then(|(bytes, kind)| Some((bytes?, kind.unwrap_or_else(|| "image/png".into())))))
+    }
+
+    /// What an id's stored data is currently called.
+    pub fn applied_name(&self, game: &str, kind: &str, id: &str) -> Result<Option<String>> {
+        Ok(self
+            .conn
+            .query_row("SELECT name FROM applied_names WHERE game = ?1 AND kind = ?2 AND id = ?3", params![game, kind, id], |r| r.get(0))
+            .optional()?)
+    }
+
+    pub fn set_applied_name(&self, game: &str, kind: &str, id: &str, name: Option<&str>) -> Result<()> {
+        match name {
+            Some(name) => self.conn.execute(
+                "INSERT INTO applied_names (game, kind, id, name) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(game, kind, id) DO UPDATE SET name = excluded.name",
+                params![game, kind, id, name],
+            )?,
+            None => self.conn.execute("DELETE FROM applied_names WHERE game = ?1 AND kind = ?2 AND id = ?3", params![game, kind, id])?,
+        };
+        Ok(())
+    }
+
+    /// (kind, id, name) for everything whose stored data has been given a name.
+    pub fn applied_names(&self, game: &str) -> Result<Vec<(String, String, String)>> {
+        let mut stmt = self.conn.prepare("SELECT kind, id, name FROM applied_names WHERE game = ?1")?;
+        let rows = stmt.query_map([game], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// How many runs are stored under each track name / car name of a game.
+    pub fn track_run_counts(&self, game: &str) -> Result<Vec<(String, u32)>> {
+        let mut stmt = self.conn.prepare("SELECT track, COUNT(*) FROM laps WHERE game = ?1 GROUP BY track")?;
+        let rows = stmt.query_map([game], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn car_run_counts(&self, game: &str) -> Result<Vec<(String, u32)>> {
+        let mut stmt = self.conn.prepare("SELECT car, COUNT(*) FROM laps WHERE game = ?1 GROUP BY car")?;
+        let rows = stmt.query_map([game], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     pub fn count_laps(&self, f: &LapFilter) -> Result<u32> {

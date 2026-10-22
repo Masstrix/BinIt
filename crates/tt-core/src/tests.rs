@@ -10,6 +10,7 @@ fn session(car: &str) -> SessionInfo {
         session_kind: "Hot Stint".into(),
         timing: tt_games::TimingKind::CircuitLap,
         length_m: Some(4909),
+        identity: None,
     }
 }
 
@@ -470,6 +471,154 @@ fn the_live_view_says_why_a_run_cant_teach_the_map() {
     assert_eq!(spoiled(vec![live(60_000, true, 0), live(61_000, true, 0)]), Some("joinedLate"), "first seen a minute in");
     assert_eq!(spoiled(vec![live(1_000, true, 0), live(2_000, false, 0)]), Some("invalid"));
     assert_eq!(spoiled(vec![live(60_000, true, 2)]), Some("penalty"), "the penalty is the more useful thing to say");
+}
+
+fn dr2_session() -> SessionInfo {
+    SessionInfo {
+        game: GameId::DirtRally2,
+        track: "Unknown stage 8B2484".into(),
+        layout: Some("2.85 km".into()),
+        car: "Unknown car AB77AD".into(),
+        session_kind: "Stage".into(),
+        timing: tt_games::TimingKind::RallyStage,
+        length_m: Some(2846),
+        identity: None,
+    }
+}
+
+fn dr2_run(time_ms: u32) -> CompletedLap {
+    CompletedLap { session: dr2_session(), ..lap(time_ms, true) }
+}
+
+fn stage_detail() -> serde_json::Value {
+    serde_json::json!({ "length_m": 2845.63, "start": [903.7, 205.61] })
+}
+
+fn car_detail() -> serde_json::Value {
+    serde_json::json!({ "max_rpm": 7749.26, "idle_rpm": 1780.24, "gears": 5 })
+}
+
+#[test]
+fn a_name_recorded_for_an_unnamed_stage_relabels_its_runs_and_the_ones_to_come() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(dr2_session())).unwrap();
+    tt.handle_game_event(GameEvent::LapCompleted(dr2_run(160_000))).unwrap();
+    assert_eq!(tt.recent_laps(10).unwrap()[0].combo.track, "Unknown stage 8B2484");
+
+    tt.save_association("dr2", "stage", "Wales Bidno Reservoir", &stage_detail(), None).unwrap();
+    tt.save_association("dr2", "car", "Skoda Fabia R5", &car_detail(), None).unwrap();
+
+    // The run already stored, the session being driven, and the next run all use the names.
+    let first = &tt.recent_laps(10).unwrap()[0];
+    assert_eq!((first.combo.track.as_str(), first.combo.car.as_str()), ("Wales Bidno Reservoir", "Skoda Fabia R5"));
+    assert_eq!(tt.status().unwrap().session.unwrap().combo.track, "Wales Bidno Reservoir");
+    tt.handle_game_event(GameEvent::LapCompleted(dr2_run(155_000))).unwrap();
+    let laps = tt.recent_laps(10).unwrap();
+    assert!(laps.iter().all(|l| l.combo.track == "Wales Bidno Reservoir" && l.combo.car == "Skoda Fabia R5"), "{laps:?}");
+}
+
+#[test]
+fn a_corrected_name_finds_the_runs_that_carry_the_old_one_and_removing_it_restores_the_id() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(dr2_session())).unwrap();
+    tt.handle_game_event(GameEvent::LapCompleted(dr2_run(160_000))).unwrap();
+    tt.save_association("dr2", "stage", "Wales Bidno Resevoir", &stage_detail(), None).unwrap();
+    tt.save_association("dr2", "stage", "Wales Bidno Reservoir", &stage_detail(), None).unwrap();
+    assert_eq!(tt.recent_laps(10).unwrap()[0].combo.track, "Wales Bidno Reservoir");
+
+    tt.delete_association("dr2", "stage", "8B2484").unwrap();
+    assert_eq!(tt.recent_laps(10).unwrap()[0].combo.track, "Unknown stage 8B2484");
+    assert_eq!(tt.status().unwrap().session.unwrap().combo.track, "Unknown stage 8B2484", "the session being driven goes back too");
+}
+
+#[test]
+fn a_start_beside_a_cell_edge_still_finds_its_name() {
+    let tt = BinIt::in_memory().unwrap();
+    // Recorded at x = 900.3, 0.3 m into its cell; another player's start was 0.5 m the other way.
+    let detail = serde_json::json!({ "length_m": 1000.0, "start": [900.3, 225.0] });
+    let theirs = tt_games::dr2::identity::stage_id(1000.0, [899.8, 225.0]);
+    let label = format!("Unknown stage {theirs}");
+    let info = SessionInfo { track: label.clone(), ..dr2_session() };
+    tt.handle_game_event(GameEvent::SessionChanged(info.clone())).unwrap();
+    tt.handle_game_event(GameEvent::LapCompleted(CompletedLap { session: info, ..lap(90_000, true) })).unwrap();
+    assert_eq!(tt.recent_laps(10).unwrap()[0].combo.track, label);
+    tt.save_association("dr2", "stage", "Edge Stage", &detail, None).unwrap();
+    assert_eq!(tt.recent_laps(10).unwrap()[0].combo.track, "Edge Stage");
+}
+
+#[test]
+fn the_names_page_lists_what_is_driven_what_is_unnamed_and_what_is_recorded() {
+    let tt = BinIt::in_memory().unwrap();
+    let mut info = dr2_session();
+    info.identity = Some(serde_json::json!({ "stage": { "id": "8B2484" }, "car": { "id": "AB77AD" } }).to_string());
+    tt.handle_game_event(GameEvent::SessionChanged(info)).unwrap();
+    tt.handle_game_event(GameEvent::LapCompleted(dr2_run(160_000))).unwrap();
+    tt.handle_game_event(GameEvent::LapCompleted(dr2_run(158_000))).unwrap();
+
+    let view = tt.associations_view("dr2").unwrap();
+    assert_eq!(view.now.stage_label.as_deref(), Some("Unknown stage 8B2484"));
+    assert_eq!(view.now.identity.as_ref().unwrap()["car"]["id"], "AB77AD");
+    let stage = view.unknown.iter().find(|u| u.kind == "stage").unwrap();
+    assert_eq!((stage.id.as_str(), stage.runs), ("8B2484", 2));
+    assert!(view.entries.is_empty());
+
+    tt.save_association("dr2", "stage", "Wales Bidno Reservoir", &stage_detail(), None).unwrap();
+    let view = tt.associations_view("dr2").unwrap();
+    assert_eq!((view.entries[0].name.as_str(), view.entries[0].source, view.entries[0].id.as_str()), ("Wales Bidno Reservoir", "dev", "8B2484"));
+    assert!(!view.unknown.iter().any(|u| u.kind == "stage"), "no longer unnamed");
+}
+
+#[test]
+fn a_picture_is_kept_with_a_car_and_exported_as_a_file_with_the_list() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.save_association("dr2", "car", "Skoda Fabia R5", &car_detail(), Some((vec![1, 2, 3], "image/png".into()))).unwrap();
+    // Saving again without a picture keeps it.
+    tt.save_association("dr2", "car", "Škoda Fabia R5", &car_detail(), None).unwrap();
+    let (bytes, kind) = tt.association_image("dr2", "car", "AB77AD").unwrap().unwrap();
+    assert_eq!((bytes, kind.as_str()), (vec![1, 2, 3], "image/png"));
+
+    let export = tt.export_associations("dr2").unwrap().expect("dr2 has a list");
+    assert_eq!(export.list.0, "crates/tt-games/src/dr2/known.json");
+    assert_eq!(export.images, vec![("app/src/assets/cars/dr2/AB77AD.png".to_string(), vec![1, 2, 3])]);
+    let written: serde_json::Value = serde_json::from_str(&export.list.1).unwrap();
+    assert_eq!(written["cars"][0]["name"], "Škoda Fabia R5");
+    assert_eq!(written["cars"][0]["image"], "cars/dr2/AB77AD.png");
+    // A game with no list exports nothing.
+    assert!(tt.export_associations("acevo").unwrap().is_none());
+}
+
+#[test]
+fn a_cars_group_is_kept_and_exported_with_its_name() {
+    let tt = BinIt::in_memory().unwrap();
+    let detail = serde_json::json!({ "max_rpm": 7749.26, "idle_rpm": 1780.24, "gears": 5, "class": "R5" });
+    tt.save_association("dr2", "car", "Skoda Fabia R5", &detail, None).unwrap();
+    let view = tt.associations_view("dr2").unwrap();
+    assert_eq!(view.entries[0].detail["class"], "R5");
+    let written: serde_json::Value = serde_json::from_str(&tt.export_associations("dr2").unwrap().unwrap().list.1).unwrap();
+    assert_eq!(written["cars"][0]["class"], "R5");
+    // A car saved with no group (or an empty one) has none in the list.
+    let none = serde_json::json!({ "max_rpm": 7749.26, "idle_rpm": 1780.24, "gears": 5, "class": null });
+    tt.save_association("dr2", "car", "Skoda Fabia R5", &none, None).unwrap();
+    let written: serde_json::Value = serde_json::from_str(&tt.export_associations("dr2").unwrap().unwrap().list.1).unwrap();
+    assert!(written["cars"][0].get("class").is_none());
+}
+
+#[test]
+fn a_picture_can_be_added_to_a_recorded_name_but_only_once_it_has_one() {
+    let tt = BinIt::in_memory().unwrap();
+    assert!(tt.set_association_image("dr2", "car", "AB77AD", vec![9], "image/png").is_err(), "record the name first");
+    tt.save_association("dr2", "car", "Skoda Fabia R5", &car_detail(), None).unwrap();
+    tt.set_association_image("dr2", "car", "AB77AD", vec![9, 9], "image/webp").unwrap();
+    assert_eq!(tt.association_image("dr2", "car", "AB77AD").unwrap(), Some((vec![9, 9], "image/webp".to_string())));
+    assert!(tt.associations_view("dr2").unwrap().entries[0].has_image);
+}
+
+#[test]
+fn a_name_needs_to_be_real_and_say_what_it_is_for() {
+    let tt = BinIt::in_memory().unwrap();
+    assert!(tt.save_association("dr2", "stage", "  ", &stage_detail(), None).is_err());
+    assert!(tt.save_association("dr2", "stage", "Somewhere", &serde_json::json!({ "length_m": 1.0 }), None).is_err());
+    assert!(tt.save_association("acevo", "stage", "Somewhere", &stage_detail(), None).is_err(), "AC EVO names its own");
 }
 
 /// Drives the real AC EVO lap tracker into core like the adapter does, and returns what the

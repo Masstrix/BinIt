@@ -133,6 +133,17 @@ pub struct LeaderboardEntry {
     pub best_sectors_ms: Vec<Option<u32>>,
 }
 
+/// A name recorded in this install for a stage or car a game doesn't name (see associations.rs).
+#[derive(Debug, Clone, PartialEq)]
+pub struct StoredAssociation {
+    pub kind: String,
+    pub id: String,
+    pub name: String,
+    /// What it was recorded from, as JSON.
+    pub detail: String,
+    pub has_image: bool,
+}
+
 /// A time penalty to pin on a map: where the car was when the game added it, and how much it added.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
