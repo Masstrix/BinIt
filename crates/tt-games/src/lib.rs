@@ -123,6 +123,9 @@ pub enum UntimedReason {
     Cut,
     /// The driver in the seat changed during the lap, so it can't be credited to anyone.
     DriverChange,
+    /// The game didn't publish a time that fits the lap (its "last lap" still showed the one
+    /// before, maybe someone else's), so the time is Bin It's own reading and isn't ranked.
+    NoTime,
 }
 
 impl UntimedReason {
@@ -133,6 +136,7 @@ impl UntimedReason {
             UntimedReason::Partial => "partial",
             UntimedReason::Cut => "cut",
             UntimedReason::DriverChange => "driverChange",
+            UntimedReason::NoTime => "noTime",
         }
     }
 

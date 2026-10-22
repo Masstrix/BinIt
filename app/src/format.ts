@@ -53,13 +53,13 @@ export function prettify(id: string): string {
     .join(" ");
 }
 
-export type LapKind = "timed" | "cut" | "outLap" | "inLap" | "partial" | "driverChange";
+export type LapKind = "timed" | "cut" | "outLap" | "inLap" | "partial" | "driverChange" | "noTime";
 
 /** What kind of lap this was. Older invalid laps (before reasons existed) count as cuts. */
 export function lapKind(lap: { valid: boolean; untimedReason: string | null }): LapKind {
   if (lap.valid) return "timed";
   const r = lap.untimedReason;
-  return r === "outLap" || r === "inLap" || r === "partial" || r === "driverChange" ? r : "cut";
+  return r === "outLap" || r === "inLap" || r === "partial" || r === "driverChange" || r === "noTime" ? r : "cut";
 }
 
 /** Short badge text for laps that aren't timed. Only "cut" is a failed attempt. */
@@ -69,6 +69,7 @@ export const LAP_BADGE: Record<Exclude<LapKind, "timed">, { text: string; classN
   inLap: { text: "IN LAP", className: "chip plain", title: "Ended in the pit lane, not timed" },
   partial: { text: "PARTIAL", className: "chip plain", title: "Bin It joined mid-lap, not timed" },
   driverChange: { text: "DRIVER CHANGE", className: "chip plain", title: "The driver changed during this lap, so it was not timed for anyone" },
+  noTime: { text: "NO TIME", className: "chip plain", title: "The game didn't confirm this lap's time, so it isn't ranked. The time shown is Bin It's own reading" },
 };
 
 /**

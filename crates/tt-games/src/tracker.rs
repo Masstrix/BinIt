@@ -41,9 +41,22 @@ pub struct DetectedLap {
     pub trace: Option<crate::timing::LapTrace>,
 }
 
-/// How many samples to wait for `last_lap_ms` to update after the lap counter ticks.
+/// How many samples a line crossing the counter hasn't caught up with yet is remembered for.
 /// The game may update the two fields on different frames.
 const MAX_PENDING_SAMPLES: u32 = 10;
+
+/// How many samples to wait for the game to publish a lap's time after the lap counter ticks
+/// (about 5 s at AC EVO's 20 Hz polling). Until it does, `last_lap_ms` still holds the previous
+/// lap's time, which may be someone else's.
+const MAX_PUBLISH_SAMPLES: u32 = 100;
+
+/// How far a newly published lap time may be from the lap clock we watched (`LapState::clock_ms`,
+/// the last reading before the line, so the real time is a poll or so later). Only a sanity check:
+/// a time that changed is the game's answer.
+const PUBLISHED_WINDOW_MS: (i32, i32) = (-1_000, 5_000);
+/// The same for a time that didn't change from the previous lap: accepted only when our own clock
+/// says this lap really took that long too (two laps can genuinely match to the millisecond).
+const UNCHANGED_WINDOW_MS: (i32, i32) = (-100, 300);
 
 /// What happened during the lap in progress.
 #[derive(Debug, Default, Clone, Copy)]
@@ -60,6 +73,8 @@ struct LapState {
     was_in_pits: bool,
     /// The lap began somewhere other than the line (spawned / teleported on track).
     off_line_start: bool,
+    /// The highest lap clock seen during the lap (0 = none): how long it took, by our own reading.
+    clock_ms: i32,
 }
 
 impl LapState {
@@ -75,6 +90,7 @@ impl LapState {
     }
 
     fn observe(&mut self, s: &Sample) {
+        self.clock_ms = self.clock_ms.max(s.current_lap_ms);
         if !s.lap_valid {
             self.invalidated = true;
         }
@@ -124,7 +140,16 @@ struct Pending {
     lap_number: u32,
     untimed: Option<UntimedReason>,
     profile: ProfileRecorder,
+    /// Our own reading of the lap's length (see `LapState::clock_ms`).
+    clock_ms: i32,
     waited: u32,
+}
+
+impl Pending {
+    /// Whether `published` fits how long we saw this lap take. Without a reading, anything fits.
+    fn fits(&self, published: i32, (below, above): (i32, i32)) -> bool {
+        self.clock_ms <= 0 || (published - self.clock_ms >= below && published - self.clock_ms <= above)
+    }
 }
 
 impl LapTracker {
@@ -165,7 +190,8 @@ impl LapTracker {
                     Some((lap, profile, _)) => (lap, profile),
                     None => (self.lap, std::mem::take(&mut self.profile)),
                 };
-                self.pending = Some(Pending { lap_number: s.lap_count as u32, untimed: lap.untimed(), profile, waited: 0 });
+                self.pending =
+                    Some(Pending { lap_number: s.lap_count as u32, untimed: lap.untimed(), profile, clock_ms: lap.clock_ms, waited: 0 });
                 self.lap_count = Some(s.lap_count);
                 self.lap = LapState::starting(&s, false);
                 self.record_progress(&s);
@@ -221,21 +247,37 @@ impl LapTracker {
 
     fn resolve_pending(&mut self, s: Sample) -> Option<DetectedLap> {
         let mut pending = self.pending.take()?;
-        let updated = s.last_lap_ms > 0 && s.last_lap_ms != self.last_lap_ms_before;
-        if !updated && pending.waited < MAX_PENDING_SAMPLES {
+        let published = s.last_lap_ms;
+        let updated = published > 0 && published != self.last_lap_ms_before;
+        // A new time is the game's answer; an unchanged one is most likely still the previous lap's.
+        let confirmed = if updated { pending.fits(published, PUBLISHED_WINDOW_MS) } else { published > 0 && pending.fits(published, UNCHANGED_WINDOW_MS) };
+        if !(updated && confirmed) && pending.waited < MAX_PUBLISH_SAMPLES {
             pending.waited += 1;
             self.pending = Some(pending);
             return None;
         }
 
-        self.last_lap_ms_before = s.last_lap_ms;
-        if s.last_lap_ms <= 0 {
+        self.last_lap_ms_before = published;
+        let (time_ms, untimed) = if confirmed {
+            (published as u32, pending.untimed)
+        } else if pending.clock_ms > 0 {
+            // The game never gave a time that fits this lap. Keep the lap, with our own reading, but
+            // never as a timed lap: the number in `last_lap_ms` may be another driver's.
+            eprintln!(
+                "lap {}: the game published {published} ms but the lap clock read {} ms; not timed",
+                pending.lap_number, pending.clock_ms
+            );
+            let untimed = match pending.untimed {
+                None | Some(UntimedReason::Cut) => Some(UntimedReason::NoTime),
+                other => other,
+            };
+            (pending.clock_ms as u32, untimed)
+        } else {
             return None;
-        }
-        let time_ms = s.last_lap_ms as u32;
+        };
         let profile = pending.profile.finish(time_ms);
         if profile.is_none()
-            && pending.untimed.is_none()
+            && untimed.is_none()
             && let Some(why) = pending.profile.why_not(time_ms)
         {
             // A timed lap without a profile can't be a reference for live timing: say why.
@@ -243,8 +285,8 @@ impl LapTracker {
         }
         // Input traces are only kept for proper timed laps: those are the ones that get compared and
         // charted over time. Cut, in, out and partial laps keep their times (and sectors) but no trace.
-        let trace = if pending.untimed.is_none() { pending.profile.finish_trace(time_ms) } else { None };
-        Some(DetectedLap { lap_number: pending.lap_number, time_ms, untimed: pending.untimed, profile, trace })
+        let trace = if untimed.is_none() { pending.profile.finish_trace(time_ms) } else { None };
+        Some(DetectedLap { lap_number: pending.lap_number, time_ms, untimed, profile, trace })
     }
 }
 
@@ -265,6 +307,7 @@ mod tests {
     fn first_partial_lap_is_not_trusted() {
         let mut t = LapTracker::default();
         assert_eq!(t.update(live(0, 0, 30_000, true)), None);
+        t.update(live(0, 0, 102_290, true));
         let lap = t.update(live(1, 102_318, 50, true)).unwrap();
         assert_eq!(lap, DetectedLap { lap_number: 1, time_ms: 102_318, untimed: Some(UntimedReason::Partial), profile: None, trace: None });
     }
@@ -274,6 +317,7 @@ mod tests {
         let mut t = LapTracker::default();
         t.update(live(1, 0, 0, true));
         t.update(live(1, 0, 60_000, true));
+        t.update(live(1, 0, 102_290, true));
         let lap = t.update(live(2, 102_318, 20, true)).unwrap();
         assert_eq!(lap.untimed, None);
         assert_eq!(lap.time_ms, 102_318);
@@ -284,10 +328,10 @@ mod tests {
         let mut t = LapTracker::default();
         t.update(live(1, 0, 0, true));
         t.update(live(1, 0, 30_000, false));
-        t.update(live(1, 0, 60_000, true));
+        t.update(live(1, 0, 101_960, true));
         assert_eq!(t.update(live(2, 101_990, 20, true)).unwrap().untimed, Some(UntimedReason::Cut));
         // ...but the next lap starts clean.
-        t.update(live(2, 101_990, 60_000, true));
+        t.update(live(2, 101_990, 103_070, true));
         assert_eq!(t.update(live(3, 103_102, 20, true)).unwrap().untimed, None);
     }
 
@@ -297,11 +341,11 @@ mod tests {
         // Sitting in the pit box: the game also flags the lap invalid there.
         t.update(in_pits(live(0, 0, 0, false)));
         t.update(in_pits(live(0, 0, 8_000, false)));
-        t.update(live(0, 0, 20_000, false));
+        t.update(live(0, 0, 132_240, false));
         let lap = t.update(live(1, 132_270, 20, true)).unwrap();
         assert_eq!(lap.untimed, Some(UntimedReason::OutLap));
         // The first flying lap after it counts.
-        t.update(live(1, 132_270, 60_000, true));
+        t.update(live(1, 132_270, 130_990, true));
         assert_eq!(t.update(live(2, 131_013, 20, true)).unwrap().untimed, None);
     }
 
@@ -341,6 +385,7 @@ mod tests {
     fn spawning_on_track_is_an_out_lap() {
         let mut t = LapTracker::default();
         t.update(at(live(0, 0, 0, true), 0.4));
+        t.update(at(live(0, 0, 60_980, true), 0.99));
         assert_eq!(t.update(at(live(1, 61_000, 20, true), 0.001)).unwrap().untimed, Some(UntimedReason::OutLap));
     }
 
@@ -349,7 +394,7 @@ mod tests {
         let mut t = LapTracker::default();
         t.update(live(3, 100_000, 0, true));
         t.update(live(3, 100_000, 90_000, true));
-        t.update(in_pits(live(3, 100_000, 110_000, true)));
+        t.update(in_pits(live(3, 100_000, 124_970, true)));
         let lap = t.update(in_pits(live(4, 125_000, 20, true))).unwrap();
         assert_eq!(lap.untimed, Some(UntimedReason::InLap));
     }
@@ -403,7 +448,8 @@ mod tests {
     fn waits_for_lap_time_to_be_published() {
         let mut t = LapTracker::default();
         t.update(live(1, 100_000, 0, true));
-        t.update(live(1, 100_000, 60_000, true));
+        t.update(live(1, 100_000, 99_470, true));
+        // Still the previous lap's time: not this one's.
         assert_eq!(t.update(live(2, 100_000, 20, true)), None);
         let lap = t.update(live(2, 99_500, 70, true)).unwrap();
         assert_eq!(lap.time_ms, 99_500);
@@ -412,14 +458,60 @@ mod tests {
 
     #[test]
     fn identical_lap_time_still_emitted_after_timeout() {
+        // Two laps can match to the millisecond: when our clock agrees, the unchanged time is used.
         let mut t = LapTracker::default();
         t.update(live(1, 100_000, 0, true));
+        t.update(live(1, 100_000, 99_980, true));
         assert_eq!(t.update(live(2, 100_000, 20, true)), None);
         let mut out = None;
-        for i in 0..MAX_PENDING_SAMPLES {
+        for i in 0..MAX_PUBLISH_SAMPLES {
             out = out.or(t.update(live(2, 100_000, 40 + i as i32, true)));
         }
-        assert_eq!(out.unwrap().time_ms, 100_000);
+        let lap = out.unwrap();
+        assert_eq!((lap.time_ms, lap.untimed), (100_000, None));
+    }
+
+    /// One lap at `lap_ms`, sampled every 1% (as the game's clock reads it), after `previous_ms`.
+    fn drive_lap(t: &mut LapTracker, count: i32, previous_ms: i32, lap_ms: i32) {
+        for i in 1..100 {
+            t.update(at(live(count, previous_ms, lap_ms * i / 100, true), i as f32 / 100.0));
+        }
+    }
+
+    #[test]
+    fn a_late_lap_time_is_waited_for_not_taken_from_the_lap_before() {
+        // Sam's lap is 1:42.318. The next one (someone else, 1:44.500) is published by the game
+        // 0.75 s after the line: until then "last lap" still says 1:42.318.
+        let mut t = LapTracker::default();
+        t.update(live(1, 0, 0, true));
+        drive_lap(&mut t, 1, 0, 102_318);
+        assert_eq!(t.update(at(live(2, 102_318, 20, true), 0.001)).unwrap().time_ms, 102_318);
+        drive_lap(&mut t, 2, 102_318, 104_500);
+        let mut got = None;
+        for i in 0..20 {
+            let published = if i < 15 { 102_318 } else { 104_500 };
+            got = got.or(t.update(at(live(3, published, 20 + i * 50, true), 0.001)));
+        }
+        let lap = got.unwrap();
+        assert_eq!((lap.time_ms, lap.untimed), (104_500, None));
+    }
+
+    #[test]
+    fn a_lap_time_never_published_is_not_taken_from_the_lap_before() {
+        let mut t = LapTracker::default();
+        t.update(live(1, 0, 0, true));
+        drive_lap(&mut t, 1, 0, 102_318);
+        t.update(at(live(2, 102_318, 20, true), 0.001));
+        drive_lap(&mut t, 2, 102_318, 104_500);
+        let mut got = None;
+        for i in 0..=MAX_PUBLISH_SAMPLES as i32 {
+            got = got.or(t.update(at(live(3, 102_318, 20 + i * 50, true), 0.001)));
+        }
+        // Kept, with Bin It's own reading of the clock, but never as a timed lap.
+        let lap = got.unwrap();
+        assert_eq!(lap.untimed, Some(UntimedReason::NoTime));
+        assert_eq!(lap.time_ms, 104_500 * 99 / 100);
+        assert!(lap.trace.is_none());
     }
 
     #[test]
@@ -439,6 +531,8 @@ mod tests {
         t.update(live(5, 100_000, 10_000, true));
         assert_eq!(t.update(live(0, 0, 0, true)), None);
         t.update(live(0, 0, 50_000, true));
+        t.update(live(0, 0, 100_980, true));
         assert_eq!(t.update(live(1, 101_000, 20, true)).unwrap().untimed, None);
     }
 }
+

@@ -374,10 +374,11 @@ fn simulate_widget(laps_after_out: u32, counted_out_lap: bool) -> Vec<(String, b
     let mut out = Vec::new();
     let mut lap_count = 0;
     let mut last_lap = 0;
-    let lap_ms = 100_000i32;
+    // Each lap a little different, as real ones are (an unchanged "last lap" is waited on).
+    let lap_ms = |n: u32| 100_000i32 - n as i32 * 137;
     // (start progress, in pit lane at start) for the out lap, then full laps.
     let mut step = 0u32;
-    let mut run = |tt: &BinIt, tr: &mut LapTracker, start: f32, lap_label: String, lap_count: &mut i32, last_lap: &mut i32, counted: bool, from_pits: bool, out: &mut Vec<(String, bool, bool, Option<i32>, usize)>| {
+    let mut run = |tt: &BinIt, tr: &mut LapTracker, lap_ms: i32, start: f32, lap_label: String, lap_count: &mut i32, last_lap: &mut i32, counted: bool, from_pits: bool, out: &mut Vec<(String, bool, bool, Option<i32>, usize)>| {
         let len = (((1.0 - start) * lap_ms as f32) / 50.0) as u32;
         for i in 0..=len {
             let p = (start + (i as f32 / len as f32) * (1.0 - start)).min(0.9999);
@@ -403,9 +404,9 @@ fn simulate_widget(laps_after_out: u32, counted_out_lap: bool) -> Vec<(String, b
         }
     };
     // Out lap: from the pit exit (95%) to the line.
-    run(&tt, &mut tr, 0.5, "out".into(), &mut lap_count, &mut last_lap, counted_out_lap, true, &mut out);
+    run(&tt, &mut tr, lap_ms(0), 0.5, "out".into(), &mut lap_count, &mut last_lap, counted_out_lap, true, &mut out);
     for n in 1..=laps_after_out {
-        run(&tt, &mut tr, 0.0, format!("lap{n}"), &mut lap_count, &mut last_lap, true, false, &mut out);
+        run(&tt, &mut tr, lap_ms(n), 0.0, format!("lap{n}"), &mut lap_count, &mut last_lap, true, false, &mut out);
     }
     out
 }
