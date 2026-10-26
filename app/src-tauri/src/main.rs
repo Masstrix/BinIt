@@ -63,7 +63,7 @@ fn main() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![overlay::close_switcher, overlay::set_hit_regions, updater::updater_stage, updater::open_download])
+        .invoke_handler(tauri::generate_handler![overlay::close_switcher, overlay::open_switcher, overlay::set_hit_regions, updater::updater_stage, updater::open_download])
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;

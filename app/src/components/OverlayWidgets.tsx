@@ -200,20 +200,37 @@ function StripStat({ label, value, color, extra, icon }: { label: string; value:
 }
 
 /** Driver / PB / challenge position, merged into one slim strip when they share a section. */
-export function StripCard({ items, data, itemProps }: { items: WidgetId[]; data: OverlayData; itemProps?: ItemProps }) {
+export function StripCard({ items, data, itemProps, onDriverClick }: { items: WidgetId[]; data: OverlayData; itemProps?: ItemProps; onDriverClick?: () => void }) {
   return (
     <div style={{ ...card, borderRadius: 999, display: "flex", alignItems: "center", gap: 14, padding: items[0] === "driver" ? "8px 18px 8px 8px" : "8px 20px", whiteSpace: "nowrap" }}>
       {items.map((w, i) => (
         <span key={w} style={{ display: "flex", alignItems: "center", gap: 14 }}>
           {i > 0 && <span style={{ width: 1, height: 28, background: "var(--line)" }} />}
           <span data-widget={w} {...itemProps?.(w)} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {w === "driver" && (
-              <>
-                <Helmet color={data.driverColor} size={40} seed={data.driverName} mood={data.lapInvalid ? "binned" : "focus"} />
-                <span style={{ font: "700 20px var(--font-display)", letterSpacing: "-0.02em" }}>{data.driverName}</span>
-                <span className="kbd" style={{ background: "var(--line)", color: "var(--text-2)" }}>F8</span>
-              </>
-            )}
+            {w === "driver" && (() => {
+              const who = (
+                <>
+                  <Helmet color={data.driverColor} size={40} seed={data.driverName} mood={data.lapInvalid ? "binned" : "focus"} round />
+                  <span style={{ font: "700 20px var(--font-display)", letterSpacing: "-0.02em" }}>{data.driverName}</span>
+                  <span className="kbd" style={{ background: "var(--line)", color: "var(--text-2)" }}>F8</span>
+                </>
+              );
+              // In the real overlay the driver can be clicked to pick someone else (the same picker as F8).
+              return onDriverClick ? (
+                <button
+                  type="button"
+                  className="tt-hit"
+                  data-hit=""
+                  title="Pick a different driver"
+                  onClick={onDriverClick}
+                  style={{ display: "flex", alignItems: "center", gap: 12, border: 0, background: "none", padding: 0, margin: 0, color: "inherit", font: "inherit", cursor: "pointer", pointerEvents: "auto", borderRadius: 999 }}
+                >
+                  {who}
+                </button>
+              ) : (
+                who
+              );
+            })()}
             {w === "pb" && <StripStat label="PB" value={lapTime(data.pbMs)} color="var(--mint)" />}
             {w === "challenge" && (
               <StripStat
@@ -899,6 +916,7 @@ export function SectionWidgets({
   itemProps,
   anchor,
   styles,
+  onDriverClick,
 }: {
   items: WidgetId[];
   data: OverlayData;
@@ -909,6 +927,8 @@ export function SectionWidgets({
   anchor?: Anchor;
   /** The layout's chosen styles, for a widget that comes in more than one. */
   styles?: OverlayLayout["styles"];
+  /** Makes the driver on the strip clickable (the real overlay only: it opens the driver picker). */
+  onDriverClick?: () => void;
 }) {
   const visible = preview ? items : items.filter((w) => hasContent(w, data));
   const groups: (WidgetId[] | WidgetId)[] = [];
@@ -925,7 +945,7 @@ export function SectionWidgets({
   return (
     <>
       {groups.map((g) => {
-        if (Array.isArray(g)) return <StripCard key={g.join()} items={g} data={data} itemProps={itemProps} />;
+        if (Array.isArray(g)) return <StripCard key={g.join()} items={g} data={data} itemProps={itemProps} onDriverClick={onDriverClick} />;
         if (g === "standings") return wrap(g, <StandingsCard data={data} mode={styleOf({ styles }, "standings")} />);
         if (g === "timing") return wrap(g, <TimingCard data={data} mode={styleOf({ styles }, "timing")} />);
         if (g === "leaderboard") return wrap(g, <LeaderboardCard data={data} />);

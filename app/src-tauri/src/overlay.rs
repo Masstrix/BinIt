@@ -431,6 +431,10 @@ pub fn spawn_hit_tester(app: AppHandle) {
     std::thread::spawn(move || {
         loop {
             std::thread::sleep(std::time::Duration::from_millis(40));
+            // While the driver picker is open it has the mouse (see `set_switcher`); leave it alone.
+            if SWITCHER_OPEN.load(Ordering::SeqCst) {
+                continue;
+            }
             let spots = HITS.lock().unwrap_or_else(|e| e.into_inner()).clone();
             let want = !spots.is_empty()
                 && window(&app).is_some_and(|w| {
@@ -461,6 +465,12 @@ pub fn spawn_hit_tester(app: AppHandle) {
 
 #[cfg(not(windows))]
 pub fn spawn_hit_tester(_app: AppHandle) {}
+
+/// Called by the overlay UI when the driver card is clicked: opens the same picker F8 does.
+#[tauri::command]
+pub fn open_switcher(app: AppHandle) {
+    set_switcher(&app, true);
+}
 
 /// Called by the overlay UI when the switcher closes itself (pick, Esc, add).
 #[tauri::command]

@@ -66,6 +66,12 @@ export function Overlay() {
     ),
   );
 
+  // Clicking the driver on the strip opens the same picker as F8.
+  const openSwitcher = useCallback(() => {
+    if (isTauri) import("@tauri-apps/api/core").then(({ invoke }) => invoke("open_switcher")).catch(() => {});
+    else setSwitcherOpen(true);
+  }, []);
+
   // The few widgets that can be clicked (live timing) tell the desktop app where they are, so it lets the mouse
   // through to them and nowhere else.
   useEffect(() => {
@@ -105,7 +111,7 @@ export function Overlay() {
           if (!items?.length) return null;
           return (
             <div key={a} style={anchorStyle(a, profile)}>
-              <SectionWidgets items={items} data={data} toast={toast} preview={devGame != null} anchor={a} styles={layout.styles} />
+              <SectionWidgets items={items} data={data} toast={toast} preview={devGame != null} anchor={a} styles={layout.styles} onDriverClick={openSwitcher} />
             </div>
           );
         })}

@@ -516,6 +516,7 @@ h2 { font-size: 22px; line-height: 1.2; }
 .sticker:nth-child(3n+2)[data-earned] .sticker-icon { background: var(--mint-bg); color: var(--mint); }
 .sticker:nth-child(3n)[data-earned] .sticker-icon { background: rgba(255, 201, 60, 0.18); color: var(--gold); }
 /* Overlay live timing: the lit pill slides between laps and the delta rolls in when the lap changes. */
+.tt-hit:hover { background: rgba(255, 255, 255, 0.07) !important; }
 .tt-slide { transition: left 0.3s cubic-bezier(0.3, 0.8, 0.3, 1); }
 .tt-in { animation: tt-in 0.38s cubic-bezier(0.2, 0.8, 0.3, 1) backwards; }
 .tt-out { animation: tt-out 0.28s cubic-bezier(0.4, 0, 0.8, 0.5) forwards; }

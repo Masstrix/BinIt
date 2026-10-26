@@ -93,7 +93,7 @@ function useAmbientMood(base: HelmetMood, seed: string): HelmetMood {
  * The eyes are alive: they blink, glance about and pull faces, on a rhythm unique to `seed`
  * (pass the driver's id; it defaults to the colour).
  */
-export function Helmet({ color, size = 48, tile = true, mood = "idle", seed }: { color: string; size?: number; tile?: boolean; mood?: HelmetMood; seed?: string | number }) {
+export function Helmet({ color, size = 48, tile = true, mood = "idle", seed, round = false }: { color: string; size?: number; tile?: boolean; mood?: HelmetMood; seed?: string | number; /** The tile is a circle instead of a rounded square. */ round?: boolean }) {
   const key = String(seed ?? color);
   const { vars } = useMemo(() => personality(key), [key]);
   const face = useAmbientMood(mood, key);
@@ -118,7 +118,7 @@ export function Helmet({ color, size = 48, tile = true, mood = "idle", seed }: {
   );
   if (!tile) return svg;
   return (
-    <span className="helmet-tile" style={{ width: size, height: size, borderRadius: size * 0.3, background: `${color}33` }}>
+    <span className="helmet-tile" style={{ width: size, height: size, borderRadius: round ? "50%" : size * 0.3, background: `${color}33` }}>
       {svg}
     </span>
   );
