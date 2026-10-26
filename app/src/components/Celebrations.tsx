@@ -4,6 +4,7 @@ import { api, useAppEvent, useAppState, useDriverMap, type AppEvent } from "../a
 import { lapKind, lapTime } from "../format";
 import { fx, type Rect } from "../fx";
 import { useDevCelebrate } from "../devOverlay";
+import { momentsFor } from "../celebrationRules";
 import { Helmet } from "./Helmet";
 
 /** One moment worth marking on the overlay. The slot that shows them (the Pop-ups widget) shows one at a time. */
@@ -110,15 +111,7 @@ export function useCelebrations(): Celebration | null {
       const name = driverId != null ? names.current.get(driverId)?.name ?? "Guest" : "Guest";
       const s = r.challenges[0];
       const kind = lapKind(r.lap);
-      if (kind === "timed") {
-        const time = lapTime(r.lap.timeMs);
-        if (r.comboRecord) push({ kind: "record", time, name });
-        else if (s?.position === 1 && s.previousPosition !== 1) push({ kind: "lead", name, time, challenge: s.challengeName, from: s.previousPosition });
-        else if (r.personalBest) push({ kind: "pb", time, position: s?.position ?? null });
-        else if (s?.position != null && s.previousPosition != null && s.position < s.previousPosition) {
-          push({ kind: "moved", from: s.previousPosition, to: s.position, context: s.challengeName, gap: s.gapToLeaderMs ? `${(s.gapToLeaderMs / 1000).toFixed(3)} off the lead` : null });
-        }
-      }
+      for (const m of momentsFor({ timed: kind === "timed", time: lapTime(r.lap.timeMs), name, personalBest: r.personalBest, comboRecord: r.comboRecord, standing: s })) push(m);
       if (r.awards?.levelUp) push({ kind: "level", level: r.awards.levelUp, xp: r.awards.xp });
       if (driverId != null) window.setTimeout(() => checkStickers(driverId, true), 700);
     },
