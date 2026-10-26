@@ -177,22 +177,44 @@ export function OverlayEditor() {
   const overlayOn = status?.overlayEnabled ?? true;
   const [game, setGame] = useState(status?.game ?? "acevo");
   const { layout, save, reset, custom, profile } = useOverlayLayout(game);
-  // The spacing sliders move the widgets as they are dragged and save a moment after the last change.
+  // The spacing sliders move the widgets as they are dragged. The overlay follows live: the setting is saved at
+  // most every 100 ms while dragging, and the drag's own value is kept until things have gone quiet.
   const [draft, setDraft] = useState<OverlayLayout["margins"] | null>(null);
   const margins = draft ?? layout.margins;
-  const saveTimer = useRef<number | undefined>(undefined);
+  const sending = useRef<number | undefined>(undefined);
+  const settle = useRef<number | undefined>(undefined);
+  const latest = useRef<OverlayLayout["margins"]>(undefined);
+  const sent = useRef<OverlayLayout["margins"]>(undefined);
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
-  const setMargin = (side: Side, value: number) => {
-    const next = { ...(draft ?? layout.margins ?? {}), [side]: value };
-    setDraft(next);
-    window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => {
-      save({ ...layoutRef.current, margins: next });
-      setDraft(null);
-    }, 350);
+  const flush = () => {
+    sending.current = undefined;
+    if (latest.current && latest.current !== sent.current) {
+      sent.current = latest.current;
+      save({ ...layoutRef.current, margins: latest.current });
+      sending.current = window.setTimeout(flush, 100);
+    }
   };
-  useEffect(() => () => window.clearTimeout(saveTimer.current), []);
+  const setMargin = (side: Side, value: number) => {
+    const next = { ...(latest.current ?? draft ?? layout.margins ?? {}), [side]: value };
+    latest.current = next;
+    setDraft(next);
+    if (sending.current === undefined) flush();
+    window.clearTimeout(settle.current);
+    settle.current = window.setTimeout(() => {
+      flush();
+      setDraft(null);
+      latest.current = undefined;
+      sent.current = undefined;
+    }, 700);
+  };
+  useEffect(
+    () => () => {
+      window.clearTimeout(sending.current);
+      window.clearTimeout(settle.current);
+    },
+    [],
+  );
 
   const [selected, setSelected] = useState<WidgetId | null>(null);
   const [dragging, setDragging] = useState<WidgetId | null>(null);
@@ -506,7 +528,10 @@ export function OverlayEditor() {
           className="chip plain"
           disabled={!margins || SIDES.every((s) => margins[s] === undefined)}
           onClick={() => {
-            window.clearTimeout(saveTimer.current);
+            window.clearTimeout(sending.current);
+            window.clearTimeout(settle.current);
+            latest.current = undefined;
+            sent.current = undefined;
             const { margins: _m, ...rest } = layout;
             setDraft(null);
             save(rest);
