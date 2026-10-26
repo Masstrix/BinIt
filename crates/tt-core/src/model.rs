@@ -26,7 +26,49 @@ pub struct Driver {
     pub name: String,
     /// Helmet colour, `#RRGGBB`.
     pub color: String,
+    /// What the driver has equipped in the Garage (empty: the plain helmet in `color`).
+    #[serde(default)]
+    pub look: Look,
     pub created_at: Timestamp,
+}
+
+/// A helmet look: which shop items are equipped. Ids are those of `shop::CATALOGUE`; the app draws them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Look {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shell: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decal: Option<String>,
+    /// `side`, `top` or `chin`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decal_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stripe: Option<String>,
+    /// Race number, 1 to 99.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number: Option<u8>,
+}
+
+/// What the shop shows one driver: their balance, what they own and wear, and every item's price.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShopState {
+    pub coins: i64,
+    pub level: u32,
+    /// Keys (`shell:aurora`) of items bought; free items are not listed, everyone has them.
+    pub owned: Vec<String>,
+    pub look: Look,
+    pub items: Vec<ShopItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShopItem {
+    pub id: String,
+    pub slot: String,
+    pub price: i64,
+    pub min_level: u32,
 }
 
 /// Game, track, layout and car: what a lap time is comparable against.

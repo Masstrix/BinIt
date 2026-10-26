@@ -1148,3 +1148,87 @@ fn laps_from_before_points_existed_are_paid_once() {
     tt.store().backfill_points().unwrap();
     assert_eq!(tt.profile(sam.id).unwrap().xp, 105);
 }
+
+// ---- Garage shop ---------------------------------------------------------------------------------
+
+fn rich_driver(tt: &BinIt, coins: i64, xp: i64) -> DriverId {
+    let d = tt.add_driver("Sam", None).unwrap();
+    tt.store().insert_point_event(d.id, "lap", xp, coins, None, now_ms()).unwrap();
+    d.id
+}
+
+#[test]
+fn buying_spends_coins_once_and_unlocks_wearing_it() {
+    let tt = BinIt::in_memory().unwrap();
+    let id = rich_driver(&tt, 500, 600);
+    let before = tt.shop(id).unwrap();
+    assert_eq!((before.coins, before.level), (500, 4));
+
+    // Not owned yet: cannot wear it.
+    let aurora = Look { shell: Some("aurora".into()), ..Look::default() };
+    assert!(tt.set_look(id, &aurora).is_err());
+
+    let after = tt.buy(id, "shell", "aurora").unwrap();
+    assert_eq!(after.coins, 500 - 320);
+    assert_eq!(after.owned, vec!["shell:aurora".to_string()]);
+    assert!(tt.buy(id, "shell", "aurora").is_err(), "cannot buy twice");
+
+    let driver = tt.set_look(id, &aurora).unwrap();
+    assert_eq!(driver.look.shell.as_deref(), Some("aurora"));
+    // The look is what every screen sees through the driver list.
+    assert_eq!(tt.drivers().unwrap()[0].look, driver.look);
+    // The profile shows the spend in the ledger without touching XP.
+    let p = tt.profile(id).unwrap();
+    assert_eq!((p.xp, p.coins), (600, 180));
+    assert_eq!(p.recent[0].kind, "buy:shell:aurora");
+}
+
+#[test]
+fn the_shop_refuses_what_a_driver_cannot_afford_or_reach() {
+    let tt = BinIt::in_memory().unwrap();
+    let id = rich_driver(&tt, 100, 0);
+    assert!(tt.buy(id, "shell", "sunset").is_err(), "150 coins needed");
+    let id2 = rich_driver_named(&tt, "Jess", 5000, 0);
+    assert!(tt.buy(id2, "shell", "holo").is_err(), "level 5 needed");
+    assert!(tt.buy(id2, "decal", "bolt").is_err(), "free items are not sold");
+    assert!(tt.buy(id2, "shell", "nope").is_err());
+    assert_eq!(tt.shop(id2).unwrap().coins, 5000, "failed purchases cost nothing");
+}
+
+fn rich_driver_named(tt: &BinIt, name: &str, coins: i64, xp: i64) -> DriverId {
+    let d = tt.add_driver(name, None).unwrap();
+    tt.store().insert_point_event(d.id, "lap", xp, coins, None, now_ms()).unwrap();
+    d.id
+}
+
+#[test]
+fn a_look_is_checked_before_it_is_worn() {
+    let tt = BinIt::in_memory().unwrap();
+    let id = rich_driver(&tt, 0, 0);
+    // Free items and any race number are fine; a decal defaults to the side.
+    let ok = tt.set_look(id, &Look { decal: Some("flame".into()), stripe: Some("centre".into()), number: Some(7), ..Look::default() }).unwrap();
+    assert_eq!(ok.look.decal_at.as_deref(), Some("side"));
+    assert!(tt.set_look(id, &Look { number: Some(0), ..Look::default() }).is_err());
+    assert!(tt.set_look(id, &Look { decal: Some("flame".into()), decal_at: Some("roof".into()), ..Look::default() }).is_err());
+    assert!(tt.set_look(id, &Look { stripe: Some("made-up".into()), ..Look::default() }).is_err());
+}
+
+#[test]
+fn a_database_from_before_the_garage_gains_looks_and_keeps_its_drivers() {
+    let dir = std::env::temp_dir().join(format!("binit-garage-{}", now_ms()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("old.db");
+    {
+        let tt = BinIt::open(&path).unwrap();
+        tt.add_driver("Sam", Some("#FF8A4C")).unwrap();
+    }
+    // Pretend it was saved before schema 10: no look column, no items table.
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("ALTER TABLE drivers DROP COLUMN look; DROP TABLE driver_items; PRAGMA user_version = 9;").unwrap();
+    }
+    let tt = BinIt::open(&path).unwrap();
+    let sam = tt.drivers().unwrap().remove(0);
+    assert_eq!((sam.name.as_str(), sam.look.clone()), ("Sam", Look::default()));
+    let _ = std::fs::remove_dir_all(dir);
+}

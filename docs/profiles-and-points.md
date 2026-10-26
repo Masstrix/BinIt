@@ -139,3 +139,20 @@ like everything else here; that is acceptable for this product but worth knowing
 * Should challenge winners get something special (a trophy sticker) rather than only coins?
 * Should coins and XP be visible to everyone on the leaderboard, or only on your own profile?
 * Is it fine that XP and coins from before this feature starts at zero, or should existing laps be back-filled?
+
+## Status: the Garage and shop are built (2026-10-26)
+
+* **Server.** Schema 10 adds `drivers.look` (JSON, the equipped `Look`) and `driver_items` (what was bought). The
+  catalogue with prices and level gates is `crates/tt-core/src/shop.rs`; the app only knows how to draw each id
+  (`app/src/looks.ts`), so the two id lists must match. A purchase is one `driver_items` row plus a negative
+  `point_events` row (`buy:shell:aurora`) in one transaction, so a balance is still just a sum and XP is untouched.
+  `Look` rides on every `Driver`, so leaderboards, podium, overlay and the picker all draw it.
+* **Routes.** `GET /drivers/{id}/shop`, `POST /drivers/{id}/shop/buy {slot, id}`, `PUT /drivers/{id}/look`. Buying and
+  equipping use the same guard as editing a driver (PC, or the phone paired to them).
+* **Rules.** Free items (price 0) belong to everyone; others need the level and the coins, and cannot be bought
+  twice. A look may only wear owned or free items; race numbers are 1 to 99 and free.
+* **UI.** `#/garage` (try on anything, "Buy and equip" pays for what is new), `#/shop` (grid with a confirm sheet, "Try
+  on" hands the item to the Garage), links on the You page. The mock server (`?mock`) sells the same catalogue and
+  gives each mock driver spare coins.
+* **Not done:** visor and default face (designed, not in the catalogue), earned-only items (challenge winners, level
+  milestones), the Paddock page, overlay pop-up when someone equips something, number style and colour extras.

@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 9;
+const SCHEMA_VERSION: i32 = 10;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -222,6 +222,21 @@ impl Store {
                 ",
             )?;
         }
+        if version < 10 {
+            // The Garage: what a driver wears (JSON, see `Look`) and what they have bought.
+            conn.execute_batch(
+                "
+                ALTER TABLE drivers ADD COLUMN look TEXT NOT NULL DEFAULT '{}';
+                CREATE TABLE IF NOT EXISTS driver_items (
+                    driver_id  INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+                    item       TEXT NOT NULL,
+                    price      INTEGER NOT NULL,
+                    at         INTEGER NOT NULL,
+                    PRIMARY KEY (driver_id, item)
+                );
+                ",
+            )?;
+        }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         let store = Self { conn };
         store.backfill_points()?;
@@ -252,7 +267,7 @@ impl Store {
     // ---- drivers -----------------------------------------------------------
 
     pub fn drivers(&self) -> Result<Vec<Driver>> {
-        let mut stmt = self.conn.prepare("SELECT id, name, color, created_at FROM drivers ORDER BY name")?;
+        let mut stmt = self.conn.prepare("SELECT id, name, color, look, created_at FROM drivers ORDER BY name")?;
         let rows = stmt.query_map([], driver_from_row)?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
@@ -260,14 +275,14 @@ impl Store {
     pub fn driver(&self, id: DriverId) -> Result<Option<Driver>> {
         Ok(self
             .conn
-            .query_row("SELECT id, name, color, created_at FROM drivers WHERE id = ?1", [id], driver_from_row)
+            .query_row("SELECT id, name, color, look, created_at FROM drivers WHERE id = ?1", [id], driver_from_row)
             .optional()?)
     }
 
     pub fn driver_by_name(&self, name: &str) -> Result<Option<Driver>> {
         Ok(self
             .conn
-            .query_row("SELECT id, name, color, created_at FROM drivers WHERE name = ?1", [name], driver_from_row)
+            .query_row("SELECT id, name, color, look, created_at FROM drivers WHERE name = ?1", [name], driver_from_row)
             .optional()?)
     }
 
@@ -276,12 +291,42 @@ impl Store {
             "INSERT INTO drivers (name, color, created_at) VALUES (?1, ?2, ?3)",
             params![name, color, now],
         )?;
-        Ok(Driver { id: self.conn.last_insert_rowid(), name: name.to_string(), color: color.to_string(), created_at: now })
+        Ok(Driver { id: self.conn.last_insert_rowid(), name: name.to_string(), color: color.to_string(), look: Look::default(), created_at: now })
     }
 
     pub fn update_driver(&self, id: DriverId, name: &str, color: &str) -> Result<()> {
         self.conn.execute("UPDATE drivers SET name = ?2, color = ?3 WHERE id = ?1", params![id, name, color])?;
         Ok(())
+    }
+
+    // ---- Garage ----------------------------------------------------------------
+
+    pub fn set_look(&self, id: DriverId, look: &Look) -> Result<()> {
+        self.conn.execute("UPDATE drivers SET look = ?2 WHERE id = ?1", params![id, serde_json::to_string(look)?])?;
+        Ok(())
+    }
+
+    /// Keys (`shell:aurora`) of everything this driver bought.
+    pub fn owned_items(&self, driver_id: DriverId) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT item FROM driver_items WHERE driver_id = ?1 ORDER BY at, item")?;
+        let rows = stmt.query_map([driver_id], |r| r.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Records a purchase: the item and its price leave as one spend row in the ledger, together or not at all.
+    pub fn buy_item(&self, driver_id: DriverId, item: &str, price: i64, at: Timestamp) -> Result<()> {
+        self.conn.execute_batch("BEGIN")?;
+        let done = (|| -> Result<()> {
+            self.conn.execute("INSERT INTO driver_items (driver_id, item, price, at) VALUES (?1, ?2, ?3, ?4)", params![driver_id, item, price, at])?;
+            self.insert_point_event(driver_id, &format!("buy:{item}"), 0, -price, None, at)
+        })();
+        match done {
+            Ok(()) => Ok(self.conn.execute_batch("COMMIT")?),
+            Err(e) => {
+                let _ = self.conn.execute_batch("ROLLBACK");
+                Err(e)
+            }
+        }
     }
 
     // ---- XP and coins ----------------------------------------------------------
@@ -892,7 +937,8 @@ const LAP_SELECT: &str = "SELECT id, driver_id, game, track, layout, car, sessio
 const CHALLENGE_SELECT: &str = "SELECT id, name, game, track, layout, car, starts_at, ends_at, valid_only, max_laps, prizes, created_at FROM challenges";
 
 fn driver_from_row(r: &Row) -> rusqlite::Result<Driver> {
-    Ok(Driver { id: r.get(0)?, name: r.get(1)?, color: r.get(2)?, created_at: r.get(3)? })
+    let look: String = r.get(3)?;
+    Ok(Driver { id: r.get(0)?, name: r.get(1)?, color: r.get(2)?, look: serde_json::from_str(&look).unwrap_or_default(), created_at: r.get(4)? })
 }
 
 fn device_from_row(r: &Row) -> rusqlite::Result<Device> {

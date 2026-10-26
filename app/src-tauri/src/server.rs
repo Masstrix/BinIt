@@ -53,6 +53,9 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/drivers/ratings", get(driver_ratings))
         .route("/drivers/{id}", put(update_driver))
         .route("/drivers/{id}/profile", get(driver_profile))
+        .route("/drivers/{id}/shop", get(driver_shop))
+        .route("/drivers/{id}/shop/buy", post(buy_item))
+        .route("/drivers/{id}/look", put(set_look))
         .route("/drivers/{id}/pair-code", post(pair_code))
         .route("/drivers/{id}/devices", get(driver_devices).delete(sign_out_driver))
         .route("/devices/{id}", delete(sign_out_device))
@@ -295,6 +298,44 @@ async fn update_driver(
 /// Level, XP, coins, bests and stickers: what the You page shows. Open to everyone, like the leaderboards.
 async fn driver_profile(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<tt_core::Profile> {
     Ok(Json(c.tt.profile(id)?))
+}
+
+/// The Garage and shop for one driver: balance, level, what they own and wear, every price.
+async fn driver_shop(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<tt_core::ShopState> {
+    Ok(Json(c.tt.shop(id)?))
+}
+
+#[derive(Deserialize)]
+struct BuyItem {
+    slot: String,
+    id: String,
+}
+
+/// Spending coins is guarded like editing: a driver with a paired phone can only buy from the PC or that phone.
+async fn buy_item(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    State(c): State<Ctx>,
+    Path(id): Path<DriverId>,
+    Json(body): Json<BuyItem>,
+) -> Result<Json<tt_core::ShopState>, Response> {
+    if c.tt.driver_is_claimed(id).map_err(bad_request)? {
+        may_manage(&c, &headers, addr, id)?;
+    }
+    c.tt.buy(id, &body.slot, &body.id).map(Json).map_err(bad_request)
+}
+
+async fn set_look(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    State(c): State<Ctx>,
+    Path(id): Path<DriverId>,
+    Json(look): Json<tt_core::Look>,
+) -> Result<Json<tt_core::Driver>, Response> {
+    if c.tt.driver_is_claimed(id).map_err(bad_request)? {
+        may_manage(&c, &headers, addr, id)?;
+    }
+    c.tt.set_look(id, &look).map(Json).map_err(bad_request)
 }
 
 // ---- paired phones ---------------------------------------------------------------------------

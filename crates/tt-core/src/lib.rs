@@ -6,6 +6,7 @@ pub mod live;
 pub mod model;
 pub mod pairing;
 pub mod progress;
+pub mod shop;
 mod store;
 pub mod trackmap;
 
@@ -450,6 +451,57 @@ impl BinIt {
     /// Whether any phone is paired to this driver (an unpaired driver can be edited by anyone, as before).
     pub fn driver_is_claimed(&self, driver_id: DriverId) -> Result<bool> {
         Ok(self.store().device_count(driver_id)? > 0)
+    }
+
+    // ---- Garage ------------------------------------------------------------
+
+    /// The shop as one driver sees it: balance, level, what they own and wear, and every price.
+    pub fn shop(&self, driver_id: DriverId) -> Result<ShopState> {
+        let store = self.store();
+        let driver = store.driver(driver_id)?.ok_or_else(|| anyhow::anyhow!("no such driver"))?;
+        let (xp, coins) = store.point_totals(driver_id)?;
+        let items = shop::CATALOGUE
+            .iter()
+            .map(|i| ShopItem { id: i.id.to_string(), slot: i.slot.to_string(), price: i.price, min_level: i.min_level })
+            .collect();
+        Ok(ShopState { coins, level: progress::level_of(xp), owned: store.owned_items(driver_id)?, look: driver.look, items })
+    }
+
+    /// Buys an item with coins. Fails when it is free, already owned, above the driver's level or too dear.
+    pub fn buy(&self, driver_id: DriverId, slot: &str, id: &str) -> Result<ShopState> {
+        {
+            let store = self.store();
+            let entry = shop::item(slot, id).ok_or_else(|| anyhow::anyhow!("no such item"))?;
+            if entry.price == 0 {
+                bail!("that one is free");
+            }
+            let key = shop::key(slot, id);
+            if store.owned_items(driver_id)?.contains(&key) {
+                bail!("you already own that");
+            }
+            let (xp, coins) = store.point_totals(driver_id)?;
+            if progress::level_of(xp) < entry.min_level {
+                bail!("that needs level {}", entry.min_level);
+            }
+            if coins < entry.price {
+                bail!("not enough coins: {} needed, you have {coins}", entry.price);
+            }
+            store.buy_item(driver_id, &key, entry.price, now_ms())?;
+        }
+        self.emit(AppEvent::DriversChanged);
+        self.shop(driver_id)
+    }
+
+    /// Wears a look. Everything in it must exist and be free or owned.
+    pub fn set_look(&self, driver_id: DriverId, look: &Look) -> Result<Driver> {
+        let store = self.store();
+        let owned = store.owned_items(driver_id)?;
+        let clean = shop::check_look(&owned, look).map_err(|e| anyhow::anyhow!(e))?;
+        store.set_look(driver_id, &clean)?;
+        let driver = store.driver(driver_id)?.ok_or_else(|| anyhow::anyhow!("no such driver"))?;
+        drop(store);
+        self.emit(AppEvent::DriversChanged);
+        Ok(driver)
     }
 
     // ---- profile ---------------------------------------------------------
