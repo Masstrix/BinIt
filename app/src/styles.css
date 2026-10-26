@@ -1377,7 +1377,7 @@ img.game-icon { object-fit: cover; display: inline-block; }
 .price.lock { color: var(--muted); }
 .you-coin-gain[data-spend] { color: var(--red); }
 .garage { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 20px; align-items: start; }
-.garage-preview { align-items: center; text-align: center; gap: 10px; position: sticky; top: 8px; }
+.garage-preview { align-items: center; text-align: center; gap: 10px; position: sticky; top: 76px; }
 .garage-stage { position: relative; width: 100%; display: grid; place-items: center; padding: 20px 0 8px; border-radius: 22px; background: radial-gradient(circle at 50% 42%, var(--tint) 0%, transparent 70%); }
 .garage-trying { position: absolute; top: 8px; left: 8px; background: var(--panel-2); color: var(--violet); font-weight: 700; }
 .garage-coins { display: inline-flex; align-items: center; gap: 8px; font: 700 15px var(--font-mono); color: var(--gold); background: var(--panel-2); border-radius: 999px; padding: 6px 14px 6px 8px; }
@@ -1416,7 +1416,7 @@ img.game-icon { object-fit: cover; display: inline-block; }
 }
 
 /* Customize and Shop: header, item art, sections */
-.shop-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; margin-bottom: 14px; }
+.shop-header { position: sticky; top: -12px; z-index: 6; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 20px 0 8px; margin-top: -12px; margin-bottom: 6px; background: var(--bg); }
 .shop-header h1 { margin: 0; font: 700 20px var(--font-display); letter-spacing: -0.02em; }
 .shop-back { width: 44px; height: 44px; border-radius: 16px; background: var(--panel); color: var(--text); display: grid; place-items: center; text-decoration: none; }
 .shop-back:hover { background: var(--panel-2); color: var(--text); }
