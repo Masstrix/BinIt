@@ -95,7 +95,7 @@ const ICON = "M12 3v12M7 10l5 5 5-5M5 21h14";
  * The menu's update button: only there when a newer version is out (or one is installing). From a
  * phone it updates the app on the PC.
  */
-export function UpdateButton() {
+export function UpdateButton({ variant = "menu" }: { variant?: "menu" | "titlebar" }) {
   const { update } = useAppState();
   const { install } = useUpdateActions();
   const [confirming, setConfirming] = useState(false);
@@ -109,7 +109,7 @@ export function UpdateButton() {
   const onClick = () => (what === "install" ? setConfirming(true) : what === "download" ? openDownload("portable") : undefined);
   return (
     <>
-      <button className={`update-pill${progress ? " busy" : ""}`} onClick={onClick} disabled={!what} title={label} aria-label={label}>
+      <button className={`update-pill${variant === "titlebar" ? " in-titlebar" : ""}${progress ? " busy" : ""}`} onClick={onClick} disabled={!what} title={label} aria-label={label}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d={ICON} />
         </svg>
@@ -117,6 +117,39 @@ export function UpdateButton() {
       </button>
       {confirming && <ConfirmUpdate version={update.latest!.version} onClose={() => setConfirming(false)} onConfirm={install} />}
     </>
+  );
+}
+
+/**
+ * A card at the top of the Rig page on a phone: a newer version is out (or installing), and it can be started from here. The
+ * update happens on the PC, so it asks first. Hidden on wider screens, where the title bar and the menu carry it.
+ */
+export function UpdateBanner() {
+  const { update } = useAppState();
+  const { busy, error, install } = useUpdateActions();
+  const [confirming, setConfirming] = useState(false);
+  const what = action(update);
+  const progress = stageText(update?.stage ?? null);
+  if (!update || (!what && !progress)) return null;
+  return (
+    <section className={`card update-banner${progress ? " busy" : ""}`} aria-label="Update available">
+      <div className="update-head">
+        <span className="update-dot" aria-hidden="true" />
+        <div className="update-text">
+          <h2>{progress ?? `Bin It ${update.latest!.version} is available`}</h2>
+          <span className="muted">
+            {progress ? "Bin It on the PC closes for a moment and opens again." : `The PC has ${update.current}. Updating happens on the PC and takes a minute.`}
+          </span>
+        </div>
+        {what && !progress && (
+          <button className="btn" disabled={busy === "install"} onClick={() => (what === "install" ? setConfirming(true) : openDownload("portable"))}>
+            {what === "install" ? "Update now" : `Download ${update.latest!.version}`}
+          </button>
+        )}
+      </div>
+      {error && <div className="update-error">{error}</div>}
+      {confirming && update.latest && <ConfirmUpdate version={update.latest.version} onClose={() => setConfirming(false)} onConfirm={install} />}
+    </section>
   );
 }
 

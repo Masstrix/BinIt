@@ -310,7 +310,9 @@ const about: About = {
   name: "Bin It", version: "0.6.0", buildNumber: 0, build: "development", os: "Mock data", webview: null, dataDir: null, dbBytes: null, port: 7878, lanEnabled: true,
   counts: { drivers: drivers.length, laps: laps.length, timedLaps: laps.length, tracedLaps: 0, challenges: challenges.length, schemaVersion: 0, createdWith: null, previousVersion: null },
 };
-const update: UpdateStatus = { current: "0.6.0", kind: "development", latest: null, checking: false, lastChecked: NOW, error: null, stage: null };
+// Add ?update to the address to see how a newer version is announced.
+const newer = typeof location !== "undefined" && new URLSearchParams(location.search).has("update");
+const update: UpdateStatus = { current: "0.6.0", kind: newer ? "installed" : "development", latest: newer ? { version: "0.7.0", notes: ["- Challenges page redesign", "- Celebrations on the overlay"].join(String.fromCharCode(10)) } : null, checking: false, lastChecked: NOW, error: null, stage: null };
 const server: ServerInfo = { port: 7878, lanEnabled: true, urls: ["http://192.168.0.79:7878"] };
 
 // ---- the router ----------------------------------------------------------------------

@@ -1176,6 +1176,16 @@ img.game-icon { object-fit: cover; display: inline-block; }
 /* Phones: an icon at the end of the top bar (whose edges would clip the pulse). */
 @media (max-width: 640px) { .update-pill { flex: none; order: 1; width: 44px; min-height: 44px; animation: none; } }
 
+/* In the title bar, beside the window buttons: a slim pill, always showing its words. */
+.update-pill.in-titlebar { min-height: 30px; align-self: center; margin-right: 10px; padding: 0 12px 0 10px; gap: 7px; border-radius: 999px; font-size: 13px; width: auto; justify-content: flex-start; }
+.update-pill.in-titlebar svg { width: 16px; height: 16px; }
+.update-pill.in-titlebar .update-pill-label { display: inline; }
+/* The phone's Rig page carries the update; wider screens have the title bar and the menu. */
+.update-banner { --tone: var(--violet); border: 1px solid var(--violet); background: color-mix(in srgb, var(--violet) 14%, var(--panel)); }
+.update-banner.busy { --tone: var(--peri-1); }
+.update-banner .btn { min-height: 48px; }
+@media (min-width: 641px) { .update-banner { display: none; } }
+@media (max-width: 640px) { .update-banner .btn { width: 100%; } }
 .update-card { --tone: var(--mint); }
 .update-card.new { --tone: var(--violet); border-color: var(--violet); background: color-mix(in srgb, var(--violet) 14%, var(--panel)); }
 .update-card.busy { --tone: var(--peri-1); }

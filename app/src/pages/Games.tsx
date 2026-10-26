@@ -4,6 +4,7 @@ import { OverlayEditor } from "../components/OverlayEditor";
 import { QrCode } from "../components/QrCode";
 import { GameIcon } from "../components/GameIcon";
 import { GAMES } from "../format";
+import { UpdateBanner } from "../components/Update";
 
 /** Which games Bin It can follow, and which one is running right now. */
 function SupportedGames({ running }: { running: string | null }) {
@@ -40,6 +41,7 @@ export function GamesPage() {
 
   return (
     <>
+      <UpdateBanner />
       <h1>Games &amp; overlay</h1>
 
       <OverlayEditor />

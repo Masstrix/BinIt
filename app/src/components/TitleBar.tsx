@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { isTauri, mockEnabled } from "../api";
+import { UpdateButton } from "./Update";
 
 type Action = "minimise" | "maximise" | "close";
 
@@ -43,6 +44,7 @@ export function TitleBar({ title }: { title: string }) {
         <a className="mock-badge" href="?mock=0" title="Showing made-up data from src/mock. Click to switch it off.">Mock data</a>
       )}
       <span className="titlebar-fill" data-tauri-drag-region />
+      <UpdateButton variant="titlebar" />
       {isTauri && (
         <div className="titlebar-buttons">
           <button type="button" aria-label="Minimise" onClick={() => run("minimise")}>
