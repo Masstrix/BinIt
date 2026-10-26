@@ -6,6 +6,9 @@ import { Helmet } from "./Helmet";
 import { Modal } from "./Modal";
 import { useSeatSwitcher } from "./SeatSwitcher";
 
+const RING_R = 24;
+const RING_C = 2 * Math.PI * RING_R;
+
 /**
  * Phones: the banner at the top, "this is me" and the seat. A phone is paired to a driver by the server (see
  * `pair_device` in tt-core): the first phone to pick a driver claims them, another one needs a code from the
@@ -48,12 +51,29 @@ export function MeBar() {
   const driving = inSeat && !!live?.driving;
   const delta = live?.timing?.deltaMs;
   const state = driving ? "driving" : inSeat ? "seated" : "free";
+  // The ring: XP towards the next level; while you drive it follows the lap instead.
+  const xpFill = profile ? (profile.xp - profile.levelStartXp) / Math.max(1, profile.nextLevelXp - profile.levelStartXp) : 0;
+  const ringFill = Math.max(0, Math.min(1, driving ? (live?.lapProgress ?? 0) : xpFill));
 
   return (
     <div className="me-bar" data-state={state}>
       <button type="button" className="me-who" onClick={() => (me ? (location.hash = "#/you") : setPicking(true))} title={me ? "Your profile" : "Who you are on this phone"}>
         <span className="me-ring">
-          <Helmet color={me?.color ?? "#5B6578"} size={46} seed={me?.id} mood={inSeat ? "happy" : "idle"} />
+          <svg className="me-ring-svg" viewBox="0 0 54 54" aria-hidden="true">
+            <circle className="me-ring-track" cx="27" cy="27" r={RING_R} />
+            <circle
+              className="me-ring-arc"
+              cx="27"
+              cy="27"
+              r={RING_R}
+              strokeDasharray={RING_C}
+              strokeDashoffset={RING_C * (1 - ringFill)}
+              transform="rotate(-90 27 27)"
+            />
+          </svg>
+          <span className="me-face" style={{ background: `${me?.color ?? "#5B6578"}2E` }}>
+            <Helmet color={me?.color ?? "#5B6578"} size={34} tile={false} seed={me?.id} mood={inSeat ? "happy" : "idle"} />
+          </span>
           {profile && <span className="me-level" aria-label={`Level ${profile.level}`}>{profile.level}</span>}
         </span>
         <span className="me-text">

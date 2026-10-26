@@ -478,8 +478,13 @@ h2 { font-size: 22px; line-height: 1.2; }
 /* The banner pinned to the top of a phone: who you are and the seat (MeBar). Phones only. */
 .me-bar { display: none; }
 .me-who { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; padding: 0; border: 0; background: none; color: var(--text); text-align: left; cursor: pointer; font: inherit; }
-.me-ring { flex: none; display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; background: var(--panel-2); }
-.me-ring .helmet-tile { background: transparent !important; }
+.me-ring { flex: none; display: grid; place-items: center; width: 54px; height: 54px; }
+.me-ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.me-ring-track { fill: none; stroke: var(--panel-3); stroke-width: 3.5; }
+.me-ring-arc { fill: none; stroke: var(--violet); stroke-width: 3.5; stroke-linecap: round; transition: stroke-dashoffset 0.4s ease; }
+.me-bar[data-state="driving"] .me-ring-arc { stroke: var(--mint); transition: stroke-dashoffset 0.2s linear; }
+.me-bar[data-state="driving"] .me-ring-track { stroke: color-mix(in srgb, var(--mint) 25%, transparent); }
+.me-face { position: relative; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; }
 .me-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .me-name { font: 700 17px var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .me-time { font-size: 22px; line-height: 1.1; font-weight: 500; letter-spacing: -0.06em; }
@@ -551,8 +556,7 @@ h2 { font-size: 22px; line-height: 1.2; }
     border-radius: 24px; background: var(--panel); box-shadow: 0 0 0 10px var(--bg);
   }
   .me-bar[data-state="driving"] { background: var(--mint-bg); }
-  .me-bar[data-state="driving"] .me-ring { background: color-mix(in srgb, var(--mint) 25%, transparent); }
-  .phone-switch { display: flex; }
+    .phone-switch { display: flex; }
   .phone-switch a { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 44px; border-radius: 999px; color: var(--muted); font-weight: 500; font-size: 14px; text-decoration: none; text-align: center; }
   .phone-switch a[aria-pressed="true"] { background: var(--panel); color: var(--text); font-weight: 600; }
   .content { overflow: visible; padding: 16px 16px calc(96px + env(safe-area-inset-bottom)); gap: 16px; }
