@@ -7,7 +7,7 @@ import { lapKind, lapTime, trackName } from "../format";
 import { words } from "../vocab";
 import { orientationFor, styleOf, WIDGETS, type Anchor, type Orientation, type OverlayLayout, type WidgetId } from "../overlayLayout";
 import { BASE, gapText as ladderGap, place, room } from "./GapLadder";
-import { Crown, Helmet } from "./Helmet";
+import { Helmet } from "./Helmet";
 import { QrCode } from "./QrCode";
 
 const card = {
@@ -208,74 +208,117 @@ export function StripCard({ items, data, itemProps }: { items: WidgetId[]; data:
 }
 
 export function StandingsCard({ data }: { data: OverlayData }) {
+  // Second, first, third, left to right: the winner's step is the tallest.
+  const steps = [
+    { place: 2, h: 34 },
+    { place: 1, h: 48 },
+    { place: 3, h: 24 },
+  ];
   return (
-    <div style={{ ...card, padding: "10px 14px", minWidth: 230, display: "flex", flexDirection: "column", gap: 6 }}>
-      <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-        <Trophy />
-        <span style={{ font: "800 13px var(--font-display)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {data.challengeName ?? "No challenge running"}
+    <div style={{ ...card, borderRadius: 28, padding: "12px 14px", width: 216, display: "flex", flexDirection: "column", gap: 10 }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <span style={{ flex: "none", width: 28, height: 28, borderRadius: 10, background: "rgba(255,201,60,0.15)", display: "grid", placeItems: "center" }}>
+          <Trophy size={16} />
+        </span>
+        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
+          <span style={{ font: "500 9px var(--font-mono)", letterSpacing: "0.1em", color: "var(--muted)" }}>CHALLENGE</span>
+          <span style={{ font: "700 13px var(--font-display)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {data.challengeName ?? "No challenge running"}
+          </span>
         </span>
       </span>
-      {data.top3.length === 0 && <span className="muted" style={{ fontSize: 13 }}>No {words(data.game).laps} yet</span>}
-      {data.top3.map((r, i) => (
-        <span key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
-          <span style={{ width: 16, fontWeight: 800, color: i === 0 ? "var(--gold)" : "var(--text-2)" }}>{i + 1}</span>
-          {i === 0 ? <Crown size={14} /> : <span style={{ width: 14 }} />}
-          <span style={{ flex: 1, fontWeight: 600 }}>{r.name}</span>
-          <span className="mono" style={{ fontSize: 14, color: i === 0 ? "var(--gold)" : undefined }}>{lapTime(r.timeMs)}</span>
+      {data.top3.length === 0 ? (
+        <span className="muted" style={{ fontSize: 13 }}>No {words(data.game).laps} yet</span>
+      ) : (
+        <span style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
+          {steps.map(({ place, h }) => {
+            const r = data.top3[place - 1];
+            return (
+              <span key={place} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
+                {r ? (
+                  <>
+                    <Helmet color={r.color} size={32} seed={r.name} />
+                    <span style={{ fontSize: 11, fontWeight: 600, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+                    <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>{lapTime(r.timeMs)}</span>
+                  </>
+                ) : (
+                  <span style={{ height: 32 }} />
+                )}
+                <span style={{ width: "100%", height: h, borderRadius: "12px 12px 0 0", background: r ? `${r.color}33` : "var(--panel-2)", display: "flex", justifyContent: "center", paddingTop: 4, font: "700 15px var(--font-display)" }}>
+                  {place}
+                </span>
+              </span>
+            );
+          })}
         </span>
-      ))}
+      )}
     </div>
   );
 }
 
 const SECTOR_COLOURS = { purple: "#B79BFF", green: "#4FD39A", yellow: "#FFC93C", current: "#E8EBF4", pending: "#262D3B" };
 
+const CAPTION = { font: "500 11px var(--font-mono)", letterSpacing: "0.08em", color: "var(--muted)", textTransform: "uppercase" } as const;
+
 /** Delta to the reference lap plus one bar per sector (purple / green / yellow). */
 export function TimingCard({ data }: { data: OverlayData }) {
   const t = data.timing;
   if (data.outLap || !t) {
     return data.outLap ? (
-      <div style={{ ...card, padding: "10px 14px", minWidth: 240, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 1, color: "var(--muted)" }}>OUT LAP</span>
-        <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>TIMING STARTS AT THE LINE</span>
+      <div style={{ ...card, padding: "14px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={CAPTION}>Live timing</span>
+        <span style={{ font: "700 20px var(--font-display)", letterSpacing: "-0.02em" }}>Out lap</span>
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>Timing starts at the line</span>
       </div>
     ) : null;
   }
   const d = t.deltaMs;
   const cut = data.lapInvalid;
+  // The two things a delta can be against; the one in use is lit.
+  const againstLeader = !!t.reference && /leader|^p1$/i.test(t.reference);
+  const pills = ["PB", "Leader"];
   return (
-    <div style={{ ...card, padding: "10px 14px", minWidth: 240, display: "flex", flexDirection: "column", gap: 8, ...(cut ? { boxShadow: "inset 0 0 0 1.5px rgba(255,122,146,0.7), 0 8px 30px rgba(0,0,0,0.35)", background: "#2A1420" } : {}) }}>
-      {cut && (
-        <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, color: "#FF7A92" }}>{data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : `${words(data.game).lap.toUpperCase()} INVALID`}</span>
-          <span style={{ fontSize: 11, color: "#FF7A92", fontWeight: 600 }}>WON'T BE TIMED</span>
+    <div style={{ ...card, borderRadius: 28, padding: "16px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 10, ...(cut ? { boxShadow: "inset 0 0 0 1.5px rgba(255,122,146,0.7), 0 8px 30px rgba(0,0,0,0.35)", background: "#2A1420" } : {}) }}>
+      <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+        <span style={CAPTION}>Live timing</span>
+        {cut && (
+          <span style={{ font: "500 11px var(--font-mono)", letterSpacing: "0.06em", color: "var(--red)" }}>
+            {data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : `${words(data.game).lap.toUpperCase()} INVALID`} · WON'T COUNT
+          </span>
+        )}
+      </span>
+      {t.reference && !cut && (
+        <span style={{ display: "flex", gap: 6 }}>
+          {pills.map((name) => {
+            const on = name === "Leader" ? againstLeader : !againstLeader;
+            return (
+              <span key={name} style={{ flex: 1, textAlign: "center", padding: "4px 0", borderRadius: 999, font: "500 11px var(--font-mono)", background: on ? "var(--tint)" : "var(--panel-2)", color: on ? "var(--peri-1)" : "var(--muted)" }}>
+                {name}
+              </span>
+            );
+          })}
         </span>
       )}
-      <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, ...(cut ? { opacity: 0.55, textDecoration: "line-through" } : {}) }}>
+      <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, ...(cut ? { opacity: 0.55, textDecoration: "line-through" } : {}) }}>
         {t.reference ? (
-          <>
-            <span className="mono" style={{ fontSize: 24, color: cut ? "#FF7A92" : deltaColour(d) }}>{deltaText(d)}</span>
-            <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>VS {t.reference.toUpperCase()}</span>
-          </>
+          <span className="mono" style={{ font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.08em", color: cut ? "var(--red)" : deltaColour(d) }}>{deltaText(d)}</span>
         ) : (
           // First lap on this track: nothing to compare against yet, so show the lap clock.
           <>
-            <span className="mono" style={{ fontSize: 24 }}>{lapTime(data.lapMs)}</span>
-            <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>FIRST {words(data.game).lap.toUpperCase()} · NO REFERENCE</span>
+            <span className="mono" style={{ font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.08em" }}>{lapTime(data.lapMs)}</span>
+            <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>FIRST {words(data.game).lap.toUpperCase()}</span>
           </>
         )}
       </span>
-      <span style={{ display: "flex", gap: 4 }}>
+      <span style={{ display: "flex", gap: 6 }}>
         {t.sectors.map((s, i) => (
-          <span key={i} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-            <span style={{ height: 8, borderRadius: 4, background: SECTOR_COLOURS[s.status], opacity: s.status === "current" ? 0.5 : 1 }} />
-            <span className="mono" style={{ fontSize: 11, lineHeight: 1.2, textAlign: "center", color: s.timeMs ? "var(--text)" : "var(--muted)" }}>
-              {s.timeMs ? (s.timeMs / 1000).toFixed(3) : `S${i + 1}`}
-            </span>
-            {s.deltaMs !== null && (
-              <span className="mono" style={{ fontSize: 10, lineHeight: 1.1, textAlign: "center", color: deltaColour(s.deltaMs) }}>{deltaText(s.deltaMs)}</span>
-            )}
+          <span key={i} style={{ flex: 1, height: 10, borderRadius: 5, background: SECTOR_COLOURS[s.status], opacity: s.status === "current" ? 0.5 : 1 }} />
+        ))}
+      </span>
+      <span style={{ display: "flex", justifyContent: "space-between", gap: 8, font: "500 11px var(--font-mono)", color: "var(--muted)" }}>
+        {t.sectors.map((s, i) => (
+          <span key={i}>
+            S{i + 1} {s.timeMs ? (s.timeMs / 1000).toFixed(2) : "--"}
           </span>
         ))}
       </span>
@@ -490,40 +533,40 @@ export function QrCard({ data }: { data: OverlayData }) {
 
 /** Top of the leaderboard for what's being driven right now, independent of challenges. */
 export function LeaderboardCard({ data }: { data: OverlayData }) {
+  const placeColour = (n: number) => (n === 1 ? "#FFE14D" : n === 3 ? "#FF8A4C" : "var(--muted)");
   return (
-    <div style={{ ...card, padding: "10px 14px", minWidth: 260, display: "flex", flexDirection: "column", gap: 5 }}>
-      <span style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-        <span style={{ font: "800 13px var(--font-display)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {data.comboLabel ?? "Leaderboard"}
-        </span>
-        <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>THIS CAR</span>
+    <div style={{ ...card, borderRadius: 28, padding: "14px 16px", width: 260, display: "flex", flexDirection: "column" }}>
+      <span style={{ font: "500 11px var(--font-mono)", letterSpacing: "0.08em", textTransform: "uppercase", color: "#2FA8FF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {data.comboLabel ?? "Leaderboard"}
       </span>
-      {data.comboTop.length === 0 && <span className="muted" style={{ fontSize: 13 }}>{data.comboLabel ? `No ${words(data.game).laps} yet. Set the first!` : "Waiting for a session"}</span>}
-      {data.comboTop.map((r, i) => (
-        <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
-          {i === 5 && <span style={{ height: 1, background: "var(--line)", margin: "2px 0" }} />}
-          <span
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: 14,
-              padding: "2px 6px",
-              margin: "0 -6px",
-              borderRadius: 8,
-              background: r.isSeat ? "var(--tint)" : undefined,
-            }}
-          >
-            <span style={{ width: 18, fontWeight: 800, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}>{r.position}</span>
-            <span style={{ width: 10, height: 10, borderRadius: 3, background: r.color, flex: "none" }} />
-            <span style={{ flex: 1, fontWeight: r.isSeat ? 800 : 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
-            <span className="mono" style={{ fontSize: 12, color: "var(--muted)", width: 58, textAlign: "right" }}>
-              {r.gapMs ? `+${(r.gapMs / 1000).toFixed(3)}` : ""}
+      {data.comboTop.length === 0 && (
+        <span className="muted" style={{ fontSize: 13, marginTop: 8 }}>{data.comboLabel ? `No ${words(data.game).laps} yet. Set the first!` : "Waiting for a session"}</span>
+      )}
+      <span style={{ display: "flex", flexDirection: "column", marginTop: 8 }}>
+        {data.comboTop.map((r, i) => (
+          <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
+            {i === 5 && <span style={{ height: 1, background: "var(--line)", margin: "4px 0" }} />}
+            <span
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                minHeight: 36,
+                padding: "0 8px",
+                margin: "0 -8px",
+                borderRadius: 12,
+                background: r.isSeat ? "var(--tint)" : "transparent",
+                color: r.isSeat ? "var(--peri-1)" : "var(--text)",
+              }}
+            >
+              <span style={{ font: "600 12px var(--font-mono)", width: 14, color: r.isSeat ? "var(--peri-1)" : placeColour(r.position) }}>{r.position}</span>
+              <Helmet color={r.color} size={26} seed={r.driverId ?? r.name} />
+              <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: r.isSeat ? 700 : 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
+              <span className="mono" style={{ fontSize: 13, color: r.position === 1 && !r.isSeat ? "var(--mint)" : undefined }}>{lapTime(r.timeMs)}</span>
             </span>
-            <span className="mono" style={{ fontSize: 14, color: r.position === 1 ? "var(--gold)" : undefined }}>{lapTime(r.timeMs)}</span>
           </span>
-        </span>
-      ))}
+        ))}
+      </span>
     </div>
   );
 }
