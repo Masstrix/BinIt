@@ -7,7 +7,6 @@ import {
   WIDGET_STYLES,
   anchorBox,
   anchorStyle,
-  hudConflict,
   moveWidget,
   styleOf,
   useOverlayLayout,
@@ -112,6 +111,22 @@ export function OverlayEditor() {
   const compact = useMediaQuery("(max-width: 640px)");
   const touch = useMediaQuery("(pointer: coarse), (max-width: 640px)");
 
+  const [zoomed, setZoomed] = useState(false);
+  const zoomFrame = useRef<HTMLDivElement>(null);
+  const [zoomScale, setZoomScale] = useState(0.4);
+  useEffect(() => {
+    const el = zoomFrame.current;
+    if (!zoomed || !el) return;
+    const ro = new ResizeObserver(() => setZoomScale(el.clientWidth / VIRTUAL_W));
+    ro.observe(el);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setZoomed(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [zoomed]);
+
   const frame = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.4);
   useEffect(() => {
@@ -130,7 +145,6 @@ export function OverlayEditor() {
 
   const where = (w: WidgetId): Anchor | null => ANCHORS.find((a) => layout.sections[a]?.includes(w)) ?? null;
   const usedSections = ANCHORS.filter((a) => layout.sections[a]?.length);
-  const conflicts = usedSections.map((a) => ({ a, hud: hudConflict(profile, a, layout.sections[a]) })).filter((c) => c.hud);
 
   /** The section under (or nearest to) a point, and where in its order the widget would go. */
   const targetAt = (clientX: number, clientY: number, moving: WidgetId | null): DropTarget | null => {
@@ -272,6 +286,22 @@ export function OverlayEditor() {
 
   const showZones = !!dragging || !!selected;
 
+  /** The overlay as it would look on the PC's screen, scaled to `sc`; `props` makes the widgets draggable. */
+  const renderScene = (sc: number, props?: ItemProps) => (
+    <div style={{ position: "absolute", left: 0, top: 0, width: VIRTUAL_W, height: VIRTUAL_H, transform: `scale(${sc})`, transformOrigin: "0 0", zIndex: 2, pointerEvents: "none" }}>
+      <GameBackdrop />
+      {ANCHORS.map((a) => {
+        const items = layout.sections[a];
+        if (!items?.length) return null;
+        return (
+          <div key={a} data-anchor={a} style={{ ...anchorStyle(a, profile), pointerEvents: "auto" }}>
+            <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={props} anchor={a} styles={layout.styles} />
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <section className="card" aria-label="Overlay layout">
       <div className="head" style={{ alignItems: "center" }}>
@@ -314,7 +344,6 @@ export function OverlayEditor() {
         {showZones &&
           ANCHORS.map((a) => {
             const b = anchorBox(a, profile);
-            const hud = hudConflict(profile, a);
             const active = target?.anchor === a;
             return (
               <div
@@ -327,8 +356,8 @@ export function OverlayEditor() {
                   width: `${b.w}%`,
                   height: `${b.h}%`,
                   borderRadius: 10,
-                  border: `2px dashed ${active ? "#fff" : hud ? "rgba(255,107,138,0.9)" : "rgba(169,174,255,0.6)"}`,
-                  background: active ? (hud ? "rgba(255,107,138,0.22)" : "rgba(106,88,245,0.28)") : "rgba(13,18,36,0.2)",
+                  border: `2px dashed ${active ? "#fff" : "rgba(169,174,255,0.6)"}`,
+                  background: active ? "rgba(139,139,245,0.28)" : "rgba(14,17,23,0.2)",
                   display: "flex",
                   alignItems: a.startsWith("bottom") ? "flex-start" : "flex-end",
                   justifyContent: "center",
@@ -337,48 +366,14 @@ export function OverlayEditor() {
                   zIndex: 1,
                 }}
               >
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 6px", borderRadius: 6, background: "rgba(13,18,36,0.8)", color: hud ? "#FFB3C3" : "var(--text-2)", whiteSpace: "nowrap" }}>
-                  {hud ? `${ANCHOR_NAMES[a]} · game HUD` : ANCHOR_NAMES[a]}
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 6px", borderRadius: 6, background: "rgba(13,18,36,0.8)", color: "var(--text-2)", whiteSpace: "nowrap" }}>
+                  {ANCHOR_NAMES[a]}
                 </span>
               </div>
             );
           })}
 
-        {/* Scaled render of the real overlay widgets (example data). */}
-        <div style={{ position: "absolute", left: 0, top: 0, width: VIRTUAL_W, height: VIRTUAL_H, transform: `scale(${scale})`, transformOrigin: "0 0", zIndex: 2, pointerEvents: "none" }}>
-          <GameBackdrop />
-          {profile.hud.map((z) => (
-            <div
-              key={z.label}
-              style={{
-                position: "absolute",
-                left: `${z.box.x}%`,
-                top: `${z.box.y}%`,
-                width: `${z.box.w}%`,
-                height: `${z.box.h}%`,
-                border: "4px dashed rgba(255,107,138,0.85)",
-                background: "rgba(255,107,138,0.14)",
-                borderRadius: 14,
-                display: "grid",
-                placeItems: "center",
-                color: "#FFD0DA",
-                font: "600 24px var(--font-body)",
-                textAlign: "center",
-              }}
-            >
-              {z.label}
-            </div>
-          ))}
-          {ANCHORS.map((a) => {
-            const items = layout.sections[a];
-            if (!items?.length) return null;
-            return (
-              <div key={a} data-anchor={a} style={{ ...anchorStyle(a, profile), pointerEvents: "auto" }}>
-                <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={itemProps} anchor={a} styles={layout.styles} />
-              </div>
-            );
-          })}
-        </div>
+        {renderScene(scale, itemProps)}
 
         {/* Where the widget will land. */}
         {dragging && target?.bar && (
@@ -389,7 +384,22 @@ export function OverlayEditor() {
         )}
       </div>
       </div>
-      {compact && <span className="muted ed-hint">Swipe sideways to see the whole screen.</span>}
+      {compact && (
+        <button type="button" className="btn ghost ed-enlarge" onClick={() => setZoomed(true)}>
+          Enlarge preview
+        </button>
+      )}
+      {zoomed && (
+        <div className="ed-zoom" role="dialog" aria-label="Overlay preview" onClick={() => setZoomed(false)}>
+          <div className="ed-zoom-turn">
+            <div ref={zoomFrame} className="ed-zoom-frame" style={{ ["--aspect" as string]: ASPECT, aspectRatio: `${VIRTUAL_W} / ${VIRTUAL_H}` }}>
+              {renderScene(zoomScale)}
+            </div>
+          </div>
+          <button type="button" className="btn ed-zoom-close" onClick={() => setZoomed(false)}>Close</button>
+          <span className="ed-zoom-hint">Turn your phone sideways for the right way up</span>
+        </div>
+      )}
 
       <div
         ref={tray}
@@ -505,14 +515,6 @@ export function OverlayEditor() {
           The overlay is off, so nothing is drawn over the game. F8 still switches drivers. Turn on the spoken name below to hear who was picked.
         </span>
       )}
-      {profile.hud.length === 0 && (
-        <span style={{ fontSize: 13, color: "var(--peach)" }}>The HUD for {profile.name} isn't mapped yet, so there's no overlap warning for this game.</span>
-      )}
-      {conflicts.map((c) => (
-        <span key={c.a} style={{ fontSize: 13, color: "#FF8BA3" }}>
-          {ANCHOR_NAMES[c.a]} overlaps the game's {c.hud?.toLowerCase()}.
-        </span>
-      ))}
       {usedSections.length > 2 && (
         <span style={{ fontSize: 13, color: "var(--peach)" }}>
           {usedSections.length} sections in use. Games already show a lot, so two is usually plenty.
