@@ -44,7 +44,8 @@ function useLearningPath(active: boolean, key: string): [number, number][] {
   return path.key === key ? path.points : [];
 }
 
-export function LiveMap() {
+/** `placeholder` keeps an empty card in place while nobody is driving (the Home page), instead of showing nothing. */
+export function LiveMap({ placeholder = false }: { placeholder?: boolean }) {
   const { status } = useAppState();
   const drivers = useDriverMap();
   const session = status?.session ?? null;
@@ -53,7 +54,25 @@ export function LiveMap() {
   const maps = useTrackMaps(session?.game ?? null);
   const map = session ? findMap(maps, session.track, session.layout) : undefined;
   const learned = useLearningPath(!!session && !!live?.driving && !map, session ? `${session.game}|${session.track}|${session.layout}|${session.car}` : "");
-  if (!session || !live?.driving) return null;
+  if (!session || !live?.driving) {
+    if (!placeholder) return null;
+    return (
+      <section className="card livemap livemap-idle" aria-label="Live map">
+        <div className="head" style={{ alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+            <Helmet color="#8f99b3" size={40} mood="idle" />
+            <div style={{ minWidth: 0 }}>
+              <div className="label">Live</div>
+              <h2 style={{ marginTop: 2 }}>No one driving</h2>
+            </div>
+          </div>
+        </div>
+        <div className="livemap-frame">
+          <span className="muted" style={{ textAlign: "center" }}>The live map shows up here when someone is on track.</span>
+        </div>
+      </section>
+    );
+  }
 
   const setView = (patch: { rotate?: number; mirror?: boolean }) =>
     map && api.setMapView({ game: map.game, track: map.track, layout: map.layout, rotate: map.rotate, mirror: map.mirror, ...patch });

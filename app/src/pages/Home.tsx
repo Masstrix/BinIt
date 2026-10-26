@@ -99,7 +99,7 @@ export function Home() {
       </section>
 
       <div className="home-side">
-        <LiveMap />
+        <LiveMap placeholder />
         <RecentLaps />
       </div>
       </div>
