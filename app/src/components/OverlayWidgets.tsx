@@ -274,9 +274,13 @@ const HOLD_MS = 15000;
  * the widget or a pill, or Ctrl+Shift+T in game, switches by hand. In a fixed style that stays until the style
  * changes; while cycling it holds for a while and then carries on.
  */
-function useTimingReference(kinds: string[], mode: string | undefined): [string | undefined, () => void, (kind: string) => void] {
+function useTimingReference(
+  kinds: string[],
+  mode: string | undefined,
+): [string | undefined, () => void, (kind: string) => void, { ms: number; key: string; held: boolean } | null] {
   const [tick, setTick] = useState(0);
   const [held, setHeld] = useState<string | null>(null);
+  const [seq, setSeq] = useState(0);
   const timer = useRef<number | undefined>(undefined);
   const list = kinds.join();
   useEffect(() => setHeld(null), [mode]);
@@ -292,6 +296,7 @@ function useTimingReference(kinds: string[], mode: string | undefined): [string 
   const select = useCallback(
     (kind: string) => {
       setHeld(kind);
+      setSeq((n) => n + 1);
       window.clearTimeout(timer.current);
       if (mode === "cycle") timer.current = window.setTimeout(() => setHeld(null), HOLD_MS);
     },
@@ -321,16 +326,32 @@ function useTimingReference(kinds: string[], mode: string | undefined): [string 
     };
   }, []);
   useEffect(() => () => window.clearTimeout(timer.current), []);
-  return [shown, next, select];
+  // How long until the next automatic switch (or until cycling resumes after a hand switch), for the countdown ring.
+  const wait = mode === "cycle" && kinds.length > 1 ? { ms: held ? HOLD_MS : CYCLE_MS, key: `${tick}|${held ?? "-"}|${seq}`, held: !!held } : null;
+  return [shown, next, select, wait];
 }
 
 const REF_NAME: Record<string, string> = { pb: "PB", best: "Leader" };
+
+/** A small ring that empties over `ms`: how long until live timing switches to the other lap (muted while a hand switch is held). */
+function CountdownRing({ ms, held }: { ms: number; held: boolean }) {
+  const r = 6;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" role="img" aria-label={held ? "Holding your choice" : "Switching soon"} style={{ flex: "none", alignSelf: "center" }}>
+      <circle cx="9" cy="9" r={r} fill="none" stroke="var(--panel-3)" strokeWidth="2.5" />
+      <circle cx="9" cy="9" r={r} fill="none" stroke={held ? "var(--muted)" : "var(--peri-1)"} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={c} strokeDashoffset="0" transform="rotate(-90 9 9)">
+        <animate attributeName="stroke-dashoffset" from="0" to={c} dur={`${ms / 1000}s`} fill="freeze" />
+      </circle>
+    </svg>
+  );
+}
 
 /** Delta to the reference lap plus one bar per sector (purple / green / yellow). */
 export function TimingCard({ data, mode }: { data: OverlayData; mode?: string }) {
   const t = data.timing;
   const refs = t?.references ?? [];
-  const [shown, , select] = useTimingReference(refs.map((r) => r.kind), mode);
+  const [shown, , select, wait] = useTimingReference(refs.map((r) => r.kind), mode);
   if (data.outLap || !t) {
     return data.outLap ? (
       <div style={{ ...card, padding: "14px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -378,6 +399,7 @@ export function TimingCard({ data, mode }: { data: OverlayData; mode?: string })
               </span>
             );
           })}
+          {wait && <CountdownRing key={wait.key} ms={wait.ms} held={wait.held} />}
         </span>
       )}
       <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, ...(cut ? { opacity: 0.55, textDecoration: "line-through" } : {}) }}>
