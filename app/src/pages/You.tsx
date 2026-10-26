@@ -40,9 +40,7 @@ export function YouPage({ path = "/you" }: { path?: string }) {
 
   return (
     <>
-      <div className="page-head">
-        <h1>{info?.local ? "Profile" : "You"}</h1>
-      </div>
+      {/* A profile can be anyone's, so the page has no title of its own: the driver's name is the heading. */}
 
       {info && viewId == null && (
         <section className="card" style={{ alignItems: "center", textAlign: "center", padding: "40px 24px" }}>
@@ -202,8 +200,8 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
       </div>
 
       <div className="you-side">
-      <section className="you-section" aria-label="Your bests">
-        <div className="head"><h2>Your bests</h2><span className="muted" style={{ fontSize: 13 }}>All games</span></div>
+      <section className="you-section" aria-label="Bests">
+        <div className="head"><h2>Bests</h2><span className="muted" style={{ fontSize: 13 }}>All games</span></div>
         {p.bests.length === 0 && <div className="empty">No times yet. Get out there!</div>}
         <div className="list">
           {p.bests.map((b) => (
