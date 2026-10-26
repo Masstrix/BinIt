@@ -344,6 +344,7 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
   const ok = (v: unknown) => v as T;
   let r: RegExpMatchArray | null;
 
+  if (p === "/rewards") return ok({ challenge: { placings: [{ xp: 300, coins: 100 }, { xp: 200, coins: 60 }, { xp: 100, coins: 30 }], participation: { xp: 25, coins: 5 }, minEntrants: 2, scalePerEntrant: 0.1, maxScale: 2 } });
   if (p === "/status") return ok(status());
   if (p === "/me") return ok({ driver: drivers.find((d) => d.id === callerDriver(token)) ?? null, local: isLocal() });
   if (p === "/me/pair") {

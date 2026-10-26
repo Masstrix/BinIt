@@ -53,6 +53,7 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/drivers/ratings", get(driver_ratings))
         .route("/drivers/{id}", put(update_driver))
         .route("/drivers/{id}/profile", get(driver_profile))
+        .route("/rewards", get(rewards))
         .route("/drivers/{id}/shop", get(driver_shop))
         .route("/drivers/{id}/shop/buy", post(buy_item))
         .route("/drivers/{id}/look", put(set_look))
@@ -298,6 +299,11 @@ async fn update_driver(
 /// Level, XP, coins, bests and stickers: what the You page shows. Open to everyone, like the leaderboards.
 async fn driver_profile(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<tt_core::Profile> {
     Ok(Json(c.tt.profile(id)?))
+}
+
+/// What things pay and cost (`crates/tt-core/rewards.json`): the new-challenge page shows what a challenge pays.
+async fn rewards() -> Json<tt_core::progress::Rewards> {
+    Json(tt_core::progress::rewards().clone())
 }
 
 /// The Garage and shop for one driver: balance, level, what they own and wear, every price.

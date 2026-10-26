@@ -9,9 +9,9 @@ import { Helmet } from "../components/Helmet";
 import { BASE, place, room } from "../components/GapLadder";
 import { Signed } from "../components/Signed";
 import { useCompactTable } from "../useCompactTable";
+import { Coin } from "../components/Coin";
 import { Dropdown } from "../components/Dropdown";
 import { DateTimePicker } from "../components/DateTimePicker";
-import { Modal } from "../components/Modal";
 import { Picker } from "../components/Picker";
 import { keyOf, Podium } from "../components/Podium";
 import { ago, bestSectors, carName, countdown, gameName, gap, gridMinWidth, lapTime, ordinal, SECTOR_MINT, SECTOR_PURPLE, sectorColor, SUPPORTED_GAMES, trackName, whenLabel } from "../format";
@@ -87,7 +87,9 @@ function NewButton({ onClick }: { onClick: () => void }) {
 
 export function ChallengesPage({ path }: { path: string }) {
   const { challenges, status } = useAppState();
-  const [creating, setCreating] = useState(false);
+  const goNew = () => {
+    location.hash = "#/challenges/new";
+  };
   const running = challenges.filter((c) => isActive(c));
   const finished = challenges
     .filter((c) => !isActive(c) && c.endsAt !== null && c.endsAt <= Date.now())
@@ -107,7 +109,7 @@ export function ChallengesPage({ path }: { path: string }) {
       {!shown && (
         <div className="page-head" style={{ alignItems: "center" }}>
           <h1>Challenges</h1>
-          <NewButton onClick={() => setCreating(true)} />
+          <NewButton onClick={() => goNew()} />
         </div>
       )}
 
@@ -126,12 +128,12 @@ export function ChallengesPage({ path }: { path: string }) {
       )}
 
       {shown ? (
-        <ChallengeView key={shown.id} challenge={shown} onNew={() => setCreating(true)} />
+        <ChallengeView key={shown.id} challenge={shown} onNew={() => goNew()} />
       ) : (
         <section className="card" style={{ alignItems: "center", textAlign: "center", padding: "56px 24px" }}>
           <h2>No challenge running</h2>
           <p className="muted" style={{ margin: 0 }}>Pick a track and a deadline and let the office fight it out.</p>
-          <button className="btn big" onClick={() => setCreating(true)}>Start a challenge</button>
+          <button className="btn big" onClick={() => goNew()}>Start a challenge</button>
         </section>
       )}
 
@@ -144,17 +146,6 @@ export function ChallengesPage({ path }: { path: string }) {
         </section>
       )}
 
-      {creating && (
-        <Modal title="New challenge" onClose={() => setCreating(false)}>
-          <NewChallengeForm
-            onCreated={(c) => {
-              setCreating(false);
-              location.hash = `#/challenges/${c.id}`;
-            }}
-            onCancel={() => setCreating(false)}
-          />
-        </Modal>
-      )}
     </>
   );
 }
@@ -357,6 +348,20 @@ function defaultCustomEnd() {
   return t.getTime();
 }
 
+/** The page for starting a challenge (`#/challenges/new`). */
+export function NewChallengePage() {
+  return (
+    <NewChallengeForm
+      onCreated={(c) => {
+        location.hash = `#/challenges/${c.id}`;
+      }}
+      onCancel={() => {
+        location.hash = "#/challenges";
+      }}
+    />
+  );
+}
+
 function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) => void; onCancel: () => void }) {
   const { status } = useAppState();
   const combos = useFetch(() => api.combos(), []) ?? [];
@@ -427,6 +432,7 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
     }
   };
 
+  const rewards = useFetch(() => api.rewards(), []);
   const noTracks = catalogue !== null && trackPickItems.length === 0;
   const gamePicker = (
     <Dropdown
@@ -440,123 +446,184 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
       }}
     />
   );
+  const shownName = name.trim() || (selected ? `${trackName(selected.track)} Hot Lap` : "New challenge");
+  const header = (
+    <div className="page-head">
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <h1>Start a challenge</h1>
+        <span className="muted" style={{ fontSize: 16 }}>Pick a track and a deadline and let the office fight it out.</span>
+      </div>
+    </div>
+  );
 
   if (noTracks) {
     return (
-      <div className="modal-form">
-        <div className="modal-body">
+      <>
+        {header}
+        <section className="card">
           {gamePicker}
           <div className="empty">Bin It doesn't know any {words(game).tracks} for {gameName(game)} yet. {words(game).rally ? "Drive a stage" : "Get on track"} for a moment and it will learn {words(game).rally ? "it" : "them"}.</div>
-        </div>
-        <div className="modal-foot">
-          <button type="button" className="btn ghost" onClick={onCancel}>Cancel</button>
-        </div>
-      </div>
+          <div><button type="button" className="btn ghost" onClick={onCancel}>Cancel</button></div>
+        </section>
+      </>
     );
   }
 
+  const pay = rewards?.challenge;
+  const growth = pay ? Math.round(pay.scalePerEntrant * 100) : 0;
   return (
     <form
-      className="modal-form"
+      className="nc"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
       }}
     >
-      <div className="modal-body">
-        <label className="field">
-          Give it a name
-          <input className="input" autoFocus={!window.matchMedia("(pointer: coarse)").matches} value={name} onChange={(e) => setName(e.target.value)} placeholder={selected ? `${trackName(selected.track)} Hot Lap` : ""} style={{ fontSize: 20, fontWeight: 700, minHeight: 56 }} />
-        </label>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-          <div style={{ flex: "1 1 100%", minWidth: 0 }}>{gamePicker}</div>
-          <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-            <Picker
-              label={cap(words(game).track)}
-              title={`Choose a ${words(game).track}`}
-              value={track}
-              items={trackPickItems}
-              onChange={setTrack}
-              tagLabel="Country"
-              visualOf={(v) => {
-                const t = splitTrackValue(v);
-                return <TrackThumb map={findMap(maps, t.track, t.layout)} />;
-              }}
-            />
-          </div>
-          <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-            <Picker label="Car" title="Choose a car" value={car} anyLabel="Any car" items={carPickItems} onChange={setCar} tagLabel="Class" />
-          </div>
-        </div>
-
-        <fieldset className="plain-fieldset">
-          <legend style={{ fontWeight: 600, marginBottom: 10 }}>Ends</legend>
-          <div className="preset-grid">
-            {PRESETS.map((p) => {
-              const at = presetTime(p.id, custom);
-              return (
-                <label key={p.id} className="preset" data-on={preset === p.id || undefined}>
-                  <input type="radio" name="end" checked={preset === p.id} onChange={() => setPreset(p.id)} />
-                  <span style={{ font: "800 15px var(--font-display)" }}>{p.label}</span>
-                  <span className="muted" style={{ fontSize: 13 }}>{at === null ? "until you end it" : p.id === "custom" && preset !== "custom" ? "on the calendar" : whenLabel(at)}</span>
-                </label>
-              );
-            })}
-          </div>
-          {preset === "custom" && <DateTimePicker value={custom} onChange={setCustom} />}
-        </fieldset>
-
-        <div className="rules-box" role="group" aria-labelledby="house-rules">
-          <h3 id="house-rules">House rules</h3>
-          <label className="rules-row">
-            <input type="checkbox" checked={validOnly} onChange={(e) => setValidOnly(e.target.checked)} />
-            Valid {words(game).laps} only (no cutting)
-          </label>
-          <div className="rules-row">
-            <input type="checkbox" aria-label={`Limit ${words(game).laps} per driver`} checked={limit !== null} onChange={(e) => setLimit(e.target.checked ? 10 : null)} />
-            <label className="rules-limit">
-              Max
-              <input type="number" min={1} value={limit ?? 10} disabled={limit === null} onChange={(e) => setLimit(Math.max(1, Number(e.target.value) || 1))} className="input" />
-              {words(game).laps} per driver
+      {header}
+      <div className="nc-grid">
+        <div className="nc-main">
+          <section className="card" aria-label="The challenge">
+            <label className="field">
+              Name
+              <input className="input" autoFocus={!window.matchMedia("(pointer: coarse)").matches} value={name} onChange={(e) => setName(e.target.value)} placeholder={selected ? `${trackName(selected.track)} Hot Lap` : ""} style={{ fontSize: 20, fontWeight: 700, minHeight: 56 }} />
             </label>
-          </div>
-        </div>
+            {gamePicker}
+            <div className="nc-pair">
+              <Picker
+                label={cap(words(game).track)}
+                title={`Choose a ${words(game).track}`}
+                value={track}
+                items={trackPickItems}
+                onChange={setTrack}
+                tagLabel="Country"
+                visualOf={(v) => {
+                  const t = splitTrackValue(v);
+                  return <TrackThumb map={findMap(maps, t.track, t.layout)} />;
+                }}
+              />
+              <Picker label="Car" title="Choose a car" value={car} anyLabel="Any car" items={carPickItems} onChange={setCar} tagLabel="Class" />
+            </div>
+          </section>
 
-        <div className="prize-box">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <span>
-              <span style={{ fontWeight: 600 }}>Prizes</span> <span className="muted" style={{ fontSize: 14 }}>· optional</span>
-            </span>
-            <button type="button" className="toggle" role="switch" aria-checked={withPrizes} aria-label="Add prizes" onClick={() => setWithPrizes(!withPrizes)} />
-          </div>
-          {withPrizes && (
-            <>
-              {prizes.map((p, i) => (
-                <div key={i} className="prize" style={{ background: ["var(--peri-1)", "var(--peri-2)", "var(--peri-3)"][i] ?? "var(--panel-3)", color: i < 3 ? "var(--bg)" : "var(--text)" }}>
-                  <b>{p.place}</b>
-                  <input
-                    value={p.prize}
-                    onChange={(e) => setPrizes(prizes.map((q, j) => (j === i ? { ...q, prize: e.target.value } : q)))}
-                    placeholder={p.place === "Last" ? "e.g. makes the coffee" : "e.g. picks Friday lunch"}
-                    aria-label={`${p.place} prize`}
-                    style={{ flex: 1, minWidth: 0, background: "transparent", border: "none", textAlign: "right", fontWeight: 700, color: "inherit", outline: "none" }}
-                  />
-                </div>
-              ))}
-              {prizes.length < PLACES.length && (
-                <button type="button" className="btn ghost" style={{ borderStyle: "dashed" }} onClick={() => setPrizes([...prizes, { place: PLACES[prizes.length], prize: "" }])}>
-                  + Add {PLACES[prizes.length] === "Last" ? "a forfeit for last" : `${PLACES[prizes.length]} place prize`}
+          <section className="card" aria-label="When it ends">
+            <h2>When does it end?</h2>
+            <div className="nc-chips" role="radiogroup" aria-label="When it ends">
+              {PRESETS.map((p) => (
+                <button key={p.id} type="button" role="radio" aria-checked={preset === p.id} className="nc-chip" onClick={() => setPreset(p.id)}>
+                  {p.label}
                 </button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
+              ))}
+            </div>
+            {preset === "custom" && <DateTimePicker value={custom} onChange={setCustom} />}
+            <span className="muted" style={{ fontSize: 13 }}>{endsAt === null ? "It runs until you end it." : `${whenLabel(endsAt)} · ${countdown(endsAt)}`}</span>
+          </section>
 
-      <div className="modal-foot">
-        {error && <span className="error" style={{ marginRight: "auto" }}>{error}</span>}
-        <button type="button" className="btn ghost" onClick={onCancel}>Cancel</button>
-        <button className="btn big" type="submit" disabled={busy || !selected}>Lights out</button>
+          <section className="card" aria-label="House rules">
+            <h2>House rules</h2>
+            <div className="nc-row">
+              <span className="grow">
+                <span style={{ fontWeight: 500, display: "block" }}>Only clean {words(game).laps} count</span>
+                <span className="muted" style={{ fontSize: 13 }}>Cut {words(game).laps} and driver changes are ignored</span>
+              </span>
+              <button type="button" className="toggle" role="switch" aria-checked={validOnly} aria-label={`Only clean ${words(game).laps} count`} onClick={() => setValidOnly(!validOnly)} />
+            </div>
+            <div className="nc-row">
+              <span className="grow">
+                <span style={{ fontWeight: 500, display: "block" }}>Limit {words(game).laps} per driver</span>
+                {limit !== null && (
+                  <label className="rules-limit" style={{ fontSize: 13 }}>
+                    Max
+                    <input type="number" min={1} value={limit} onChange={(e) => setLimit(Math.max(1, Number(e.target.value) || 1))} className="input" aria-label={`Most ${words(game).laps} per driver`} />
+                    {words(game).laps} per driver
+                  </label>
+                )}
+              </span>
+              <button type="button" className="toggle" role="switch" aria-checked={limit !== null} aria-label={`Limit ${words(game).laps} per driver`} onClick={() => setLimit(limit === null ? 10 : null)} />
+            </div>
+          </section>
+
+          <section className="card" aria-label="House prizes">
+            <div className="nc-row">
+              <span className="grow">
+                <h2>House prizes</h2>
+                <span className="muted" style={{ fontSize: 13 }}>Things you hand out yourself, like lunch on the team. Optional.</span>
+              </span>
+              <button type="button" className="toggle" role="switch" aria-checked={withPrizes} aria-label="Add house prizes" onClick={() => setWithPrizes(!withPrizes)} />
+            </div>
+            {withPrizes && (
+              <>
+                {prizes.map((p, i) => (
+                  <div key={i} className="nc-prize">
+                    <span className="nc-place">{p.place === "Last" ? "Last" : i + 1}</span>
+                    <input
+                      className="input"
+                      value={p.prize}
+                      onChange={(e) => setPrizes(prizes.map((q, j) => (j === i ? { ...q, prize: e.target.value } : q)))}
+                      placeholder={p.place === "Last" ? "e.g. makes the coffee" : i === 0 ? "e.g. picks Friday lunch" : "Prize (optional)"}
+                      aria-label={`${p.place} prize`}
+                    />
+                  </div>
+                ))}
+                {prizes.length < PLACES.length && (
+                  <button type="button" className="btn ghost" style={{ borderStyle: "dashed", alignSelf: "flex-start" }} onClick={() => setPrizes([...prizes, { place: PLACES[prizes.length], prize: "" }])}>
+                    + Add {PLACES[prizes.length] === "Last" ? "a forfeit for last" : `${PLACES[prizes.length]} place prize`}
+                  </button>
+                )}
+              </>
+            )}
+          </section>
+        </div>
+
+        <aside className="nc-side">
+          <section className="card" aria-label="Preview">
+            <span className="muted" style={{ fontSize: 13 }}>Preview</span>
+            <div className="nc-title">{shownName}</div>
+            <div className="nc-map">
+              <TrackThumb map={selected ? findMap(maps, selected.track, selected.layout) : undefined} />
+            </div>
+            <div className="nc-tags">
+              <span className="chip plain">{gameName(game)}</span>
+              {selected && <span className="chip plain">{trackName(selected.track, selected.layout)}</span>}
+              <span className="chip plain">{car ? carName(car) : "Any car"}</span>
+              <span className="chip nc-ends">{endsAt === null ? "No end" : `Ends ${whenLabel(endsAt)}`}</span>
+            </div>
+          </section>
+
+          {pay && (
+            <section className="card" aria-label="Coins and XP">
+              <h2>Coins and XP</h2>
+              <span className="muted" style={{ fontSize: 13 }}>Paid by the app when the challenge ends, on top of what each {words(game).lap} earns.</span>
+              <div className="nc-pays">
+                {pay.placings.map((p, i) => (
+                  <div key={i} className="nc-pay">
+                    <span className="nc-place">{i + 1}</span>
+                    <span className="grow">{ordinal(i + 1)} place</span>
+                    <span className="mono" style={{ color: "var(--peri-1)" }}>+{p.xp} XP</span>
+                    <span className="mono you-coin-gain"><Coin size={16} />{p.coins}</span>
+                  </div>
+                ))}
+                <div className="nc-pay">
+                  <span className="nc-place">·</span>
+                  <span className="grow">Everyone else</span>
+                  <span className="mono" style={{ color: "var(--peri-1)" }}>+{pay.participation.xp} XP</span>
+                  <span className="mono you-coin-gain"><Coin size={16} />{pay.participation.coins}</span>
+                </div>
+              </div>
+              <span className="muted" style={{ fontSize: 13 }}>
+                Needs at least {pay.minEntrants} drivers. {growth > 0 ? `Every driver beyond that adds ${growth}% (up to ${pay.maxScale}x).` : ""}
+              </span>
+            </section>
+          )}
+
+          {error && <span className="error" role="alert">{error}</span>}
+          <div className="nc-actions">
+            <button className="btn big" type="submit" disabled={busy || !selected}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5" /></svg>
+              Start challenge
+            </button>
+            <button type="button" className="btn ghost big" onClick={onCancel}>Cancel</button>
+          </div>
+        </aside>
       </div>
     </form>
   );

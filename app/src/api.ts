@@ -313,6 +313,16 @@ export interface PointEvent {
   at: number;
 }
 
+export interface Pay {
+  xp: number;
+  coins: number;
+}
+
+/** What things pay (the part of `rewards.json` the app shows). */
+export interface Rewards {
+  challenge: { placings: Pay[]; participation: Pay; minEntrants: number; scalePerEntrant: number; maxScale: number };
+}
+
 /** One thing the shop sells. Free items (price 0) belong to everyone. */
 export interface ShopItem {
   id: string;
@@ -468,6 +478,7 @@ export const api = {
   updateDriver: (id: DriverId, name: string, color: string) =>
     request<Driver>("PUT", `/drivers/${id}`, { name, color }),
   profile: (id: DriverId) => request<Profile>("GET", `/drivers/${id}/profile`),
+  rewards: () => request<Rewards>("GET", "/rewards"),
   shop: (id: DriverId) => request<ShopState>("GET", `/drivers/${id}/shop`),
   buy: (id: DriverId, slot: string, item: string) => request<ShopState>("POST", `/drivers/${id}/shop/buy`, { slot, id: item }),
   setLook: (id: DriverId, look: Look) => request<Driver>("PUT", `/drivers/${id}/look`, look),

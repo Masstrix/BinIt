@@ -10,7 +10,7 @@ import { Helmet, Logo } from "./components/Helmet";
 import { Home } from "./pages/Home";
 import { ConnectionGate } from "./components/ConnectionGate";
 import { LeaderboardPage } from "./pages/Leaderboard";
-import { ChallengesPage } from "./pages/Challenges";
+import { ChallengesPage, NewChallengePage } from "./pages/Challenges";
 import { DriversPage } from "./pages/Drivers";
 import { GamesPage } from "./pages/Games";
 import { AdvancedPage } from "./pages/Advanced";
@@ -114,6 +114,7 @@ export function App() {
 
   let page;
   if (path.startsWith("/leaderboard")) page = <LeaderboardPage />;
+  else if (path.startsWith("/challenges/new")) page = <NewChallengePage />;
   else if (path.startsWith("/challenges")) page = <ChallengesPage path={path} />;
   else if (path.startsWith("/drivers")) page = <DriversPage path={path} />;
   else if (path.startsWith("/games")) page = <GamesPage />;
