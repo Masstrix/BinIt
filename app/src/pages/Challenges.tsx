@@ -627,15 +627,15 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
             </section>
           )}
 
-          {error && <span className="error" role="alert">{error}</span>}
-          <div className="nc-actions">
-            <button className="btn big" type="submit" disabled={busy || !selected}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5" /></svg>
-              Start challenge
-            </button>
-            <button type="button" className="btn ghost big" onClick={onCancel}>Cancel</button>
-          </div>
         </aside>
+      </div>
+      <div className="nc-bar">
+        {error && <span className="error" role="alert" style={{ marginRight: "auto" }}>{error}</span>}
+        <button type="button" className="btn ghost big" onClick={onCancel}>Cancel</button>
+        <button className="btn big" type="submit" disabled={busy || !selected}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 21V4M5 4h11l-2 4 2 4H5" /></svg>
+          Start challenge
+        </button>
       </div>
     </form>
   );
