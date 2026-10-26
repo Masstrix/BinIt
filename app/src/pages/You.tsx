@@ -182,7 +182,7 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
             </a>
           )}
           <span className="you-wallet-coins" title="Coins: earned with XP, spent in the Shop">
-            <Coin size={22} title="Coins" />
+            <Coin size={26} spin title="Coins" />
             {p.coins.toLocaleString()}
           </span>
         </div>

@@ -2,9 +2,9 @@
  * The coin: a gold token with a stamped bolt, readable down to 14px. Shown wherever coins are counted,
  * usually beside a bare number (the icon says "coins").
  */
-export function Coin({ size = 18, dim = false, title }: { size?: number; /** Dimmed for a price the driver cannot afford. */ dim?: boolean; title?: string }) {
+export function Coin({ size = 18, dim = false, spin = false, title }: { size?: number; /** Dimmed for a price the driver cannot afford. */ dim?: boolean; /** Flips now and then, for a coin that is the centre of attention (the balance on the profile). */ spin?: boolean; title?: string }) {
   return (
-    <svg className="coin" width={size} height={size} viewBox="0 0 32 32" role={title ? "img" : undefined} aria-label={title} aria-hidden={title ? undefined : true} style={dim ? { opacity: 0.55 } : undefined}>
+    <svg className={spin ? "coin coin-spin" : "coin"} width={size} height={size} viewBox="0 0 32 32" role={title ? "img" : undefined} aria-label={title} aria-hidden={title ? undefined : true} style={dim ? { opacity: 0.55 } : undefined}>
       <defs>
         <linearGradient id="coin-gold" x1="0.15" y1="0" x2="0.85" y2="1">
           <stop offset="0" stopColor="#FFE48A" />
