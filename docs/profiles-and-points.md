@@ -181,6 +181,9 @@ When a challenge ends (its end time passes, or it is ended by hand) the server p
 block of `crates/tt-core/rewards.json`:
 
 * `placings`: XP and coins for 1st, 2nd, 3rd... in order. `participation`: everyone else with a counted lap.
+* **Reward size:** whoever starts a challenge picks Low, Medium or High (on the new challenge page, stored on the
+  challenge, schema 11). `sizes` in the config are the multipliers: 0.5, 1 and 2 by default. It multiplies every
+  payout, after the field scaling below.
 * `minEntrants`: a challenge with fewer drivers than this pays nothing (nobody farms one alone). Guest laps never count.
 * **Scaling with the field:** every driver beyond `minEntrants` adds `scalePerEntrant` (0.1 is 10%) to every payout,
   up to `maxScale` times the base. So with the defaults a six-driver challenge pays 1.4 times the base amounts.

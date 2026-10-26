@@ -99,7 +99,7 @@ fn leaderboard_ranks_best_valid_lap_per_driver() {
 fn challenge_tracks_position_changes_and_attempt_limit() {
     let tt = BinIt::in_memory().unwrap();
     let challenge = tt
-        .create_challenge(&NewChallenge {
+        .create_challenge(&NewChallenge { reward_size: None,
             name: "Imola Hot Lap Week".into(),
             game: "acevo".into(),
             track: "Imola".into(),
@@ -140,7 +140,7 @@ fn challenge_tracks_position_changes_and_attempt_limit() {
 fn a_challenge_position_counts_a_lap_from_the_same_millisecond() {
     // A fast PC can record two laps in one millisecond: the earlier one still counts as "before".
     let tt = BinIt::in_memory().unwrap();
-    tt.create_challenge(&NewChallenge {
+    tt.create_challenge(&NewChallenge { reward_size: None,
         name: "Imola".into(),
         game: "acevo".into(),
         track: "Imola".into(),
@@ -208,7 +208,7 @@ fn another_database_merges_in_by_driver_name_and_only_once() {
         old.record_lap(&lap(101_500, true)).unwrap();
         old.set_seat(None).unwrap();
         old.record_lap(&lap(104_000, true)).unwrap(); // a guest lap
-        old.create_challenge(&NewChallenge {
+        old.create_challenge(&NewChallenge { reward_size: None,
             name: "Imola Week".into(),
             game: "acevo".into(),
             track: "Imola".into(),
@@ -456,7 +456,7 @@ fn spellings_converge_and_old_data_is_migrated_to_catalogue_names() {
 
     // The game's own spelling now lands on the same entry as a challenge made from the catalogue.
     let challenge = tt
-        .create_challenge(&NewChallenge {
+        .create_challenge(&NewChallenge { reward_size: None,
             name: "Cup".into(),
             game: "acevo".into(),
             track: "Mount Panorama".into(),
@@ -555,7 +555,7 @@ fn a_laps_input_trace_is_stored_with_it() {
 fn challenge_replay_gives_each_drivers_best_lap_with_its_profile() {
     let tt = BinIt::in_memory().unwrap();
     let c = tt
-        .create_challenge(&NewChallenge {
+        .create_challenge(&NewChallenge { reward_size: None,
             name: "Hot lap".into(),
             game: "acevo".into(),
             track: "Imola".into(),
@@ -1227,7 +1227,7 @@ fn a_database_from_before_the_garage_gains_looks_and_keeps_its_drivers() {
     // Pretend it was saved before schema 10: no look column, no items table.
     {
         let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch("ALTER TABLE drivers DROP COLUMN look; DROP TABLE driver_items; PRAGMA user_version = 9;").unwrap();
+        conn.execute_batch("ALTER TABLE drivers DROP COLUMN look; DROP TABLE driver_items; ALTER TABLE challenges DROP COLUMN reward_size; PRAGMA user_version = 9;").unwrap();
     }
     let tt = BinIt::open(&path).unwrap();
     let sam = tt.drivers().unwrap().remove(0);
@@ -1270,6 +1270,7 @@ fn entry(position: u32, driver: Option<DriverId>) -> LeaderboardEntry {
 fn challenge_payouts_follow_placings_and_grow_with_the_field() {
     use crate::progress::{ChallengePay, Pay, challenge_payouts};
     let rules = ChallengePay {
+        sizes: crate::progress::RewardSizes { low: 0.5, medium: 1.0, high: 2.0 },
         placings: vec![Pay { xp: 300, coins: 100 }, Pay { xp: 200, coins: 60 }],
         participation: Pay { xp: 20, coins: 5 },
         min_entrants: 2,
@@ -1277,17 +1278,22 @@ fn challenge_payouts_follow_placings_and_grow_with_the_field() {
         max_scale: 2.0,
     };
     // Two drivers: base amounts. A guest lap is never paid and does not count as an entrant.
-    let two = challenge_payouts(&rules, "Hot Lap", &[entry(1, Some(1)), entry(2, Some(2)), entry(3, None)]);
+    let two = challenge_payouts(&rules, "Hot Lap", "medium", &[entry(1, Some(1)), entry(2, Some(2)), entry(3, None)]);
     assert_eq!(two, vec![(1, "challenge:1:Hot Lap".to_string(), 300, 100), (2, "challenge:2:Hot Lap".to_string(), 200, 60)]);
     // Three drivers: +50%, and the third just takes part.
-    let three = challenge_payouts(&rules, "Hot Lap", &[entry(1, Some(1)), entry(2, Some(2)), entry(3, Some(3))]);
+    let three = challenge_payouts(&rules, "Hot Lap", "medium", &[entry(1, Some(1)), entry(2, Some(2)), entry(3, Some(3))]);
     assert_eq!((three[0].2, three[0].3), (450, 150));
     assert_eq!(three[2], (3, "challenge:entry:Hot Lap".to_string(), 30, 8));
     // A big field stops at the cap.
     let many: Vec<_> = (1..=9).map(|i| entry(i, Some(i64::from(i)))).collect();
-    assert_eq!(challenge_payouts(&rules, "x", &many)[0].2, 600);
+    assert_eq!(challenge_payouts(&rules, "x", "medium", &many)[0].2, 600);
+    // The size picked for the challenge multiplies the lot: low halves it, high doubles it (and the field's own cap still applies first).
+    let board = [entry(1, Some(1)), entry(2, Some(2))];
+    assert_eq!(challenge_payouts(&rules, "Hot Lap", "low", &board)[0].3, 50);
+    assert_eq!(challenge_payouts(&rules, "Hot Lap", "high", &board)[0].3, 200);
+    assert_eq!(challenge_payouts(&rules, "Hot Lap", "nonsense", &board)[0].3, 100, "an unknown size counts as medium");
     // Alone: nothing.
-    assert!(challenge_payouts(&rules, "Hot Lap", &[entry(1, Some(1))]).is_empty());
+    assert!(challenge_payouts(&rules, "Hot Lap", "medium", &[entry(1, Some(1))]).is_empty());
 }
 
 #[test]
@@ -1296,7 +1302,7 @@ fn a_finished_challenge_pays_once_and_old_ones_are_left_alone() {
     let ids: Vec<DriverId> = ["Sam", "Jess", "Kim"].iter().map(|n| tt.add_driver(n, None).unwrap().id).collect();
     let now = now_ms();
     let combo = combo_of(&session("Porsche 992 GT3 R"));
-    let new = |name: &str, starts: Timestamp, ends: Timestamp| NewChallenge {
+    let new = |name: &str, starts: Timestamp, ends: Timestamp| NewChallenge { reward_size: None,
         name: name.into(), game: combo.game.clone(), track: combo.track.clone(), layout: combo.layout.clone(), car: None,
         starts_at: Some(starts), ends_at: Some(ends), valid_only: true, max_laps: None, prizes: vec![],
     };
@@ -1323,4 +1329,17 @@ fn a_finished_challenge_pays_once_and_old_ones_are_left_alone() {
     assert_eq!(after[0] - before[0], (rules.placings[0].coins as f64 * scale).round() as i64);
     assert_eq!(after[2] - before[2], (rules.placings[2].coins as f64 * scale).round() as i64);
     assert!(tt.profile(ids[0]).unwrap().recent.iter().any(|e| e.kind == "challenge:1:Hot Lap"));
+}
+
+#[test]
+fn a_challenge_remembers_its_reward_size_and_refuses_a_made_up_one() {
+    let tt = BinIt::in_memory().unwrap();
+    let combo = combo_of(&session("Porsche 992 GT3 R"));
+    let new = |size: Option<&str>| NewChallenge {
+        name: "Sized".into(), game: combo.game.clone(), track: combo.track.clone(), layout: combo.layout.clone(), car: None,
+        starts_at: None, ends_at: None, valid_only: true, max_laps: None, prizes: vec![], reward_size: size.map(String::from),
+    };
+    assert_eq!(tt.create_challenge(&new(None)).unwrap().reward_size, "medium");
+    assert_eq!(tt.create_challenge(&new(Some("high"))).unwrap().reward_size, "high");
+    assert!(tt.create_challenge(&new(Some("enormous"))).is_err());
 }

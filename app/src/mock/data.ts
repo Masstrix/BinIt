@@ -116,12 +116,12 @@ export const CHALLENGES: Challenge[] = [
     id: 1, name: "Imola Hot Lap Week", game: "acevo", track: "Imola", layout: "GP", car: null,
     startsAt: NOW - 5 * DAY, endsAt: NOW + 2 * DAY + 4 * HOUR, validOnly: true, maxLaps: null,
     prizes: [{ place: "1st", prize: "Coffee on the team" }, { place: "2nd", prize: "A biscuit of your choice" }, { place: "3rd", prize: "Bragging rights" }],
-    createdAt: NOW - 6 * DAY,
+    rewardSize: "medium", createdAt: NOW - 6 * DAY,
   },
   {
     id: 2, name: "Brands Hatch Sprint", game: "acevo", track: "Brands Hatch", layout: "GP", car: CARS[0],
     startsAt: NOW - 20 * DAY, endsAt: NOW - 13 * DAY, validOnly: true, maxLaps: 10,
-    prizes: [{ place: "1st", prize: "Lunch" }], createdAt: NOW - 21 * DAY,
+    prizes: [{ place: "1st", prize: "Lunch" }], rewardSize: "low", createdAt: NOW - 21 * DAY,
   },
 ];
 

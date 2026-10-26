@@ -1,5 +1,5 @@
 {
-  "_about": "How much XP and coins things pay, and what the shop sells things for. Edit the numbers, rebuild, ship: an update changes them for everyone. Prices of items people already bought are not refunded.",
+  "_about": "XP, coin and shop numbers. Edit, rebuild, ship: an update changes them for everyone. See docs/profiles-and-points.md.",
   "cleanLap": {
     "xp": 10,
     "coins": 2
@@ -19,12 +19,13 @@
   "dailyLapCap": 50,
   "levelXpStep": 100,
   "challenge": {
-    "_about": "Paid when a challenge ends. placings: 1st, 2nd, 3rd... in order. participation: everyone else with a counted lap. A challenge with fewer than minEntrants drivers pays nothing. Payouts grow with the field: scale = 1 + scalePerEntrant x (entrants - minEntrants), at most maxScale.",
+    "_about": "Paid when a challenge ends. See docs/profiles-and-points.md.",
     "placings": [
       { "xp": 300, "coins": 100 },
       { "xp": 200, "coins": 60 },
       { "xp": 100, "coins": 30 }
     ],
+    "sizes": { "low": 0.5, "medium": 1.0, "high": 2.0 },
     "participation": { "xp": 25, "coins": 5 },
     "minEntrants": 2,
     "scalePerEntrant": 0.1,

@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 10;
+const SCHEMA_VERSION: i32 = 11;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -236,6 +236,10 @@ impl Store {
                 );
                 ",
             )?;
+        }
+        if version < 11 {
+            // How big a challenge's coin and XP rewards are: low, medium or high.
+            conn.execute_batch("ALTER TABLE challenges ADD COLUMN reward_size TEXT NOT NULL DEFAULT 'medium';")?;
         }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         let store = Self { conn };
@@ -912,8 +916,8 @@ impl Store {
 
     pub fn insert_challenge(&self, c: &NewChallenge, starts_at: Timestamp, now: Timestamp) -> Result<Challenge> {
         self.conn.execute(
-            "INSERT INTO challenges (name, game, track, layout, car, starts_at, ends_at, valid_only, max_laps, prizes, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT INTO challenges (name, game, track, layout, car, starts_at, ends_at, valid_only, max_laps, prizes, created_at, reward_size)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 c.name,
                 c.game,
@@ -925,7 +929,8 @@ impl Store {
                 c.valid_only,
                 c.max_laps,
                 serde_json::to_string(&c.prizes)?,
-                now
+                now,
+                c.reward_size.as_deref().unwrap_or("medium")
             ],
         )?;
         Ok(self.challenge(self.conn.last_insert_rowid())?.expect("just inserted"))
@@ -954,7 +959,7 @@ impl Store {
 }
 
 const LAP_SELECT: &str = "SELECT id, driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid, sectors_ms, recorded_at, untimed_reason FROM laps";
-const CHALLENGE_SELECT: &str = "SELECT id, name, game, track, layout, car, starts_at, ends_at, valid_only, max_laps, prizes, created_at FROM challenges";
+const CHALLENGE_SELECT: &str = "SELECT id, name, game, track, layout, car, starts_at, ends_at, valid_only, max_laps, prizes, created_at, reward_size FROM challenges";
 
 fn driver_from_row(r: &Row) -> rusqlite::Result<Driver> {
     let look: String = r.get(3)?;
@@ -996,6 +1001,7 @@ fn challenge_from_row(r: &Row) -> rusqlite::Result<Challenge> {
         max_laps: r.get(9)?,
         prizes: serde_json::from_str(&prizes).unwrap_or_default(),
         created_at: r.get(11)?,
+        reward_size: r.get(12)?,
     })
 }
 

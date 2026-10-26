@@ -76,10 +76,14 @@ export interface Challenge {
   validOnly: boolean;
   maxLaps: number | null;
   prizes: Prize[];
+  /** How big the coins and XP it pays are. */
+  rewardSize: RewardSize;
   createdAt: number;
 }
 
-export type NewChallenge = Omit<Challenge, "id" | "createdAt" | "startsAt"> & { startsAt?: number | null };
+export type RewardSize = "low" | "medium" | "high";
+
+export type NewChallenge = Omit<Challenge, "id" | "createdAt" | "startsAt" | "rewardSize"> & { startsAt?: number | null; rewardSize?: RewardSize };
 
 export interface LeaderboardQuery {
   game: string;
@@ -320,7 +324,7 @@ export interface Pay {
 
 /** What things pay (the part of `rewards.json` the app shows). */
 export interface Rewards {
-  challenge: { placings: Pay[]; participation: Pay; minEntrants: number; scalePerEntrant: number; maxScale: number };
+  challenge: { sizes: Record<RewardSize, number>; placings: Pay[]; participation: Pay; minEntrants: number; scalePerEntrant: number; maxScale: number };
 }
 
 /** One thing the shop sells. Free items (price 0) belong to everyone. */

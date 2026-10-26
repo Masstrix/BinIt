@@ -1,7 +1,7 @@
 import { cap, words } from "../vocab";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useRankMotion } from "../rankMotion";
-import { api, challengeMatches, isActive, useAppState, useCatalogue, useDriverMap, useFetch, useTrackMaps, type Challenge, type Driver, type LeaderboardEntry, type Prize } from "../api";
+import { api, challengeMatches, isActive, useAppState, useCatalogue, useDriverMap, useFetch, useTrackMaps, type Challenge, type Driver, type LeaderboardEntry, type Prize, type RewardSize } from "../api";
 import { carItems, findMap, splitTrackValue, TrackThumb, trackItems } from "../catalogueItems";
 import { ChallengeReplay } from "../components/ChallengeReplay";
 import { GameIcon, GameLabel } from "../components/GameIcon";
@@ -390,6 +390,7 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
   const [custom, setCustom] = useState(defaultCustomEnd);
   const [validOnly, setValidOnly] = useState(true);
   const [limit, setLimit] = useState<number | null>(null);
+  const [size, setSize] = useState<RewardSize>("medium");
   const [withPrizes, setWithPrizes] = useState(false);
   const [prizes, setPrizes] = useState<Prize[]>([{ place: "1st", prize: "" }]);
   const [error, setError] = useState<string | null>(null);
@@ -424,6 +425,7 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
         validOnly,
         maxLaps: limit,
         prizes: withPrizes ? prizes.filter((p) => p.prize.trim()) : [],
+        rewardSize: size,
       });
       onCreated(created);
     } catch (e) {
@@ -471,6 +473,9 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
 
   const pay = rewards?.challenge;
   const growth = pay ? Math.round(pay.scalePerEntrant * 100) : 0;
+  // What the picked size does to the numbers shown below (and to what is paid).
+  const times = pay?.sizes[size] ?? 1;
+  const x = (n: number) => Math.round(n * times);
   return (
     <form
       className="nc"
@@ -593,20 +598,27 @@ function NewChallengeForm({ onCreated, onCancel }: { onCreated: (c: Challenge) =
             <section className="card" aria-label="Coins and XP">
               <h2>Coins and XP</h2>
               <span className="muted" style={{ fontSize: 13 }}>Paid by the app when the challenge ends, on top of what each {words(game).lap} earns.</span>
+              <div className="nc-chips" role="radiogroup" aria-label="Reward size">
+                {(["low", "medium", "high"] as const).map((s) => (
+                  <button key={s} type="button" role="radio" aria-checked={size === s} className="nc-chip" onClick={() => setSize(s)}>
+                    {s[0].toUpperCase() + s.slice(1)}
+                  </button>
+                ))}
+              </div>
               <div className="nc-pays">
                 {pay.placings.map((p, i) => (
                   <div key={i} className="nc-pay">
                     <span className="nc-place">{i + 1}</span>
                     <span className="grow">{ordinal(i + 1)} place</span>
-                    <span className="mono" style={{ color: "var(--peri-1)" }}>+{p.xp} XP</span>
-                    <span className="mono you-coin-gain"><Coin size={16} />{p.coins}</span>
+                    <span className="mono" style={{ color: "var(--peri-1)" }}>+{x(p.xp)} XP</span>
+                    <span className="mono you-coin-gain"><Coin size={16} />{x(p.coins)}</span>
                   </div>
                 ))}
                 <div className="nc-pay">
                   <span className="nc-place">·</span>
                   <span className="grow">Everyone else</span>
-                  <span className="mono" style={{ color: "var(--peri-1)" }}>+{pay.participation.xp} XP</span>
-                  <span className="mono you-coin-gain"><Coin size={16} />{pay.participation.coins}</span>
+                  <span className="mono" style={{ color: "var(--peri-1)" }}>+{x(pay.participation.xp)} XP</span>
+                  <span className="mono you-coin-gain"><Coin size={16} />{x(pay.participation.coins)}</span>
                 </div>
               </div>
               <span className="muted" style={{ fontSize: 13 }}>

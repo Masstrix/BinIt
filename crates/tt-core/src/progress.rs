@@ -29,13 +29,34 @@ pub struct ChallengePay {
     pub participation: Pay,
     /// A challenge with fewer drivers than this pays nothing, so one driver cannot farm it alone.
     pub min_entrants: u32,
+    /// What picking Low, Medium or High when starting a challenge multiplies every payout by.
+    pub sizes: RewardSizes,
     /// Every driver beyond `min_entrants` makes each payout this much bigger (0.1 is 10%)...
     pub scale_per_entrant: f64,
     /// ...up to this multiple of the base payout.
     pub max_scale: f64,
 }
 
+/// The multipliers behind the Low / Medium / High choice on a new challenge.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RewardSizes {
+    pub low: f64,
+    pub medium: f64,
+    pub high: f64,
+}
+
+pub const REWARD_SIZES: [&str; 3] = ["low", "medium", "high"];
+
 impl ChallengePay {
+    /// The multiplier for a size name; anything unknown counts as medium.
+    pub fn size_multiplier(&self, size: &str) -> f64 {
+        match size {
+            "low" => self.sizes.low,
+            "high" => self.sizes.high,
+            _ => self.sizes.medium,
+        }
+    }
+
     /// How much the field size multiplies the payouts.
     pub fn scale(&self, entrants: u32) -> f64 {
         let extra = f64::from(entrants.saturating_sub(self.min_entrants));
@@ -91,6 +112,7 @@ impl Rewards {
             p.xp = p.xp.max(0);
             p.coins = p.coins.max(0);
         }
+        c.sizes = RewardSizes { low: c.sizes.low.max(0.0), medium: c.sizes.medium.max(0.0), high: c.sizes.high.max(0.0) };
         c.min_entrants = c.min_entrants.max(1);
         c.scale_per_entrant = c.scale_per_entrant.max(0.0);
         c.max_scale = c.max_scale.max(1.0);
@@ -116,12 +138,12 @@ pub fn rewards() -> &'static Rewards {
 
 /// What each driver on a finished challenge's board is paid: `(driver, ledger kind, xp, coins)`. The kind is
 /// `challenge:<place>:<name>` for a placing and `challenge:entry:<name>` for taking part. Guest laps are never paid.
-pub fn challenge_payouts(rules: &ChallengePay, name: &str, board: &[crate::model::LeaderboardEntry]) -> Vec<(crate::model::DriverId, String, i64, i64)> {
+pub fn challenge_payouts(rules: &ChallengePay, name: &str, size: &str, board: &[crate::model::LeaderboardEntry]) -> Vec<(crate::model::DriverId, String, i64, i64)> {
     let entrants = board.iter().filter(|e| e.driver_id.is_some()).count() as u32;
     if entrants < rules.min_entrants {
         return Vec::new();
     }
-    let scale = rules.scale(entrants);
+    let scale = rules.scale(entrants) * rules.size_multiplier(size);
     let scaled = |v: i64| (v as f64 * scale).round() as i64;
     board
         .iter()
@@ -201,11 +223,12 @@ mod tests {
     fn nonsense_values_are_pulled_back_into_range() {
         let json = r#"{ "cleanLap": { "xp": -5, "coins": -1 }, "firstLap": { "xp": 1, "coins": 1 }, "personalBest": { "xp": 1, "coins": 1 },
             "trackRecord": { "xp": 1, "coins": 1 }, "dailyLapCap": -3, "levelXpStep": 0,
-            "challenge": { "placings": [{ "xp": -1, "coins": 5 }], "participation": { "xp": 1, "coins": 1 }, "minEntrants": 0, "scalePerEntrant": -1, "maxScale": 0 },
+            "challenge": { "sizes": { "low": -1, "medium": 1, "high": 3 }, "placings": [{ "xp": -1, "coins": 5 }], "participation": { "xp": 1, "coins": 1 }, "minEntrants": 0, "scalePerEntrant": -1, "maxScale": 0 },
             "shop": [{ "slot": "shell", "id": "x", "price": -9, "minLevel": 0 }] }"#;
         let r = Rewards::from_json(json).unwrap();
         assert_eq!((r.clean_lap.xp, r.clean_lap.coins, r.level_xp_step, r.daily_lap_cap), (0, 0, 1, 0));
         assert_eq!((r.shop[0].price, r.shop[0].min_level), (0, 1));
+        assert_eq!(r.challenge.sizes.low, 0.0);
         assert_eq!((r.challenge.placings[0].xp, r.challenge.min_entrants, r.challenge.scale_per_entrant, r.challenge.max_scale), (0, 1, 0.0, 1.0));
         assert!(Rewards::from_json("not json").is_err());
     }

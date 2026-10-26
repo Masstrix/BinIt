@@ -901,6 +901,11 @@ impl BinIt {
         {
             bail!("the challenge must end after it starts");
         }
+        if let Some(size) = &c.reward_size
+            && !progress::REWARD_SIZES.contains(&size.as_str())
+        {
+            bail!("the reward size is low, medium or high");
+        }
         let challenge = self.store().insert_challenge(c, starts_at, now)?;
         self.emit(AppEvent::ChallengesChanged);
         Ok(challenge)
@@ -932,7 +937,7 @@ impl BinIt {
                     Vec::new()
                 } else {
                     let board = store.leaderboard(&challenge_query(c))?;
-                    progress::challenge_payouts(&progress::rewards().challenge, &c.name, &board)
+                    progress::challenge_payouts(&progress::rewards().challenge, &c.name, &c.reward_size, &board)
                 };
                 store.settle_challenge(&flag, &payouts, c.ends_at.unwrap_or(now))?;
                 paid += payouts.len();

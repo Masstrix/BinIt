@@ -344,7 +344,7 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
   const ok = (v: unknown) => v as T;
   let r: RegExpMatchArray | null;
 
-  if (p === "/rewards") return ok({ challenge: { placings: [{ xp: 300, coins: 100 }, { xp: 200, coins: 60 }, { xp: 100, coins: 30 }], participation: { xp: 25, coins: 5 }, minEntrants: 2, scalePerEntrant: 0.1, maxScale: 2 } });
+  if (p === "/rewards") return ok({ challenge: { sizes: { low: 0.5, medium: 1, high: 2 }, placings: [{ xp: 300, coins: 100 }, { xp: 200, coins: 60 }, { xp: 100, coins: 30 }], participation: { xp: 25, coins: 5 }, minEntrants: 2, scalePerEntrant: 0.1, maxScale: 2 } });
   if (p === "/status") return ok(status());
   if (p === "/me") return ok({ driver: drivers.find((d) => d.id === callerDriver(token)) ?? null, local: isLocal() });
   if (p === "/me/pair") {
@@ -465,7 +465,7 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
   if (p === "/leaderboard") return ok(board(body));
   if (p === "/challenges" && method === "GET") return ok(challenges);
   if (p === "/challenges" && method === "POST") {
-    const c: Challenge = { ...body, id: Math.max(0, ...challenges.map((x) => x.id)) + 1, createdAt: Date.now(), startsAt: body.startsAt ?? Date.now() };
+    const c: Challenge = { rewardSize: "medium", ...body, id: Math.max(0, ...challenges.map((x) => x.id)) + 1, createdAt: Date.now(), startsAt: body.startsAt ?? Date.now() };
     challenges.push(c);
     emit({ type: "challengesChanged" });
     return ok(c);
