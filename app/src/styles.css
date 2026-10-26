@@ -69,6 +69,7 @@ h2 { font-size: 22px; line-height: 1.2; }
 /* The window's own title bar: drag to move, page name on the left, window buttons on the right. */
 .titlebar { flex: none; display: flex; align-items: center; gap: 12px; height: 44px; padding-left: 32px; user-select: none; }
 .titlebar-title { font-weight: 600; font-size: 15px; }
+.mock-badge { padding: 2px 10px; border-radius: 999px; background: var(--gold); color: var(--violet-ink); font: 500 11px var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; text-decoration: none; }
 .titlebar-fill { flex: 1; align-self: stretch; }
 .titlebar-buttons { display: flex; align-self: stretch; }
 .titlebar-buttons button { width: 46px; height: 100%; border: none; background: transparent; color: var(--muted); display: flex; align-items: center; justify-content: center; border-radius: 0; }

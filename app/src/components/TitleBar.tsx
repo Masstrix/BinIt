@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { isTauri } from "../api";
+import { isTauri, mockEnabled } from "../api";
 
 type Action = "minimise" | "maximise" | "close";
 
@@ -39,6 +39,9 @@ export function TitleBar({ title }: { title: string }) {
   return (
     <header className="titlebar" data-tauri-drag-region>
       <span className="titlebar-title" data-tauri-drag-region>{title}</span>
+      {mockEnabled && (
+        <a className="mock-badge" href="?mock=0" title="Showing made-up data from src/mock. Click to switch it off.">Mock data</a>
+      )}
       <span className="titlebar-fill" data-tauri-drag-region />
       {isTauri && (
         <div className="titlebar-buttons">

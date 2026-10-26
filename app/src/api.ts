@@ -304,7 +304,25 @@ export function openDownload(what: "installer" | "portable" | "release") {
 // http://<pc>:1420 reaches the PC's server rather than itself.
 const BASE = isTauri ? "http://127.0.0.1:7878" : location.port === "1420" ? `http://${location.hostname}:7878` : "";
 
+/**
+ * Dev only: `?mock` on the page URL swaps the server for in-memory fixtures (src/mock), so the UI can be built and
+ * checked without the app or a game running. `?mock=0` turns it off again. Never true in a release build.
+ */
+export const mockEnabled = (() => {
+  if (!import.meta.env.DEV || isTauri) return false;
+  const flag = new URLSearchParams(location.search).get("mock");
+  try {
+    if (flag === "0") localStorage.removeItem("mock");
+    else if (flag !== null) localStorage.setItem("mock", "1");
+    else return localStorage.getItem("mock") === "1";
+  } catch {
+    return flag !== null && flag !== "0";
+  }
+  return flag !== null && flag !== "0";
+})();
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  if (import.meta.env.DEV && mockEnabled) return (await import("./mock/server")).mockRequest<T>(method, path, body);
   const res = await fetch(`${BASE}/api${path}`, {
     method,
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
@@ -435,6 +453,13 @@ class Store {
   }
 
   private connect() {
+    if (import.meta.env.DEV && mockEnabled) {
+      this.set({ online: true });
+      this.refreshAll().catch(() => {});
+      api.update().then((update) => this.set({ update }), () => {});
+      import("./mock/server").then((m) => m.connectMock((e) => this.handle(e)));
+      return;
+    }
     const wsBase = BASE ? BASE.replace(/^http/, "ws") : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
     const ws = new WebSocket(`${wsBase}/api/events`);
     ws.onopen = () => {
