@@ -1281,3 +1281,12 @@ img.game-icon { object-fit: cover; display: inline-block; }
 .cel-csub { font: 500 20px var(--font-body); color: #9AA4BE; animation: cel-up 520ms ease-out 1250ms both; }
 .cel-ck { font: 600 13px var(--font-mono); letter-spacing: .2em; color: #8F99B3; }
 @media (prefers-reduced-motion: reduce) { .cel, .cel *, .cel-centre, .cel-centre * { animation-duration: 1ms !important; animation-delay: 0s !important; } }
+
+/* spacing sliders under the overlay preview */
+.ed-spacing { border: 0; margin: 0; padding: 14px 16px; border-radius: 20px; background: var(--panel-2); display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 12px 24px; align-items: center; min-width: 0; }
+.ed-spacing legend { float: left; width: 100%; padding: 0; font: 700 15px var(--font-display); margin-bottom: 2px; }
+.ed-space-row { display: grid; grid-template-columns: 110px minmax(0, 1fr) 48px; align-items: center; gap: 12px; font-size: 14px; }
+.ed-space-row input[type="range"] { width: 100%; accent-color: var(--violet); min-height: 28px; }
+.ed-space-row output { text-align: right; color: var(--muted); font-size: 13px; }
+.ed-space-note { grid-column: 1 / -1; font-size: 13px; }
+.ed-spacing .chip { justify-self: start; }

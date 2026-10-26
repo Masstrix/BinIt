@@ -6,6 +6,8 @@ import {
   GAME_PROFILES,
   WIDGETS,
   WIDGET_STYLES,
+  MAX_MARGIN,
+  SIDES,
   anchorBox,
   anchorStyle,
   moveWidget,
@@ -13,6 +15,7 @@ import {
   useOverlayLayout,
   type Anchor,
   type OverlayLayout,
+  type Side,
   type WidgetId,
 } from "../overlayLayout";
 import { GameLabel } from "./GameIcon";
@@ -120,6 +123,8 @@ function DevCelebrations() {
   );
 }
 
+const SIDE_LABEL: Record<Side, string> = { top: "From the top", bottom: "From the bottom", left: "From the left", right: "From the right" };
+
 const WIDGET_ORDER = Object.keys(WIDGETS) as WidgetId[];
 
 /** Tracks a CSS media query (phones, touch screens). */
@@ -171,6 +176,17 @@ export function OverlayEditor() {
   const overlayOn = status?.overlayEnabled ?? true;
   const [game, setGame] = useState(status?.game ?? "acevo");
   const { layout, save, reset, custom, profile } = useOverlayLayout(game);
+  // The spacing sliders move the widgets as they are dragged and save when they are let go.
+  const [draft, setDraft] = useState<OverlayLayout["margins"] | null>(null);
+  const margins = draft ?? layout.margins;
+  const commitMargins = () => {
+    if (!draft) return;
+    const clean: NonNullable<OverlayLayout["margins"]> = {};
+    for (const s of SIDES) if ((draft[s] ?? 0) > 0) clean[s] = draft[s];
+    const { margins: _old, ...rest } = layout;
+    save({ ...rest, ...(Object.keys(clean).length ? { margins: clean } : {}) });
+    setDraft(null);
+  };
 
   const [selected, setSelected] = useState<WidgetId | null>(null);
   const [dragging, setDragging] = useState<WidgetId | null>(null);
@@ -227,7 +243,7 @@ export function OverlayEditor() {
     let anchor = ANCHORS[0];
     let best = Infinity;
     for (const a of ANCHORS) {
-      const b = anchorBox(a, profile);
+      const b = anchorBox(a, profile, margins);
       const dx = Math.max(b.x - px, 0, px - (b.x + b.w));
       const dy = Math.max(b.y - py, 0, py - (b.y + b.h));
       const d = dx * dx + dy * dy;
@@ -365,10 +381,10 @@ export function OverlayEditor() {
         const items = layout.sections[a];
         if (!items?.length) return null;
         return (
-          <div key={a} data-anchor={a} style={{ ...anchorStyle(a, profile), pointerEvents: "auto" }}>
+          <div key={a} data-anchor={a} style={{ ...anchorStyle(a, profile, margins), pointerEvents: "auto" }}>
             {/* On a phone the widgets are drawn bigger than life so they can be read; each grows away from its own edge.
                 The wrapper lays its widgets out like the section does (a column with a gap), or they would run together. */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: anchorStyle(a, profile).alignItems, ...(boost === 1 ? {} : { transform: `scale(${boost})`, transformOrigin: growFrom(a) }) }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: anchorStyle(a, profile, margins).alignItems, ...(boost === 1 ? {} : { transform: `scale(${boost})`, transformOrigin: growFrom(a) }) }}>
               <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={props} anchor={a} styles={layout.styles} />
             </div>
           </div>
@@ -420,7 +436,7 @@ export function OverlayEditor() {
         {/* Section outlines while placing, under the widgets. */}
         {showZones &&
           ANCHORS.map((a) => {
-            const b = anchorBox(a, profile);
+            const b = anchorBox(a, profile, margins);
             const active = target?.anchor === a;
             return (
               <div
@@ -461,6 +477,40 @@ export function OverlayEditor() {
         )}
       </div>
       </div>
+      <fieldset className="ed-spacing">
+        <legend>Space from the screen edges</legend>
+        {SIDES.map((side) => (
+          <label key={side} className="ed-space-row">
+            <span>{SIDE_LABEL[side]}</span>
+            <input
+              type="range"
+              min={0}
+              max={MAX_MARGIN}
+              step={0.5}
+              value={margins?.[side] ?? 0}
+              aria-label={`Extra space from the ${side} of the screen`}
+              onChange={(e) => setDraft({ ...(margins ?? {}), [side]: Number(e.target.value) })}
+              onPointerUp={commitMargins}
+              onKeyUp={commitMargins}
+              onBlur={commitMargins}
+            />
+            <output className="mono">{margins?.[side] ?? 0}%</output>
+          </label>
+        ))}
+        <button
+          type="button"
+          className="chip plain"
+          disabled={!margins || SIDES.every((s) => !margins[s])}
+          onClick={() => {
+            const { margins: _m, ...rest } = layout;
+            setDraft(null);
+            save(rest);
+          }}
+        >
+          Reset spacing
+        </button>
+        <span className="muted ed-space-note">Added to each game's own clearance for its HUD, for this game only.</span>
+      </fieldset>
       {compact && (
         <button type="button" className="btn ghost ed-enlarge" onClick={() => setZoomed(true)}>
           Enlarge preview

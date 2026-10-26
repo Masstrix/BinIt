@@ -138,7 +138,7 @@ export function Overlay() {
           const items = layout.sections[a];
           if (!items?.length) return null;
           return (
-            <div key={a} style={anchorStyle(a, profile)}>
+            <div key={a} style={anchorStyle(a, profile, layout.margins)}>
               <SectionWidgets items={items} data={data} toast={toast} celebration={slotCelebration} preview={devGame != null} anchor={a} styles={layout.styles} onDriverClick={openSwitcher} />
             </div>
           );
