@@ -285,17 +285,20 @@ export function StandingsCard({ data, mode }: { data: OverlayData; mode?: string
         <span style={{ flex: "none", width: 28, height: 28, borderRadius: 10, background: "rgba(255,201,60,0.15)", display: "grid", placeItems: "center" }}>
           <Trophy size={16} />
         </span>
-        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
-          <span style={{ font: "500 9px var(--font-mono)", letterSpacing: "0.1em", color: "var(--muted)" }}>CHALLENGE</span>
+        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2, lineHeight: 1.15 }}>
+          {/* The time left shares the caption's line, so the name below can use the whole width. */}
+          <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ font: "500 9px var(--font-mono)", letterSpacing: "0.1em", color: "var(--muted)" }}>CHALLENGE</span>
+            {data.challengeEndsAt != null && (
+              <span style={{ font: "500 10px var(--font-mono)", padding: "2px 7px", borderRadius: 999, background: "var(--panel-2)", color: "var(--muted)", whiteSpace: "nowrap" }}>
+                {timeLeft(data.challengeEndsAt)}
+              </span>
+            )}
+          </span>
           <span style={{ font: "700 13px var(--font-display)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {data.challengeName ?? "No challenge running"}
           </span>
         </span>
-        {data.challengeEndsAt != null && (
-          <span style={{ flex: "none", font: "500 10px var(--font-mono)", padding: "3px 7px", borderRadius: 999, background: "var(--panel-2)", color: "var(--muted)", whiteSpace: "nowrap" }}>
-            {timeLeft(data.challengeEndsAt)}
-          </span>
-        )}
       </span>
       {data.top3.length === 0 ? (
         <span className="muted" style={{ fontSize: 13 }}>No {words(data.game).laps} yet</span>
