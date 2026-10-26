@@ -8,6 +8,7 @@ import { words } from "../vocab";
 import { orientationFor, styleOf, WIDGETS, type Anchor, type Orientation, type OverlayLayout, type WidgetId } from "../overlayLayout";
 import { BASE, gapText as ladderGap, place, room } from "./GapLadder";
 import { CelebrationView, type Celebration } from "./Celebrations";
+import { useDevCelebrate } from "../devOverlay";
 import { Helmet } from "./Helmet";
 import { QrCode } from "./QrCode";
 import { Signed } from "./Signed";
@@ -898,6 +899,19 @@ export function useLapToasts(pbMs: number | null): Toast | null {
     [drivers, pbMs],
   );
   useAppEvent(onEvent);
+
+  // Development builds can fire the quiet pop-ups from the editor too.
+  useDevCelebrate(
+    useCallback((kind: string) => {
+      const mk: Record<string, Omit<Toast, "id">> = {
+        toastOut: { tone: "out", title: "Out lap 1:58.402", detail: "Timing starts now. Good luck!" },
+        toastIn: { tone: "in", title: "In lap 2:03.118", detail: "Not timed" },
+        toastCut: { tone: "cut", title: "1:44.201 not counted", detail: "Lap was cut (track limits)" },
+        toastLap: { tone: "lap", title: "1:43.870", detail: "PB is 1:42.527" },
+      };
+      if (mk[kind]) setToast({ ...mk[kind], id: Date.now() });
+    }, []),
+  );
 
   useEffect(() => {
     if (!toast) return;

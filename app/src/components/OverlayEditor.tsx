@@ -95,6 +95,10 @@ function DevOverlayToggle({ game }: { game: string }) {
 /** Development builds only: play each celebration on the overlay, to look at it. */
 function DevCelebrations() {
   const kinds: [string, string][] = [
+    ["toastOut", "Out lap"],
+    ["toastIn", "In lap"],
+    ["toastCut", "Cut lap"],
+    ["toastLap", "Plain lap"],
     ["pb", "PB"],
     ["record", "Record"],
     ["lead", "Lead"],
@@ -106,7 +110,7 @@ function DevCelebrations() {
   ];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }} role="group" aria-label="Play a celebration (development only)">
-      <span className="muted" style={{ fontSize: 13 }}>Dev: play</span>
+      <span className="muted" style={{ fontSize: 13 }} title="Plays on the overlay. Turn on Dev: show it now to see it.">Dev: simulate</span>
       {kinds.map(([k, label]) => (
         <button key={k} type="button" className="chip plain" onClick={() => fireDevCelebration(k)}>
           {label}
