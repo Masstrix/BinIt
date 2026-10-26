@@ -167,6 +167,83 @@ pub struct LapResult {
     /// Purple / green / yellow for each of the lap's sectors (empty when untimed).
     pub sector_status: Vec<crate::live::SectorStatus>,
     pub challenges: Vec<ChallengeStanding>,
+    /// XP and coins this lap earned (nothing for guest laps and laps that did not count).
+    #[serde(default)]
+    pub awards: Awards,
+}
+
+/// What a lap earned the driver, and why, for the pop-up.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Awards {
+    pub xp: i64,
+    pub coins: i64,
+    /// The new level, when this lap crossed a level.
+    pub level_up: Option<u32>,
+    /// Short reasons in order, e.g. "Clean lap", "Personal best".
+    pub reasons: Vec<String>,
+}
+
+/// One row of the XP and coin ledger.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PointEvent {
+    pub id: i64,
+    pub driver_id: DriverId,
+    /// "lap", "first", "pb" or "record".
+    pub kind: String,
+    pub xp: i64,
+    pub coins: i64,
+    /// The lap that earned it.
+    pub lap_id: Option<LapId>,
+    pub at: Timestamp,
+}
+
+/// A driver's best on one track and car, and where it ranks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileBest {
+    #[serde(flatten)]
+    pub combo: Combo,
+    pub time_ms: u32,
+    pub position: u32,
+    /// How many drivers have a valid lap on it.
+    pub of: u32,
+}
+
+/// A badge worked out from the driver's laps (never stored).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sticker {
+    pub id: String,
+    pub name: String,
+    pub hint: String,
+    pub earned: bool,
+}
+
+/// Everything the You page shows.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Profile {
+    pub driver: Driver,
+    pub level: u32,
+    pub title: String,
+    pub next_title: String,
+    pub xp: i64,
+    /// Total XP at which this level began, and the next one begins.
+    pub level_start_xp: i64,
+    pub next_level_xp: i64,
+    pub coins: i64,
+    /// Laps that counted or were cut (out and in laps are not attempts).
+    pub attempts: u32,
+    pub clean_laps: u32,
+    pub clean_percent: u32,
+    pub tracks: u32,
+    /// Days in a row, up to today, with at least one clean lap.
+    pub streak_days: u32,
+    pub bests: Vec<ProfileBest>,
+    pub stickers: Vec<Sticker>,
+    pub recent: Vec<PointEvent>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

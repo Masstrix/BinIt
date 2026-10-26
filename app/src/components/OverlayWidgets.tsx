@@ -599,6 +599,10 @@ export function useLapToasts(pbMs: number | null): Toast | null {
       else if (s?.position === 1 && s.previousPosition !== 1) t = { tone: "lead", title: `${name} takes the crown`, detail: `${lapTime(r.lap.timeMs)} in ${s.challengeName}` };
       else if (r.personalBest) t = { tone: "pb", title: `New PB ${lapTime(r.lap.timeMs)}`, detail: s?.position ? `P${s.position} in ${s.challengeName}` : `Nice one, ${name}` };
       else t = { tone: "lap", title: lapTime(r.lap.timeMs), detail: pbMs ? `PB is ${lapTime(pbMs)}` : name };
+      // What the lap earned, when it earned something.
+      if (r.awards && r.awards.xp > 0) {
+        t = { ...t, detail: `${t.detail} · +${r.awards.xp} XP${r.awards.levelUp ? ` · level ${r.awards.levelUp}!` : ""}` };
+      }
       setToast({ ...t, id: Date.now() });
     },
     [drivers, pbMs],

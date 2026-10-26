@@ -52,6 +52,7 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/drivers", get(drivers).post(add_driver))
         .route("/drivers/ratings", get(driver_ratings))
         .route("/drivers/{id}", put(update_driver))
+        .route("/drivers/{id}/profile", get(driver_profile))
         .route("/drivers/{id}/pair-code", post(pair_code))
         .route("/drivers/{id}/devices", get(driver_devices).delete(sign_out_driver))
         .route("/devices/{id}", delete(sign_out_device))
@@ -289,6 +290,11 @@ async fn update_driver(
         may_manage(&c, &headers, addr, id)?;
     }
     c.tt.update_driver(id, &body.name, &body.color).map(Json).map_err(bad_request)
+}
+
+/// Level, XP, coins, bests and stickers: what the You page shows. Open to everyone, like the leaderboards.
+async fn driver_profile(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<tt_core::Profile> {
+    Ok(Json(c.tt.profile(id)?))
 }
 
 // ---- paired phones ---------------------------------------------------------------------------

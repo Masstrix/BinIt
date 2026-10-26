@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 8;
+const SCHEMA_VERSION: i32 = 9;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -205,8 +205,27 @@ impl Store {
                 ",
             )?;
         }
+        if version < 9 {
+            // The XP and coin ledger (see progress.rs). Laps are not back-filled: points start from here.
+            conn.execute_batch(
+                "
+                CREATE TABLE IF NOT EXISTS point_events (
+                    id         INTEGER PRIMARY KEY,
+                    driver_id  INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+                    kind       TEXT NOT NULL,
+                    xp         INTEGER NOT NULL,
+                    coins      INTEGER NOT NULL,
+                    lap_id     INTEGER,
+                    at         INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS point_events_driver ON point_events (driver_id, at);
+                ",
+            )?;
+        }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-        Ok(Self { conn })
+        let store = Self { conn };
+        store.backfill_points()?;
+        Ok(store)
     }
 
     // ---- settings ----------------------------------------------------------
@@ -263,6 +282,105 @@ impl Store {
     pub fn update_driver(&self, id: DriverId, name: &str, color: &str) -> Result<()> {
         self.conn.execute("UPDATE drivers SET name = ?2, color = ?3 WHERE id = ?1", params![id, name, color])?;
         Ok(())
+    }
+
+    // ---- XP and coins ----------------------------------------------------------
+
+    /// Pays laps recorded before points existed, once: the same rules as a live lap (a first lap on a track and
+    /// car, each clean lap, each personal best) without the daily cap or track records. A flag in `settings`
+    /// stops it running again, so it also covers a database that was upgraded before this ran.
+    pub(crate) fn backfill_points(&self) -> Result<()> {
+        const FLAG: &str = "points_backfilled_v1";
+        if self.setting(FLAG)?.is_some() {
+            return Ok(());
+        }
+        if self.conn.query_row("SELECT COUNT(*) FROM point_events", [], |r| r.get::<_, i64>(0))? == 0 {
+            use crate::progress::{FIRST_COINS, FIRST_XP, LAP_COINS, LAP_XP, PB_COINS, PB_XP};
+            let mut stmt = self.conn.prepare(
+                "SELECT id, driver_id, game, track, layout, car, time_ms, recorded_at FROM laps
+                 WHERE valid = 1 AND driver_id IS NOT NULL ORDER BY recorded_at, id",
+            )?;
+            let laps = stmt
+                .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, DriverId>(1)?, [r.get::<_, String>(2)?, r.get(3)?, r.get(4)?, r.get(5)?], r.get::<_, u32>(6)?, r.get::<_, Timestamp>(7)?)))?
+                .collect::<Result<Vec<_>, _>>()?;
+            drop(stmt);
+            self.conn.execute_batch("BEGIN")?;
+            let mut best: std::collections::HashMap<(DriverId, [String; 4]), u32> = std::collections::HashMap::new();
+            for (lap_id, driver, combo, time, at) in laps {
+                let previous = best.get(&(driver, combo.clone())).copied();
+                if previous.is_none() {
+                    self.insert_point_event(driver, "first", FIRST_XP, FIRST_COINS, Some(lap_id), at)?;
+                }
+                self.insert_point_event(driver, "lap", LAP_XP, LAP_COINS, Some(lap_id), at)?;
+                if previous.is_some_and(|p| time < p) {
+                    self.insert_point_event(driver, "pb", PB_XP, PB_COINS, Some(lap_id), at)?;
+                }
+                best.insert((driver, combo), time.min(previous.unwrap_or(u32::MAX)));
+            }
+            self.conn.execute_batch("COMMIT")?;
+        }
+        self.set_setting(FLAG, Some("1"))?;
+        Ok(())
+    }
+
+    pub fn insert_point_event(&self, driver_id: DriverId, kind: &str, xp: i64, coins: i64, lap_id: Option<LapId>, at: Timestamp) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO point_events (driver_id, kind, xp, coins, lap_id, at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![driver_id, kind, xp, coins, lap_id, at],
+        )?;
+        Ok(())
+    }
+
+    /// (total XP, total coins) for a driver.
+    pub fn point_totals(&self, driver_id: DriverId) -> Result<(i64, i64)> {
+        Ok(self.conn.query_row(
+            "SELECT COALESCE(SUM(xp), 0), COALESCE(SUM(coins), 0) FROM point_events WHERE driver_id = ?1",
+            [driver_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?)
+    }
+
+    pub fn recent_point_events(&self, driver_id: DriverId, limit: u32) -> Result<Vec<PointEvent>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, driver_id, kind, xp, coins, lap_id, at FROM point_events WHERE driver_id = ?1 ORDER BY at DESC, id DESC LIMIT ?2")?;
+        let rows = stmt.query_map(params![driver_id, limit], |r| {
+            Ok(PointEvent { id: r.get(0)?, driver_id: r.get(1)?, kind: r.get(2)?, xp: r.get(3)?, coins: r.get(4)?, lap_id: r.get(5)?, at: r.get(6)? })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// How many plain laps on this track and car have paid out since `since` (the daily cap).
+    pub fn lap_awards_since(&self, driver_id: DriverId, combo: &Combo, since: Timestamp) -> Result<i64> {
+        Ok(self.conn.query_row(
+            "SELECT COUNT(*) FROM point_events e JOIN laps l ON l.id = e.lap_id
+             WHERE e.driver_id = ?1 AND e.kind = 'lap' AND e.at >= ?2
+               AND l.game = ?3 AND l.track = ?4 AND l.layout = ?5 AND l.car = ?6",
+            params![driver_id, since, combo.game, combo.track, combo.layout, combo.car],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// Whether a different driver has a valid lap on this track and car.
+    pub fn others_have_valid_lap(&self, combo: &Combo, driver_id: DriverId, exclude: LapId) -> Result<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM laps WHERE game = ?1 AND track = ?2 AND layout = ?3 AND car = ?4 AND valid = 1
+                              AND id != ?5 AND driver_id IS NOT NULL AND driver_id != ?6)",
+            params![combo.game, combo.track, combo.layout, combo.car, exclude, driver_id],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// Every driver's best valid lap on every track and car: (combo, driver, time).
+    pub fn profile_best_times(&self) -> Result<Vec<(Combo, DriverId, u32)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT game, track, layout, car, driver_id, MIN(time_ms) FROM laps
+             WHERE valid = 1 AND driver_id IS NOT NULL GROUP BY game, track, layout, car, driver_id",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((Combo { game: r.get(0)?, track: r.get(1)?, layout: r.get(2)?, car: r.get(3)? }, r.get(4)?, r.get(5)?))
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     // ---- paired phones -------------------------------------------------------

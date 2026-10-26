@@ -16,6 +16,7 @@ import { GamesPage } from "./pages/Games";
 import { AdvancedPage } from "./pages/Advanced";
 import { TelemetryPage } from "./pages/Telemetry";
 import { Overlay } from "./pages/Overlay";
+import { YouPage } from "./pages/You";
 import { Updater } from "./pages/Updater";
 
 const ROUTES = [
@@ -74,6 +75,7 @@ function useHashPath() {
 const lastPathKey = (section: string) => `lastPath.${section}`;
 
 function titleFor(path: string) {
+  if (path.startsWith("/you")) return "You";
   return ROUTES.find((r) => (r.path === "/" ? path === "/" : path.startsWith(r.path)))?.label ?? "Bin It";
 }
 
@@ -112,6 +114,7 @@ export function App() {
   else if (path.startsWith("/games")) page = <GamesPage />;
   else if (path.startsWith("/telemetry")) page = <TelemetryPage path={path} />;
   else if (path.startsWith("/advanced")) page = <AdvancedPage />;
+  else if (path.startsWith("/you")) page = <YouPage />;
   else page = <Home />;
 
   return (

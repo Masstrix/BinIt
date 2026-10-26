@@ -974,3 +974,114 @@ fn logging_out_forgets_the_phone_and_signing_everyone_out_frees_the_driver() {
     // Free again: the next phone to ask claims the driver without a code.
     assert!(tt.pair_device(sam.id, None, "New phone").is_ok());
 }
+
+// ---- XP, coins and the profile ----------------------------------------------------------------
+
+#[test]
+fn laps_earn_xp_and_coins_for_what_they_are() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+
+    // First lap on a new track and car: the welcome bonus plus the lap itself.
+    let first = tt.record_lap(&lap(103_000, true)).unwrap().awards;
+    assert_eq!((first.xp, first.coins), (progress::FIRST_XP + progress::LAP_XP, progress::FIRST_COINS + progress::LAP_COINS));
+    // A slower lap is just a lap.
+    let slower = tt.record_lap(&lap(104_000, true)).unwrap().awards;
+    assert_eq!((slower.xp, slower.reasons.clone()), (progress::LAP_XP, vec!["Clean lap".to_string()]));
+    // A personal best pays extra. Nobody else has driven here, so it is not a track record.
+    let pb = tt.record_lap(&lap(102_000, true)).unwrap().awards;
+    assert_eq!(pb.xp, progress::LAP_XP + progress::PB_XP);
+    assert!(!pb.reasons.contains(&"Track record".to_string()));
+    // Cut laps and out laps earn nothing.
+    assert_eq!(tt.record_lap(&lap(101_000, false)).unwrap().awards, Awards::default());
+    assert_eq!(tt.record_lap(&untimed_lap(95_000, UntimedReason::OutLap)).unwrap().awards, Awards::default());
+
+    let p = tt.profile(tt.seat().unwrap().unwrap()).unwrap();
+    assert_eq!(p.xp, first.xp + slower.xp + pb.xp);
+    assert_eq!(p.coins, first.coins + slower.coins + pb.coins);
+}
+
+#[test]
+fn a_track_record_needs_someone_else_to_beat_and_guests_earn_nothing() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    tt.record_lap(&lap(103_000, true)).unwrap();
+    let jess = tt.add_and_seat("Jess", None).unwrap();
+    let beat = tt.record_lap(&lap(102_000, true)).unwrap().awards;
+    assert!(beat.reasons.contains(&"Track record".to_string()), "{:?}", beat.reasons);
+    assert_eq!(beat.xp, progress::FIRST_XP + progress::LAP_XP + progress::RECORD_XP);
+
+    tt.set_seat(None).unwrap();
+    assert_eq!(tt.record_lap(&lap(99_000, true)).unwrap().awards, Awards::default());
+    assert_eq!(tt.profile(jess.id).unwrap().xp, beat.xp);
+    assert_eq!(tt.profile(sam.id).unwrap().bests[0].position, 2);
+}
+
+#[test]
+fn crossing_a_level_is_reported_once_and_the_daily_cap_stops_lap_farming() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    let mut level_ups = Vec::new();
+    let mut paid = 0;
+    for i in 0..40 {
+        let a = tt.record_lap(&lap(110_000 - i, true)).unwrap().awards;
+        if let Some(l) = a.level_up {
+            level_ups.push(l);
+        }
+        paid += a.reasons.iter().filter(|r| *r == "Clean lap").count();
+    }
+    assert!(level_ups.windows(2).all(|w| w[0] < w[1]) && level_ups.first() == Some(&2), "{level_ups:?}");
+    assert_eq!(paid as i64, progress::LAP_CAP_PER_DAY, "plain laps stop paying after the cap");
+    assert_eq!(tt.profile(sam.id).unwrap().level, *level_ups.last().unwrap());
+}
+
+#[test]
+fn the_profile_counts_laps_streaks_and_stickers() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    let fresh = tt.profile(sam.id).unwrap();
+    assert_eq!((fresh.level, fresh.xp, fresh.clean_percent, fresh.streak_days), (1, 0, 100, 0));
+    assert!(fresh.stickers.iter().all(|s| !s.earned));
+
+    for i in 0..9 {
+        tt.record_lap(&lap(105_000 - i, true)).unwrap();
+    }
+    tt.record_lap(&lap(104_000, false)).unwrap();
+    let p = tt.profile(sam.id).unwrap();
+    assert_eq!((p.attempts, p.clean_laps, p.clean_percent, p.tracks), (10, 9, 90, 1));
+    assert_eq!(p.streak_days, 1);
+    let earned = |id: &str| p.stickers.iter().find(|s| s.id == id).unwrap().earned;
+    assert!(earned("first-lap") && !earned("ten-clean") && !earned("clean-sweep"));
+}
+
+#[test]
+fn streaks_count_back_from_today_or_yesterday() {
+    let day = progress::DAY_MS;
+    let now = 100 * day + 5_000;
+    assert_eq!(streak_days([now].into_iter(), now), 1);
+    assert_eq!(streak_days([now - day, now - 2 * day, now - 3 * day].into_iter(), now), 3, "yesterday still counts");
+    assert_eq!(streak_days([now, now - 2 * day].into_iter(), now), 1, "a gap ends it");
+    assert_eq!(streak_days([now - 3 * day].into_iter(), now), 0, "too long ago");
+    assert_eq!(streak_days(std::iter::empty(), now), 0);
+}
+
+#[test]
+fn laps_from_before_points_existed_are_paid_once() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_driver("Sam", None).unwrap();
+    // Laps stored without going through the live path, as an older version would have left them.
+    for (n, ms) in [(1, 104_000), (2, 103_000), (3, 105_000)] {
+        let l = Lap {
+            id: 0, driver_id: Some(sam.id), combo: combo_of(&session("Porsche 992 GT3 R")), session_kind: "Hot Stint".into(),
+            lap_number: n, time_ms: ms, valid: true, untimed_reason: None, sectors_ms: vec![], recorded_at: 1_000 * i64::from(n),
+        };
+        tt.store().insert_lap(&l, None, None).unwrap();
+    }
+    tt.store().set_setting("points_backfilled_v1", None).unwrap();
+    tt.store().backfill_points().unwrap();
+    // First lap (25 + 10), a personal best (10 + 50), then a plain lap (10).
+    assert_eq!(tt.profile(sam.id).unwrap().xp, 25 + 10 + 10 + 50 + 10);
+    // Running it again changes nothing.
+    tt.store().backfill_points().unwrap();
+    assert_eq!(tt.profile(sam.id).unwrap().xp, 105);
+}

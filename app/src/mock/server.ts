@@ -3,7 +3,7 @@
 
 import { ApiError } from "../api";
 import type {
-  About, AppEvent, Challenge, Combo, Device, Driver, Lap, LapResult, LeaderboardEntry, LeaderboardQuery, LiveView, OverlayShow,
+  About, AppEvent, Awards, Challenge, Combo, Device, Driver, Lap, LapResult, LeaderboardEntry, LeaderboardQuery, LiveView, OverlayShow, Profile, ProfileBest,
   ReplayEntry, ServerInfo, SessionView, Status, UpdateStatus,
 } from "../api";
 import { CHALLENGES, DRIVERS, LAPS, MAPS, NOW, TRACKS, catalogue, key } from "./data";
@@ -99,7 +99,14 @@ function finishLap() {
   };
   laps.push(lap);
   lapStart = Date.now();
-  const result: LapResult = { lap, personalBest: own.every((l) => l.timeMs > timeMs), comboRecord: false, challenges: [] };
+  const personalBest = own.every((l) => l.timeMs > timeMs);
+  const awards: Awards = { xp: 10, coins: 1, levelUp: null, reasons: ["Clean lap"] };
+  if (personalBest && own.length > 0) {
+    awards.xp += 50;
+    awards.coins += 5;
+    awards.reasons.push("Personal best");
+  }
+  const result: LapResult = { lap, personalBest, comboRecord: false, challenges: [], awards };
   emit({ type: "lapRecorded", result });
 }
 
@@ -195,6 +202,79 @@ function ratings() {
   });
 }
 
+// ---- XP and the profile (the same rules as tt-core/src/progress.rs, worked out from the laps) ----
+
+const xpForLevel = (l: number) => (100 * (l - 1) * l) / 2;
+const levelOf = (xp: number) => {
+  let l = 1;
+  while (xpForLevel(l + 1) <= xp) l++;
+  return l;
+};
+const TITLES = ["Rookie", "Qualifier", "Regular", "Podium Regular", "Contender", "Veteran", "Veteran", "Ace", "Ace"];
+const titleFor = (l: number) => TITLES[l - 1] ?? "Legend";
+
+function driverProfile(id: number): Profile {
+  const driver = drivers.find((d) => d.id === id)!;
+  const mine = laps.filter((l) => l.driverId === id).sort((a, b) => a.recordedAt - b.recordedAt);
+  let xp = 0;
+  let coins = 0;
+  const events: Profile["recent"] = [];
+  const bestSoFar = new Map<string, number>();
+  const give = (kind: string, x: number, c: number, lap: Lap) => {
+    xp += x;
+    coins += c;
+    events.push({ id: events.length + 1, driverId: id, kind, xp: x, coins: c, lapId: lap.id, at: lap.recordedAt });
+  };
+  for (const l of mine) {
+    if (!l.valid) continue;
+    const k = key(l);
+    const prev = bestSoFar.get(k);
+    if (prev == null) give("first", 25, 2, l);
+    give("lap", 10, 1, l);
+    if (prev != null && l.timeMs < prev) give("pb", 50, 5, l);
+    bestSoFar.set(k, Math.min(prev ?? Infinity, l.timeMs));
+  }
+  const valid = mine.filter((l) => l.valid);
+  const attempts = mine.filter((l) => l.valid || l.untimedReason == null || l.untimedReason === "cut").length;
+  const level = levelOf(xp);
+  const best = new Map<string, { combo: Lap; ms: number }>();
+  for (const l of laps) {
+    if (!l.valid || l.driverId == null) continue;
+    const k = `${key(l)}|${l.driverId}`;
+    if (!best.has(k) || l.timeMs < best.get(k)!.ms) best.set(k, { combo: l, ms: l.timeMs });
+  }
+  const bests: ProfileBest[] = [...best.values()]
+    .filter((b) => b.combo.driverId === id)
+    .map((b) => {
+      const rivals = [...best.values()].filter((o) => key(o.combo) === key(b.combo));
+      return { game: b.combo.game, track: b.combo.track, layout: b.combo.layout, car: b.combo.car, timeMs: b.ms, position: 1 + rivals.filter((o) => o.ms < b.ms).length, of: rivals.length };
+    });
+  const tracks = new Set(valid.map((l) => `${l.game}|${l.track}|${l.layout}`)).size;
+  const days = [...new Set(valid.map((l) => Math.floor(l.recordedAt / 86_400_000)))].sort((a, b) => a - b);
+  let streak = 0;
+  const today = Math.floor(Date.now() / 86_400_000);
+  if (days.length && today - days[days.length - 1] <= 1) {
+    streak = 1;
+    for (let i = days.length - 1; i > 0 && days[i] - days[i - 1] === 1; i--) streak++;
+  }
+  const sticker = (sid: string, name: string, hint: string, earned: boolean) => ({ id: sid, name, hint, earned });
+  return {
+    driver, level, title: titleFor(level), nextTitle: titleFor(level + 1), xp, levelStartXp: xpForLevel(level), nextLevelXp: xpForLevel(level + 1), coins,
+    attempts, cleanLaps: valid.length, cleanPercent: attempts ? Math.round((valid.length * 100) / attempts) : 100, tracks, streakDays: streak, bests,
+    stickers: [
+      sticker("first-lap", "First lap", "Set a clean lap", valid.length >= 1),
+      sticker("ten-clean", "10 clean laps", "Ten laps with no cuts", valid.length >= 10),
+      sticker("fifty-clean", "50 clean laps", "Fifty laps with no cuts", valid.length >= 50),
+      sticker("explorer", "3 tracks", "Set a clean lap on three tracks", tracks >= 3),
+      sticker("record", "Track record", "Hold the fastest lap on a track and car", bests.some((b) => b.position === 1 && b.of > 1)),
+      sticker("streak", "3-day streak", "Drive three days in a row", streak >= 3),
+      sticker("clean-sweep", "Clean sweep", "Ten attempts, none cut", attempts >= 10 && valid.length === attempts),
+      sticker("regular", "Level 5", "Reach level 5", level >= 5),
+    ],
+    recent: events.slice(-8).reverse(),
+  };
+}
+
 function status(): Status {
   return {
     game: session.game, gameName: session.gameName, connected: true, session, seat: settings.seat, live: liveView(),
@@ -243,6 +323,7 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
     emit({ type: "driversChanged" });
     return ok(i >= 0);
   }
+  if ((r = m(/^\/drivers\/(\d+)\/profile$/))) return ok(driverProfile(+r[1]));
   if ((r = m(/^\/drivers\/(\d+)\/pair-code$/))) {
     if (claimed(+r[1])) mayManage(+r[1], token);
     const code = String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0");

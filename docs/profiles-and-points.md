@@ -114,6 +114,24 @@ Not done: nothing is *spent* yet, so the only guarded action is editing a driver
 (below) would use the same "is this phone that driver" check. Tokens go over plain HTTP on the office network,
 like everything else here; that is acceptable for this product but worth knowing.
 
+## Status: XP, coins and the You page are built (2026-10-26)
+
+* **Ledger.** Every reward is a row in `point_events` (schema 9): kind, XP, coins, the lap that earned it. Balances are
+  sums. Rules live in `crates/tt-core/src/progress.rs`: a clean lap 10 XP + 1 coin, the first clean lap on a track and
+  car 25 + 2, a personal best 50 + 5, a track record that beats someone else 150 + 20. Plain laps stop paying after
+  30 per track and car in 24 hours. Guest laps, cut laps and out/in laps earn nothing. Awards are made server side when
+  the lap is recorded and come back on the `lapRecorded` event (`awards`), so the overlay pop-up adds "+N XP" and
+  "level N!".
+* **Levels.** Level n needs 100 * (n-1) * n / 2 XP in total (100, 300, 600, 1000, 1500, ...). Titles: Rookie,
+  Qualifier, Regular, Podium Regular, Contender, Veteran, Ace, Legend.
+* **Back-fill.** Laps recorded before this existed were paid once, with the same rules minus the daily cap and track
+  records (a flag in `settings`, `points_backfilled_v1`). This answers the "start at zero?" question with "no".
+* **You page** (`#/you`, opened by tapping the phone banner): level and XP bar, coins, clean laps / clean % / tracks,
+  your best on each track and car with its rank, stickers, recent XP, and "Not you?". The banner shows a level badge
+  and "N XP to level N+1". Stickers are worked out from your laps each time, not stored.
+* **Not done:** coins can be earned but there is nothing to spend them on yet (the Garage); challenge placings do not
+  pay out; the You page has no desktop entry (the desktop already has the driver progress page).
+
 ## Questions for the owner
 
 * Trust model or device pairing? Is a PIN wanted?

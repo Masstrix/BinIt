@@ -279,11 +279,64 @@ export interface ReplayEntry {
   profile: number[] | null;
 }
 
+/** What a lap earned the driver (XP and coins), and why. */
+export interface Awards {
+  xp: number;
+  coins: number;
+  /** The new level, when this lap crossed one. */
+  levelUp: number | null;
+  reasons: string[];
+}
+
 export interface LapResult {
   lap: Lap;
   personalBest: boolean;
   comboRecord: boolean;
   challenges: ChallengeStanding[];
+  awards?: Awards;
+}
+
+export interface PointEvent {
+  id: number;
+  driverId: DriverId;
+  kind: "lap" | "first" | "pb" | "record" | string;
+  xp: number;
+  coins: number;
+  lapId: number | null;
+  at: number;
+}
+
+export interface ProfileBest extends Combo {
+  timeMs: number;
+  position: number;
+  of: number;
+}
+
+export interface Sticker {
+  id: string;
+  name: string;
+  hint: string;
+  earned: boolean;
+}
+
+/** Everything the You page shows. */
+export interface Profile {
+  driver: Driver;
+  level: number;
+  title: string;
+  nextTitle: string;
+  xp: number;
+  levelStartXp: number;
+  nextLevelXp: number;
+  coins: number;
+  attempts: number;
+  cleanLaps: number;
+  cleanPercent: number;
+  tracks: number;
+  streakDays: number;
+  bests: ProfileBest[];
+  stickers: Sticker[];
+  recent: PointEvent[];
 }
 
 export interface ServerInfo {
@@ -390,6 +443,7 @@ export const api = {
     request<Driver>("POST", "/drivers", { name, color, seat }),
   updateDriver: (id: DriverId, name: string, color: string) =>
     request<Driver>("PUT", `/drivers/${id}`, { name, color }),
+  profile: (id: DriverId) => request<Profile>("GET", `/drivers/${id}/profile`),
   me: () => request<Me>("GET", "/me"),
   /** Pairs this phone with a driver. A driver who already has a phone needs a `code` from the PC or that phone. */
   pair: (driverId: DriverId, code?: string) => request<{ token: string; driver: Driver }>("POST", "/me/pair", { driverId, code }),

@@ -42,6 +42,8 @@ export function MeBar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [info]);
 
+  // Level and XP to go, for the badge and the line under the name. Refetches when a lap is recorded.
+  const profile = useFetch(me ? () => api.profile(me.id) : null, [me?.id]);
   const live = status?.live;
   const driving = inSeat && !!live?.driving;
   const delta = live?.timing?.deltaMs;
@@ -49,9 +51,10 @@ export function MeBar() {
 
   return (
     <div className="me-bar" data-state={state}>
-      <button type="button" className="me-who" onClick={() => setPicking(true)} title="Who you are on this phone">
+      <button type="button" className="me-who" onClick={() => (me ? (location.hash = "#/you") : setPicking(true))} title={me ? "Your profile" : "Who you are on this phone"}>
         <span className="me-ring">
           <Helmet color={me?.color ?? "#5B6578"} size={46} seed={me?.id} mood={inSeat ? "happy" : "idle"} />
+          {profile && <span className="me-level" aria-label={`Level ${profile.level}`}>{profile.level}</span>}
         </span>
         <span className="me-text">
           {driving ? (
@@ -62,7 +65,13 @@ export function MeBar() {
           ) : (
             <>
               <span className="me-name">{me ? me.name : "Who are you?"}</span>
-              <span className="me-sub">{me ? (inSeat ? "In the seat" : "Seat free") : "Pick your driver"}</span>
+              <span className="me-sub">
+                {me
+                  ? profile
+                    ? `${(profile.nextLevelXp - profile.xp).toLocaleString()} XP to level ${profile.level + 1}${inSeat ? " · in the seat" : ""}`
+                    : inSeat ? "In the seat" : "Seat free"
+                  : "Pick your driver"}
+              </span>
             </>
           )}
         </span>
@@ -90,7 +99,7 @@ export function MeBar() {
 }
 
 /** Pick who you are, ask for a pairing code when that driver already has a phone, pair another phone, or log out. */
-function WhoAreYou({ drivers, me, onClose, onChanged }: { drivers: Driver[]; me: Driver | null; onClose: () => void; onChanged: () => void }) {
+export function WhoAreYou({ drivers, me, onClose, onChanged }: { drivers: Driver[]; me: Driver | null; onClose: () => void; onChanged: () => void }) {
   const [asking, setAsking] = useState<Driver | null>(null);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
