@@ -66,6 +66,31 @@ export function Overlay() {
     ),
   );
 
+  // The few widgets that can be clicked (live timing) tell the desktop app where they are, so it lets the mouse
+  // through to them and nowhere else.
+  useEffect(() => {
+    if (!isTauri) return;
+    let last = "";
+    const send = (rects: number[][]) => import("@tauri-apps/api/core").then(({ invoke }) => invoke("set_hit_regions", { rects })).catch(() => {});
+    const report = () => {
+      const rects = [...document.querySelectorAll<HTMLElement>("[data-hit]")].map((e) => {
+        const r = e.getBoundingClientRect();
+        return [r.x, r.y, r.width, r.height];
+      });
+      const key = JSON.stringify(rects.map((r) => r.map(Math.round)));
+      if (key !== last) {
+        last = key;
+        send(rects);
+      }
+    };
+    report();
+    const t = window.setInterval(report, 300);
+    return () => {
+      window.clearInterval(t);
+      send([]);
+    };
+  }, []);
+
   // Widgets only appear in the phases the player chose: not over the game's menus unless asked to.
   const phase = status?.live?.phase ?? "menu";
   const mode = status?.overlayShow ?? "drivingPaused";

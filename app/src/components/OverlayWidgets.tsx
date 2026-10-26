@@ -342,6 +342,7 @@ export function TimingCard({ data, mode }: { data: OverlayData; mode?: string })
   const several = refs.length > 1;
   return (
     <div
+      data-hit={several ? "" : undefined}
       onClick={several ? next : undefined}
       title={several ? "Click to switch between your PB and the fastest lap" : undefined}
       style={{ ...card, borderRadius: 28, padding: "16px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 10, ...(several ? { cursor: "pointer", pointerEvents: "auto" as const } : {}), ...(cut ? { boxShadow: "inset 0 0 0 1.5px rgba(255,122,146,0.7), 0 8px 30px rgba(0,0,0,0.35)", background: "#2A1420" } : {}) }}>
