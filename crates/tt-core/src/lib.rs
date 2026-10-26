@@ -11,7 +11,6 @@ mod store;
 pub mod trackmap;
 
 use std::path::{Path, PathBuf};
-use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -170,8 +169,6 @@ pub struct BinIt {
     store: Mutex<Store>,
     runtime: Mutex<Runtime>,
     events: broadcast::Sender<AppEvent>,
-    /// One-time codes for pairing another phone to a driver: driver -> (code, runs out at). Never stored.
-    pair_codes: Mutex<HashMap<DriverId, (String, Timestamp)>>,
 }
 
 pub fn now_ms() -> Timestamp {
@@ -209,7 +206,7 @@ impl BinIt {
 
     fn with_store(store: Store) -> Self {
         let (events, _) = broadcast::channel(256);
-        Self { previous_version: Mutex::default(), catalogue_paths: Mutex::default(), store: Mutex::new(store), runtime: Mutex::new(Runtime::default()), events, pair_codes: Mutex::default() }
+        Self { previous_version: Mutex::default(), catalogue_paths: Mutex::default(), store: Mutex::new(store), runtime: Mutex::new(Runtime::default()), events }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<AppEvent> {
@@ -371,22 +368,14 @@ impl BinIt {
 
     /// Pairs a phone with a driver and returns its token (shown once; only a hash is kept).
     ///
-    /// A driver nobody has claimed can be claimed by anyone, like typing a name on the rig. Once a phone is
-    /// paired, another one needs the driver's one-time `code` (see `new_pair_code`).
-    pub fn pair_device(&self, driver_id: DriverId, code: Option<&str>, label: &str) -> Result<(String, Driver)> {
+    /// A driver nobody is signed in as can be taken by anyone, like typing a name on the rig. One who is already
+    /// signed in on another device needs `confirmed`: the phone asks "are you sure?" and asks again with it set.
+    /// Both devices then stay signed in.
+    pub fn pair_device(&self, driver_id: DriverId, confirmed: bool, label: &str) -> Result<(String, Driver)> {
         let store = self.store();
         let driver = store.driver(driver_id)?.ok_or_else(|| anyhow::anyhow!("no such driver"))?;
-        if store.device_count(driver_id)? > 0 {
-            let Some(code) = code.map(str::trim).filter(|c| !c.is_empty()) else {
-                return Err(pairing::PairError::CodeNeeded.into());
-            };
-            let mut codes = self.pair_codes.lock().expect("pair codes mutex poisoned");
-            match codes.get(&driver_id) {
-                Some((expected, until)) if *until > now_ms() && expected == code => {
-                    codes.remove(&driver_id);
-                }
-                _ => return Err(pairing::PairError::BadCode.into()),
-            }
+        if !confirmed && store.device_count(driver_id)? > 0 {
+            return Err(pairing::PairError::AlreadySignedIn.into());
         }
         let token = pairing::new_token()?;
         let label: String = label.trim().chars().take(40).collect();
@@ -394,17 +383,6 @@ impl BinIt {
         drop(store);
         self.emit(AppEvent::DriversChanged);
         Ok((token, driver))
-    }
-
-    /// A six digit code that lets one more phone pair with this driver, for the next few minutes.
-    pub fn new_pair_code(&self, driver_id: DriverId) -> Result<(String, Timestamp)> {
-        if self.store().driver(driver_id)?.is_none() {
-            bail!("no such driver");
-        }
-        let code = pairing::new_code()?;
-        let until = now_ms() + pairing::CODE_TTL_MS;
-        self.pair_codes.lock().expect("pair codes mutex poisoned").insert(driver_id, (code.clone(), until));
-        Ok((code, until))
     }
 
     /// Who a phone's token belongs to (and note that it was just used).
@@ -443,7 +421,6 @@ impl BinIt {
     /// Signs every phone out of a driver, e.g. after one was lost. The next phone to claim them wins.
     pub fn remove_driver_devices(&self, driver_id: DriverId) -> Result<usize> {
         let n = self.store().delete_driver_devices(driver_id)?;
-        self.pair_codes.lock().expect("pair codes mutex poisoned").remove(&driver_id);
         self.emit(AppEvent::DriversChanged);
         Ok(n)
     }

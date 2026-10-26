@@ -11,9 +11,8 @@ import { Helmet, Logo } from "./Helmet";
  */
 export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
   const { drivers } = useAppState();
-  const [step, setStep] = useState<"pick" | "new" | "code">("pick");
+  const [step, setStep] = useState<"pick" | "new" | "sure">("pick");
   const [picked, setPicked] = useState<Driver | null>(null);
-  const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [color, setColor] = useState("#B79BFF");
   const [error, setError] = useState<string | null>(null);
@@ -40,9 +39,8 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     try {
       await fn();
     } catch (e) {
-      if (e instanceof ApiError && e.code === "codeNeeded") {
-        setStep("code");
-        setCode("");
+      if (e instanceof ApiError && e.code === "alreadySignedIn") {
+        setStep("sure");
       } else {
         setError((e as Error).message);
       }
@@ -51,10 +49,10 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
     }
   };
 
-  const signIn = (withCode?: string) =>
+  const signIn = (confirmed = false) =>
     run(async () => {
       if (!picked) return;
-      done((await api.pair(picked.id, withCode)).token);
+      done((await api.pair(picked.id, confirmed)).token);
     });
 
   const create = () =>
@@ -129,35 +127,18 @@ export function SignIn({ onSignedIn }: { onSignedIn: () => void }) {
           </form>
         )}
 
-        {step === "code" && picked && (
-          <form
-            className="signin-step"
-            onSubmit={(e) => {
-              e.preventDefault();
-              signIn(code);
-            }}
-          >
+        {step === "sure" && picked && (
+          <div className="signin-step">
             <div>
-              <h1>{picked.name} already has a phone</h1>
+              <h1>{picked.name} is already signed in</h1>
               <p className="muted">
-                To sign in as {picked.name} here, enter the 6 digit code. Get it on the PC (open {picked.name}'s profile, then Connections) or on {picked.name}'s own phone (tap the banner, then Pair another phone).
+                {picked.name} is signed in on another device. If that is you, carry on and both devices stay signed in. If it is not you, go back and pick yourself.
               </p>
             </div>
-            <input
-              className="input code-input mono"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="000000"
-              maxLength={6}
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-              aria-label="Pairing code"
-              autoFocus
-            />
             {error && <span className="error" role="alert">{error}</span>}
-            <button className="btn big signin-go" type="submit" disabled={code.length !== 6 || busy}>Sign in</button>
+            <button className="btn big signin-go" type="button" disabled={busy} onClick={() => signIn(true)}>That's me, sign in</button>
             <button type="button" className="btn ghost" onClick={() => { setStep("pick"); setError(null); }}>Back</button>
-          </form>
+          </div>
         )}
       </div>
     </div>

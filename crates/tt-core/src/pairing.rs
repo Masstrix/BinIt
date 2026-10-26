@@ -2,31 +2,26 @@
 //!
 //! A phone that says "I'm Sam" is given a random token; the server keeps only its hash and the driver it
 //! belongs to. From then on the phone is Sam without asking, and it can log out (the token is forgotten).
-//! There are no passwords: the first phone to claim a driver wins, and any further phone needs a short
-//! one-time code, shown on the PC or on a phone that is already paired to that driver.
+//! There are no passwords: the first phone to claim a driver just takes them, and a driver who is already
+//! signed in on another device asks "are you sure?" first (the `confirmed` flag), then signs this one in too.
+//! Several devices can be signed in as one driver at once; the PC lists them and can sign any of them out.
 
 use std::fmt;
 
 use anyhow::Result;
 use sha2::{Digest, Sha256};
 
-/// How long a pairing code works.
-pub const CODE_TTL_MS: i64 = 5 * 60 * 1000;
-
-/// Why a phone could not be paired. The server turns these into something the phone can act on.
+/// Why a phone could not be paired. The server turns this into something the phone can act on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PairError {
-    /// The driver already has a phone, so this one needs a code.
-    CodeNeeded,
-    /// The code was wrong or has run out.
-    BadCode,
+    /// The driver is already signed in on another device and this phone has not said it is sure.
+    AlreadySignedIn,
 }
 
 impl fmt::Display for PairError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::CodeNeeded => f.write_str("this driver already has a phone: ask for a pairing code"),
-            Self::BadCode => f.write_str("that code is wrong or has run out"),
+            Self::AlreadySignedIn => f.write_str("this driver is already signed in on another device"),
         }
     }
 }
@@ -43,13 +38,6 @@ pub fn new_token() -> Result<String> {
 /// What is stored in place of a token.
 pub fn hash_token(token: &str) -> String {
     hex(&Sha256::digest(token.as_bytes()))
-}
-
-/// A six digit code to type into a phone.
-pub fn new_code() -> Result<String> {
-    let mut bytes = [0u8; 4];
-    getrandom::fill(&mut bytes).map_err(|e| anyhow::anyhow!("no secure random numbers: {e}"))?;
-    Ok(format!("{:06}", u32::from_le_bytes(bytes) % 1_000_000))
 }
 
 fn hex(bytes: &[u8]) -> String {
@@ -70,12 +58,4 @@ mod tests {
         assert_ne!(hash_token(&a), hash_token(&b));
     }
 
-    #[test]
-    fn codes_are_six_digits() {
-        for _ in 0..50 {
-            let c = new_code().unwrap();
-            assert_eq!(c.len(), 6);
-            assert!(c.chars().all(|ch| ch.is_ascii_digit()));
-        }
-    }
 }

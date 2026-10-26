@@ -30,7 +30,6 @@ interface MockDevice extends Device {
 }
 const devices: MockDevice[] = [{ id: 1, driverId: 2, token: "mock-jess-phone", label: "Pixel (Android phone)", createdAt: NOW - 6 * 86_400_000, lastSeen: NOW - 3_600_000 }];
 let nextDevice = 2;
-const pairCodes = new Map<number, { code: string; until: number }>();
 
 /** In the mock, a wide window is "the PC" (can manage everyone) and a phone-sized one is a phone. */
 const isLocal = () => !window.matchMedia("(max-width: 640px)").matches;
@@ -350,12 +349,7 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
   if (p === "/me/pair") {
     const d = drivers.find((x) => x.id === body.driverId);
     if (!d) throw new ApiError("no such driver", undefined, 400);
-    if (claimed(d.id)) {
-      const entry = pairCodes.get(d.id);
-      if (!body.code) throw new ApiError("this driver already has a phone: ask for a pairing code", "codeNeeded", 403);
-      if (!entry || entry.until < Date.now() || entry.code !== String(body.code).trim()) throw new ApiError("that code is wrong or has run out", "badCode", 403);
-      pairCodes.delete(d.id);
-    }
+    if (claimed(d.id) && !body.confirmed) throw new ApiError("this driver is already signed in on another device", "alreadySignedIn", 409);
     const t = `mock-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
     devices.push({ id: nextDevice++, driverId: d.id, token: t, label: isLocal() ? "Browser" : "Phone", createdAt: Date.now(), lastSeen: Date.now() });
     emit({ type: "driversChanged" });
@@ -368,19 +362,11 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
     return ok(i >= 0);
   }
   if ((r = m(/^\/drivers\/(\d+)\/profile$/))) return ok(driverProfile(+r[1]));
-  if ((r = m(/^\/drivers\/(\d+)\/pair-code$/))) {
-    if (claimed(+r[1])) mayManage(+r[1], token);
-    const code = String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0");
-    const until = Date.now() + 5 * 60_000;
-    pairCodes.set(+r[1], { code, until });
-    return ok({ code, expiresAt: until });
-  }
   if ((r = m(/^\/drivers\/(\d+)\/devices$/))) {
     mayManage(+r[1], token);
     if (method === "DELETE") {
       const before = devices.length;
       for (let i = devices.length - 1; i >= 0; i--) if (devices[i].driverId === +r[1]) devices.splice(i, 1);
-      pairCodes.delete(+r[1]);
       emit({ type: "driversChanged" });
       return ok(before - devices.length);
     }

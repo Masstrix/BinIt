@@ -194,3 +194,17 @@ block of `crates/tt-core/rewards.json`:
   first run marks challenges that had already ended as settled without paying, so old contests do not suddenly hand out coins.
 * Not built: a bigger or smaller reward for one particular challenge (a per-challenge multiplier), and an overlay
   celebration when a payout lands.
+
+## Status: signing in on a second device asks "are you sure?" (2026-10-27)
+
+The one-time pairing code is gone. A phone or browser signs in by picking a driver on its own full-screen sign-in.
+
+* A driver nobody is signed in as is just taken. One who is already signed in on another device answers `alreadySignedIn`
+  (HTTP 409) until the request is repeated with `confirmed: true`; the sign-in screen shows "<name> is already signed in" with
+  "That's me, sign in" and Back. Then **both devices stay signed in**: a driver can have any number of devices.
+* Each browser keeps its own token (in its local storage), so a laptop's browser, a phone's browser and a private window are
+  each a device. Logging out only forgets that device. Clearing browser data or opening the page at a different address
+  (an IP versus a host name) starts as a new device, which signs in again the same way.
+* This trades safety for ease: anyone on the network can sign in as anyone after one tap, and then spend that driver's coins
+  or change their look. The desktop app's Connections list (on a driver's profile) shows every device and can sign one or
+  all of them out (a lost phone, or someone who took the wrong name).

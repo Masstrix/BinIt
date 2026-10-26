@@ -449,7 +449,7 @@ export const deviceToken = {
   },
 };
 
-/** An error from the server; `code` says what to do about it ("codeNeeded" when a pairing code is wanted). */
+/** An error from the server; `code` says what to do about it ("alreadySignedIn" when the driver is signed in on another device and the person should be asked first). */
 export class ApiError extends Error {
   constructor(message: string, readonly code?: string, readonly status?: number) {
     super(message);
@@ -488,9 +488,9 @@ export const api = {
   setLook: (id: DriverId, look: Look) => request<Driver>("PUT", `/drivers/${id}/look`, look),
   me: () => request<Me>("GET", "/me"),
   /** Pairs this phone with a driver. A driver who already has a phone needs a `code` from the PC or that phone. */
-  pair: (driverId: DriverId, code?: string) => request<{ token: string; driver: Driver }>("POST", "/me/pair", { driverId, code }),
+  /** Signs this device in as a driver. A driver already signed in elsewhere answers "alreadySignedIn" until `confirmed` is set. */
+  pair: (driverId: DriverId, confirmed = false) => request<{ token: string; driver: Driver }>("POST", "/me/pair", { driverId, confirmed }),
   logout: () => request<boolean>("POST", "/me/logout"),
-  pairCode: (id: DriverId) => request<{ code: string; expiresAt: number }>("POST", `/drivers/${id}/pair-code`),
   driverDevices: (id: DriverId) => request<Device[]>("GET", `/drivers/${id}/devices`),
   signOutDriver: (id: DriverId) => request<number>("DELETE", `/drivers/${id}/devices`),
   signOutDevice: (id: number) => request<boolean>("DELETE", `/devices/${id}`),

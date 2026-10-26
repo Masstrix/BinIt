@@ -987,7 +987,7 @@ fn the_first_phone_claims_a_driver_and_is_recognised_afterwards() {
     let sam = tt.add_driver("Sam", None).unwrap();
     assert!(!tt.driver_is_claimed(sam.id).unwrap());
 
-    let (token, driver) = tt.pair_device(sam.id, None, "iPhone").unwrap();
+    let (token, driver) = tt.pair_device(sam.id, false, "iPhone").unwrap();
     assert_eq!(driver.id, sam.id);
     assert!(tt.driver_is_claimed(sam.id).unwrap());
 
@@ -997,45 +997,41 @@ fn the_first_phone_claims_a_driver_and_is_recognised_afterwards() {
 }
 
 #[test]
-fn a_second_phone_needs_a_one_time_code_and_the_code_works_once() {
+fn a_driver_signed_in_elsewhere_asks_are_you_sure_and_then_both_devices_stay_in() {
     let tt = BinIt::in_memory().unwrap();
     let sam = tt.add_driver("Sam", None).unwrap();
-    tt.pair_device(sam.id, None, "iPhone").unwrap();
+    let (first, _) = tt.pair_device(sam.id, false, "iPhone").unwrap();
 
-    let err = tt.pair_device(sam.id, None, "Android").unwrap_err();
-    assert_eq!(err.downcast_ref::<pairing::PairError>(), Some(&pairing::PairError::CodeNeeded));
-    let err = tt.pair_device(sam.id, Some("000000"), "Android").unwrap_err();
-    assert_eq!(err.downcast_ref::<pairing::PairError>(), Some(&pairing::PairError::BadCode));
+    let err = tt.pair_device(sam.id, false, "Laptop").unwrap_err();
+    assert_eq!(err.downcast_ref::<pairing::PairError>(), Some(&pairing::PairError::AlreadySignedIn));
+    assert_eq!(tt.devices().unwrap().iter().filter(|d| d.driver_id == sam.id).count(), 1, "asking changes nothing");
 
-    let (code, _) = tt.new_pair_code(sam.id).unwrap();
-    // A code for one driver is no good for another.
-    let jess = tt.add_driver("Jess", None).unwrap();
-    tt.pair_device(jess.id, None, "Pixel").unwrap();
-    assert!(tt.pair_device(jess.id, Some(&code), "Android").is_err());
-
-    assert!(tt.pair_device(sam.id, Some(&code), "Android").is_ok());
+    let (second, _) = tt.pair_device(sam.id, true, "Laptop").unwrap();
     assert_eq!(tt.devices().unwrap().iter().filter(|d| d.driver_id == sam.id).count(), 2);
-    assert!(tt.pair_device(sam.id, Some(&code), "Another").is_err(), "a code is used up");
+    assert!(tt.device_for_token(&first).unwrap().is_some(), "the first device is still signed in");
+    assert!(tt.device_for_token(&second).unwrap().is_some());
+    // Confirming for a driver nobody is signed in as is fine too.
+    let jess = tt.add_driver("Jess", None).unwrap();
+    assert!(tt.pair_device(jess.id, true, "Pixel").is_ok());
 }
 
 #[test]
 fn logging_out_forgets_the_phone_and_signing_everyone_out_frees_the_driver() {
     let tt = BinIt::in_memory().unwrap();
     let sam = tt.add_driver("Sam", None).unwrap();
-    let (token, _) = tt.pair_device(sam.id, None, "iPhone").unwrap();
+    let (token, _) = tt.pair_device(sam.id, false, "iPhone").unwrap();
 
     assert!(tt.unpair_token(&token).unwrap());
     assert!(tt.device_for_token(&token).unwrap().is_none());
     assert!(!tt.unpair_token(&token).unwrap(), "already logged out");
     assert!(!tt.driver_is_claimed(sam.id).unwrap());
 
-    let (a, _) = tt.pair_device(sam.id, None, "iPhone").unwrap();
-    let (code, _) = tt.new_pair_code(sam.id).unwrap();
-    tt.pair_device(sam.id, Some(&code), "Android").unwrap();
+    let (a, _) = tt.pair_device(sam.id, false, "iPhone").unwrap();
+    tt.pair_device(sam.id, true, "Android").unwrap();
     assert_eq!(tt.remove_driver_devices(sam.id).unwrap(), 2);
     assert!(tt.device_for_token(&a).unwrap().is_none());
-    // Free again: the next phone to ask claims the driver without a code.
-    assert!(tt.pair_device(sam.id, None, "New phone").is_ok());
+    // Free again: the next phone to ask claims the driver without being asked.
+    assert!(tt.pair_device(sam.id, false, "New phone").is_ok());
 }
 
 // ---- XP, coins and the profile ----------------------------------------------------------------

@@ -589,8 +589,6 @@ h2 { font-size: 22px; line-height: 1.2; }
   .you-best { background: var(--panel); }
 }
 .code-input { text-align: center; font-size: 28px; letter-spacing: 0.3em; min-height: 60px; }
-.pair-code { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px; border-radius: 22px; background: var(--tint); color: var(--peri-1); text-align: center; }
-.pair-code-digits { font-size: 40px; line-height: 1.1; font-weight: 500; letter-spacing: 0.06em; color: var(--text); }
 
 /* Phones (office network page): a banner on top, four tabs along the bottom in thumb reach, normal page scrolling. */
 @media (max-width: 640px) {
