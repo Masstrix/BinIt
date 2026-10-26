@@ -28,7 +28,7 @@ export const WIDGETS: Record<WidgetId, { label: string; description: string; com
   pb: { label: "Personal best", description: "Their best lap on this track and car", compact: true },
   challenge: { label: "Challenge position", description: "P2 +0.204 in the running challenge", compact: true },
   timing: { label: "Live timing", description: "Delta to PB and a purple / green / yellow bar per sector", compact: false },
-  standings: { label: "Challenge top 3", description: "Mini podium for the running challenge", compact: false },
+  standings: { label: "Challenge top 3", description: "The running challenge as a mini podium, with the next places listed under it if you like", compact: false },
   leaderboard: { label: "Track leaderboard", description: "Top 5 on this track and car, plus where the driver is", compact: false },
   tower: { label: "Gap tower", description: "The top few drivers and their gaps, in a column or a row depending on where it sits", compact: false },
   qr: { label: "Phone QR code", description: "Scan to open Bin It on a phone: pick the driver, see the standings", compact: false },
@@ -37,6 +37,10 @@ export const WIDGETS: Record<WidgetId, { label: string; description: string; com
 
 /** The styles a widget comes in, first one the default. A widget not listed has just one. */
 export const WIDGET_STYLES: Partial<Record<WidgetId, { id: string; label: string; hint: string }[]>> = {
+  standings: [
+    { id: "podium", label: "Podium", hint: "The top three on a mini podium" },
+    { id: "list", label: "Podium + list", hint: "The podium with the next places listed under it, with their gaps" },
+  ],
   timing: [
     { id: "pb", label: "PB", hint: "Always against your own best lap" },
     { id: "best", label: "Leader", hint: "Always against the fastest lap anyone has set here" },

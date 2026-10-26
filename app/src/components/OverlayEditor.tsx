@@ -583,7 +583,7 @@ export function OverlayEditor() {
 /** One widget on its own, with example data, for the tray. */
 function WidgetPreview({ w, data, styles }: { w: WidgetId; data: OverlayData; styles?: OverlayLayout["styles"] }) {
   if (WIDGETS[w].compact) return <StripCard items={[w]} data={data} />;
-  if (w === "standings") return <StandingsCard data={data} />;
+  if (w === "standings") return <StandingsCard data={data} mode={styleOf({ styles }, "standings")} />;
   if (w === "timing") return <TimingCard data={data} mode={styleOf({ styles }, "timing")} />;
   if (w === "leaderboard") return <LeaderboardCard data={data} />;
   // As a row, so the whole of it fits the tray's small preview whichever style it is in.

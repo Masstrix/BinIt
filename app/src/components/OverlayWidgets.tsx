@@ -27,6 +27,10 @@ export interface OverlayData {
   position: number | null;
   gapMs: number | null;
   top3: { name: string; color: string; timeMs: number }[];
+  /** The running challenge's top five (and the driver's own row when outside them), for the podium + list style. */
+  challengeTop: { position: number; name: string; color: string; timeMs: number; gapMs: number; isSeat: boolean; driverId?: number | null }[];
+  /** When the running challenge ends (null = no end). */
+  challengeEndsAt: number | null;
   /** "Mount Panorama · GP" style label for the track leaderboard. */
   comboLabel: string | null;
   /** The game being played, so the wording can follow it (laps or stages). */
@@ -75,6 +79,8 @@ export function useOverlayData(): OverlayData {
   });
   const comboTop = (comboBoard ?? []).slice(0, 5).map(ranked);
   if (pb && pb.position > 5) comboTop.push(ranked(pb));
+  const challengeTop = board.slice(0, 5).map(ranked);
+  if (standing && standing.position > 5) challengeTop.push(ranked(standing));
   return {
     driverName: seat?.name ?? "Guest",
     driverColor: seat?.color ?? "#8F99B3",
@@ -83,6 +89,8 @@ export function useOverlayData(): OverlayData {
     position: standing?.position ?? null,
     gapMs: standing?.gapMs ?? null,
     top3: board.slice(0, 3).map(named),
+    challengeTop,
+    challengeEndsAt: challenge?.endsAt ?? null,
     comboLabel: session ? `${trackName(session.track, session.layout)}` : null,
     game: session?.game ?? null,
     comboTop,
@@ -108,6 +116,14 @@ export const MOCK_DATA: OverlayData = {
     { name: "Sam", color: "#FF8A4C", timeMs: 102318 },
     { name: "Priya", color: "#FF5FA2", timeMs: 102870 },
   ],
+  challengeTop: [
+    { position: 1, name: "Jess", color: "#2FA8FF", timeMs: 102114, gapMs: 0, isSeat: false },
+    { position: 2, name: "Sam", color: "#FF8A4C", timeMs: 102318, gapMs: 204, isSeat: true },
+    { position: 3, name: "Priya", color: "#FF5FA2", timeMs: 102870, gapMs: 756, isSeat: false },
+    { position: 4, name: "Tom", color: "#4FD39A", timeMs: 103555, gapMs: 1441, isSeat: false },
+    { position: 5, name: "Alex", color: "#FFC93C", timeMs: 104020, gapMs: 1906, isSeat: false },
+  ],
+  challengeEndsAt: Date.now() + (2 * 24 + 4) * 3600_000,
   comboLabel: "Imola · GP",
   game: "acevo",
   comboTop: [
@@ -214,7 +230,49 @@ export function StripCard({ items, data, itemProps }: { items: WidgetId[]; data:
   );
 }
 
-export function StandingsCard({ data }: { data: OverlayData }) {
+/** One place in a ranking: used by the track leaderboard and the challenge list so they look alike. */
+function RankRow({ position, name, color, seed, right, isSeat, rightColor }: { position: number; name: string; color: string; seed?: string | number; right: string; isSeat: boolean; rightColor?: string }) {
+  const placeColour = position === 1 ? "#FFE14D" : position === 3 ? "#FF8A4C" : "var(--muted)";
+  return (
+    <span
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        minHeight: 36,
+        padding: "0 8px",
+        margin: "0 -8px",
+        borderRadius: 12,
+        background: isSeat ? "var(--tint)" : "transparent",
+        color: isSeat ? "var(--peri-1)" : "var(--text)",
+      }}
+    >
+      <span style={{ font: "600 12px var(--font-mono)", width: 14, color: isSeat ? "var(--peri-1)" : placeColour }}>{position}</span>
+      <Helmet color={color} size={26} seed={seed ?? name} />
+      <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: isSeat ? 700 : 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+      <span className="mono" style={{ fontSize: 13, color: rightColor }}>{right}</span>
+    </span>
+  );
+}
+
+/** "2d 04h" / "3h 12m": how long a challenge has left, short enough for a chip. */
+function timeLeft(until: number, now = Date.now()): string {
+  const s = Math.max(0, Math.floor((until - now) / 1000));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return d > 0 ? `${d}d ${String(h).padStart(2, "0")}h` : `${h}h ${String(m).padStart(2, "0")}m`;
+}
+
+export function StandingsCard({ data, mode }: { data: OverlayData; mode?: string }) {
+  const [, redraw] = useState(0);
+  // The countdown only changes by the minute.
+  useEffect(() => {
+    if (data.challengeEndsAt == null) return;
+    const t = window.setInterval(() => redraw((n) => n + 1), 30_000);
+    return () => window.clearInterval(t);
+  }, [data.challengeEndsAt]);
+  const below = mode === "list" ? data.challengeTop.filter((r) => r.position > 3) : [];
   // Second, first, third, left to right: the winner's step is the tallest.
   const steps = [
     { place: 2, h: 34 },
@@ -233,6 +291,11 @@ export function StandingsCard({ data }: { data: OverlayData }) {
             {data.challengeName ?? "No challenge running"}
           </span>
         </span>
+        {data.challengeEndsAt != null && (
+          <span style={{ flex: "none", font: "500 10px var(--font-mono)", padding: "3px 7px", borderRadius: 999, background: "var(--panel-2)", color: "var(--muted)", whiteSpace: "nowrap" }}>
+            {timeLeft(data.challengeEndsAt)}
+          </span>
+        )}
       </span>
       {data.top3.length === 0 ? (
         <span className="muted" style={{ fontSize: 13 }}>No {words(data.game).laps} yet</span>
@@ -257,6 +320,16 @@ export function StandingsCard({ data }: { data: OverlayData }) {
               </span>
             );
           })}
+        </span>
+      )}
+      {below.length > 0 && (
+        <span style={{ display: "flex", flexDirection: "column", borderTop: "1px solid var(--line)", paddingTop: 6 }}>
+          {below.map((r, i) => (
+            <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
+              {i > 0 && r.position - below[i - 1].position > 1 && <span style={{ height: 1, background: "var(--line)", margin: "4px 0" }} />}
+              <RankRow position={r.position} name={r.name} color={r.color} seed={r.driverId ?? r.name} right={`+${(r.gapMs / 1000).toFixed(3)}`} rightColor="var(--muted)" isSeat={r.isSeat} />
+            </span>
+          ))}
         </span>
       )}
     </div>
@@ -636,7 +709,6 @@ export function QrCard({ data }: { data: OverlayData }) {
 
 /** Top of the leaderboard for what's being driven right now, independent of challenges. */
 export function LeaderboardCard({ data }: { data: OverlayData }) {
-  const placeColour = (n: number) => (n === 1 ? "#FFE14D" : n === 3 ? "#FF8A4C" : "var(--muted)");
   return (
     <div style={{ ...card, borderRadius: 28, padding: "14px 16px", width: 260, display: "flex", flexDirection: "column" }}>
       <span style={{ font: "500 11px var(--font-mono)", letterSpacing: "0.08em", textTransform: "uppercase", color: "#2FA8FF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -649,24 +721,7 @@ export function LeaderboardCard({ data }: { data: OverlayData }) {
         {data.comboTop.map((r, i) => (
           <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
             {i === 5 && <span style={{ height: 1, background: "var(--line)", margin: "4px 0" }} />}
-            <span
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                minHeight: 36,
-                padding: "0 8px",
-                margin: "0 -8px",
-                borderRadius: 12,
-                background: r.isSeat ? "var(--tint)" : "transparent",
-                color: r.isSeat ? "var(--peri-1)" : "var(--text)",
-              }}
-            >
-              <span style={{ font: "600 12px var(--font-mono)", width: 14, color: r.isSeat ? "var(--peri-1)" : placeColour(r.position) }}>{r.position}</span>
-              <Helmet color={r.color} size={26} seed={r.driverId ?? r.name} />
-              <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: r.isSeat ? 700 : 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
-              <span className="mono" style={{ fontSize: 13, color: r.position === 1 && !r.isSeat ? "var(--mint)" : undefined }}>{lapTime(r.timeMs)}</span>
-            </span>
+            <RankRow position={r.position} name={r.name} color={r.color} seed={r.driverId ?? r.name} right={lapTime(r.timeMs)} rightColor={r.position === 1 && !r.isSeat ? "var(--mint)" : undefined} isSeat={r.isSeat} />
           </span>
         ))}
       </span>
@@ -803,7 +858,7 @@ export function SectionWidgets({
     <>
       {groups.map((g) => {
         if (Array.isArray(g)) return <StripCard key={g.join()} items={g} data={data} itemProps={itemProps} />;
-        if (g === "standings") return wrap(g, <StandingsCard data={data} />);
+        if (g === "standings") return wrap(g, <StandingsCard data={data} mode={styleOf({ styles }, "standings")} />);
         if (g === "timing") return wrap(g, <TimingCard data={data} mode={styleOf({ styles }, "timing")} />);
         if (g === "leaderboard") return wrap(g, <LeaderboardCard data={data} />);
         if (g === "tower") {

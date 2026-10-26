@@ -895,7 +895,7 @@ h2 { font-size: 22px; line-height: 1.2; }
   .ed-zoom-hint { display: block; }
 }
 .ed-card { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 14px; }
-.ed-preview { height: 92px; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 10px; background: #2B3138; }
+.ed-preview { min-height: 92px; padding: 6px 0; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 10px; background: #2B3138; }
 .ed-item { touch-action: none; }
 .ed-handle { display: none; touch-action: none; cursor: grab; font-size: 22px; line-height: 1; padding: 6px 4px; color: var(--muted); user-select: none; }
 .ed-ghost {
