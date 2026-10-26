@@ -49,6 +49,13 @@ const ANCHOR_NAMES: Record<Anchor, string> = {
   "bottom-right": "Bottom right",
 };
 
+/** Where a section grows from when it is drawn bigger: the corner or edge it is pinned to. */
+function growFrom(a: Anchor): string {
+  const x = a.endsWith("left") ? "0%" : a.endsWith("right") ? "100%" : "50%";
+  const y = a.startsWith("top") ? "0%" : a.startsWith("bottom") ? "100%" : "50%";
+  return `${x} ${y}`;
+}
+
 const WIDGET_ORDER = Object.keys(WIDGETS) as WidgetId[];
 
 /** Tracks a CSS media query (phones, touch screens). */
@@ -287,7 +294,7 @@ export function OverlayEditor() {
   const showZones = !!dragging || !!selected;
 
   /** The overlay as it would look on the PC's screen, scaled to `sc`; `props` makes the widgets draggable. */
-  const renderScene = (sc: number, props?: ItemProps) => (
+  const renderScene = (sc: number, props?: ItemProps, boost = 1) => (
     <div style={{ position: "absolute", left: 0, top: 0, width: VIRTUAL_W, height: VIRTUAL_H, transform: `scale(${sc})`, transformOrigin: "0 0", zIndex: 2, pointerEvents: "none" }}>
       <GameBackdrop />
       {ANCHORS.map((a) => {
@@ -295,7 +302,10 @@ export function OverlayEditor() {
         if (!items?.length) return null;
         return (
           <div key={a} data-anchor={a} style={{ ...anchorStyle(a, profile), pointerEvents: "auto" }}>
-            <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={props} anchor={a} styles={layout.styles} />
+            {/* On a phone the widgets are drawn bigger than life so they can be read; each grows away from its own edge. */}
+            <div style={boost === 1 ? undefined : { transform: `scale(${boost})`, transformOrigin: growFrom(a) }}>
+              <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={props} anchor={a} styles={layout.styles} />
+            </div>
           </div>
         );
       })}
@@ -373,7 +383,7 @@ export function OverlayEditor() {
             );
           })}
 
-        {renderScene(scale, itemProps)}
+        {renderScene(scale, itemProps, compact ? 2.4 : 1)}
 
         {/* Where the widget will land. */}
         {dragging && target?.bar && (
@@ -393,7 +403,7 @@ export function OverlayEditor() {
         <div className="ed-zoom" role="dialog" aria-label="Overlay preview" onClick={() => setZoomed(false)}>
           <div className="ed-zoom-turn">
             <div ref={zoomFrame} className="ed-zoom-frame" style={{ ["--aspect" as string]: ASPECT, aspectRatio: `${VIRTUAL_W} / ${VIRTUAL_H}` }}>
-              {renderScene(zoomScale)}
+              {renderScene(zoomScale, undefined, 1.5)}
             </div>
           </div>
           <button type="button" className="btn ed-zoom-close" onClick={() => setZoomed(false)}>Close</button>
