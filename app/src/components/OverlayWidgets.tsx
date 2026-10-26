@@ -280,7 +280,7 @@ export function StandingsCard({ data, mode }: { data: OverlayData; mode?: string
     { place: 3, h: 24 },
   ];
   return (
-    <div style={{ ...card, borderRadius: 28, padding: "12px 14px", width: 216, display: "flex", flexDirection: "column", gap: 10 }}>
+    <div style={{ ...card, borderRadius: 28, padding: "14px 16px", width: 260, display: "flex", flexDirection: "column", gap: 12 }}>
       <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
         <span style={{ flex: "none", width: 28, height: 28, borderRadius: 10, background: "rgba(255,201,60,0.15)", display: "grid", placeItems: "center" }}>
           <Trophy size={16} />
@@ -288,14 +288,14 @@ export function StandingsCard({ data, mode }: { data: OverlayData; mode?: string
         <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2, lineHeight: 1.15 }}>
           {/* The time left shares the caption's line, so the name below can use the whole width. */}
           <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-            <span style={{ font: "500 9px var(--font-mono)", letterSpacing: "0.1em", color: "var(--muted)" }}>CHALLENGE</span>
+            <span style={{ font: "500 10px var(--font-mono)", letterSpacing: "0.1em", color: "var(--muted)" }}>CHALLENGE</span>
             {data.challengeEndsAt != null && (
-              <span style={{ font: "500 10px var(--font-mono)", padding: "2px 7px", borderRadius: 999, background: "var(--panel-2)", color: "var(--muted)", whiteSpace: "nowrap" }}>
+              <span style={{ font: "600 12px var(--font-mono)", padding: "3px 10px", borderRadius: 999, background: "var(--panel-2)", color: "var(--text)", whiteSpace: "nowrap" }}>
                 {timeLeft(data.challengeEndsAt)}
               </span>
             )}
           </span>
-          <span style={{ font: "700 13px var(--font-display)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <span style={{ font: "700 14px var(--font-display)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {data.challengeName ?? "No challenge running"}
           </span>
         </span>
@@ -310,12 +310,12 @@ export function StandingsCard({ data, mode }: { data: OverlayData; mode?: string
               <span key={place} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
                 {r ? (
                   <>
-                    <Helmet color={r.color} size={32} seed={r.name} />
-                    <span style={{ fontSize: 11, fontWeight: 600, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
-                    <span className="mono" style={{ fontSize: 10, color: "var(--muted)" }}>{lapTime(r.timeMs)}</span>
+                    <Helmet color={r.color} size={38} seed={r.name} />
+                    <span style={{ fontSize: 12, fontWeight: 600, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+                    <span className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>{lapTime(r.timeMs)}</span>
                   </>
                 ) : (
-                  <span style={{ height: 32 }} />
+                  <span style={{ height: 38 }} />
                 )}
                 <span style={{ width: "100%", height: h, borderRadius: "12px 12px 0 0", background: r ? `${r.color}33` : "var(--panel-2)", display: "flex", justifyContent: "center", paddingTop: 4, font: "700 15px var(--font-display)" }}>
                   {place}
