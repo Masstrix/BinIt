@@ -299,6 +299,26 @@ impl Store {
         Ok(())
     }
 
+    /// Pays a finished challenge's board and marks it settled in one go, so it can never be paid twice. An empty
+    /// `payouts` just marks it (a challenge too small to pay, or one that ended before challenge rewards existed).
+    pub fn settle_challenge(&self, flag_key: &str, payouts: &[(DriverId, String, i64, i64)], at: Timestamp) -> Result<()> {
+        self.conn.execute_batch("BEGIN")?;
+        let done = (|| -> Result<()> {
+            self.set_setting(flag_key, Some("1"))?;
+            for (driver, kind, xp, coins) in payouts {
+                self.insert_point_event(*driver, kind, *xp, *coins, None, at)?;
+            }
+            Ok(())
+        })();
+        match done {
+            Ok(()) => Ok(self.conn.execute_batch("COMMIT")?),
+            Err(e) => {
+                let _ = self.conn.execute_batch("ROLLBACK");
+                Err(e)
+            }
+        }
+    }
+
     // ---- Garage ----------------------------------------------------------------
 
     pub fn set_look(&self, id: DriverId, look: &Look) -> Result<()> {

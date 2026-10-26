@@ -15,6 +15,12 @@ const KIND: Record<string, string> = { lap: "Clean lap", first: "First lap here"
 /** Ledger rows for a purchase carry the item: `buy:shell:aurora`. */
 function kindLabel(kind: string) {
   if (kind.startsWith("buy:")) return `Bought ${kind.split(":")[2] ?? "an item"}`;
+  if (kind.startsWith("challenge:")) {
+    // challenge:<place>:<name> or challenge:entry:<name>
+    const [, place, ...name] = kind.split(":");
+    const ordinal = ({ "1": "Won", "2": "2nd in", "3": "3rd in" } as Record<string, string>)[place] ?? (place === "entry" ? "Took part in" : `${place}th in`);
+    return `${ordinal} ${name.join(":")}`;
+  }
   return KIND[kind] ?? kind;
 }
 

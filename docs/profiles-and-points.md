@@ -174,3 +174,20 @@ the user's data folder to go stale.
   the price paid (no refunds), and a smaller `levelXpStep` raises everyone's level at once while a larger one lowers it
   (a driver can then own items above their level; they keep them).
 * The mock server (`?mock`) has its own copy of the prices in `app/src/mock/data.ts`; keep it in step when testing the UI.
+
+## Status: challenges pay out (2026-10-26)
+
+When a challenge ends (its end time passes, or it is ended by hand) the server pays its board once, from the `challenge`
+block of `crates/tt-core/rewards.json`:
+
+* `placings`: XP and coins for 1st, 2nd, 3rd... in order. `participation`: everyone else with a counted lap.
+* `minEntrants`: a challenge with fewer drivers than this pays nothing (nobody farms one alone). Guest laps never count.
+* **Scaling with the field:** every driver beyond `minEntrants` adds `scalePerEntrant` (0.1 is 10%) to every payout,
+  up to `maxScale` times the base. So with the defaults a six-driver challenge pays 1.4 times the base amounts.
+* Rows go in the ledger as `challenge:<place>:<name>` or `challenge:entry:<name>`, and show on the You page as "Won ...",
+  "2nd in ...", "Took part in ...". A settled flag per challenge (`challenge_settled_<id>`) stops a second payment, and
+  deleting a challenge later does not take the coins back.
+* `BinIt::settle_challenges` runs at start and every 30 seconds, and straight after a challenge is ended by hand. The very
+  first run marks challenges that had already ended as settled without paying, so old contests do not suddenly hand out coins.
+* Not built: a bigger or smaller reward for one particular challenge (a per-challenge multiplier), and an overlay
+  celebration when a payout lands.

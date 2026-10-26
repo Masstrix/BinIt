@@ -1086,7 +1086,7 @@ fn crossing_a_level_is_reported_once_and_the_daily_cap_stops_lap_farming() {
     let sam = tt.add_and_seat("Sam", None).unwrap();
     let mut level_ups = Vec::new();
     let mut paid = 0;
-    for i in 0..40 {
+    for i in 0..(progress::rewards().daily_lap_cap as u32 + 10) {
         let a = tt.record_lap(&lap(110_000 - i, true)).unwrap().awards;
         if let Some(l) = a.level_up {
             level_ups.push(l);
@@ -1142,11 +1142,13 @@ fn laps_from_before_points_existed_are_paid_once() {
     }
     tt.store().set_setting("points_backfilled_v1", None).unwrap();
     tt.store().backfill_points().unwrap();
-    // First lap (25 + 10), a personal best (10 + 50), then a plain lap (10).
-    assert_eq!(tt.profile(sam.id).unwrap().xp, 25 + 10 + 10 + 50 + 10);
+    // First lap, a personal best, then a plain lap: three clean laps plus the first-lap and best bonuses.
+    let rw = progress::rewards();
+    let expected = rw.first_lap.xp + 3 * rw.clean_lap.xp + rw.personal_best.xp;
+    assert_eq!(tt.profile(sam.id).unwrap().xp, expected);
     // Running it again changes nothing.
     tt.store().backfill_points().unwrap();
-    assert_eq!(tt.profile(sam.id).unwrap().xp, 105);
+    assert_eq!(tt.profile(sam.id).unwrap().xp, expected);
 }
 
 // ---- Garage shop ---------------------------------------------------------------------------------
@@ -1256,4 +1258,69 @@ fn a_decal_can_be_painted_one_of_the_preset_colours() {
     // No decal, no colour.
     let bare = tt.set_look(id, &Look { decal_color: Some("#FF5D5D".into()), ..Look::default() }).unwrap();
     assert_eq!(bare.look.decal_color, None);
+}
+
+// ---- Challenge rewards ----------------------------------------------------------------------------
+
+fn entry(position: u32, driver: Option<DriverId>) -> LeaderboardEntry {
+    LeaderboardEntry { position, driver_id: driver, lap_id: 0, time_ms: 100_000 + position * 1000, gap_ms: 0, car: String::new(), lap_count: 1, set_at: 0, sectors_ms: vec![], best_sectors_ms: vec![] }
+}
+
+#[test]
+fn challenge_payouts_follow_placings_and_grow_with_the_field() {
+    use crate::progress::{ChallengePay, Pay, challenge_payouts};
+    let rules = ChallengePay {
+        placings: vec![Pay { xp: 300, coins: 100 }, Pay { xp: 200, coins: 60 }],
+        participation: Pay { xp: 20, coins: 5 },
+        min_entrants: 2,
+        scale_per_entrant: 0.5,
+        max_scale: 2.0,
+    };
+    // Two drivers: base amounts. A guest lap is never paid and does not count as an entrant.
+    let two = challenge_payouts(&rules, "Hot Lap", &[entry(1, Some(1)), entry(2, Some(2)), entry(3, None)]);
+    assert_eq!(two, vec![(1, "challenge:1:Hot Lap".to_string(), 300, 100), (2, "challenge:2:Hot Lap".to_string(), 200, 60)]);
+    // Three drivers: +50%, and the third just takes part.
+    let three = challenge_payouts(&rules, "Hot Lap", &[entry(1, Some(1)), entry(2, Some(2)), entry(3, Some(3))]);
+    assert_eq!((three[0].2, three[0].3), (450, 150));
+    assert_eq!(three[2], (3, "challenge:entry:Hot Lap".to_string(), 30, 8));
+    // A big field stops at the cap.
+    let many: Vec<_> = (1..=9).map(|i| entry(i, Some(i64::from(i)))).collect();
+    assert_eq!(challenge_payouts(&rules, "x", &many)[0].2, 600);
+    // Alone: nothing.
+    assert!(challenge_payouts(&rules, "Hot Lap", &[entry(1, Some(1))]).is_empty());
+}
+
+#[test]
+fn a_finished_challenge_pays_once_and_old_ones_are_left_alone() {
+    let tt = BinIt::in_memory().unwrap();
+    let ids: Vec<DriverId> = ["Sam", "Jess", "Kim"].iter().map(|n| tt.add_driver(n, None).unwrap().id).collect();
+    let now = now_ms();
+    let combo = combo_of(&session("Porsche 992 GT3 R"));
+    let new = |name: &str, starts: Timestamp, ends: Timestamp| NewChallenge {
+        name: name.into(), game: combo.game.clone(), track: combo.track.clone(), layout: combo.layout.clone(), car: None,
+        starts_at: Some(starts), ends_at: Some(ends), valid_only: true, max_laps: None, prizes: vec![],
+    };
+    // A contest that ended before rewards existed: marked, never paid.
+    let old = tt.create_challenge(&new("Old", now - 9000, now - 8000)).unwrap();
+    for (i, id) in ids.iter().enumerate() {
+        tt.record_lap_for(&lap(100_000 + i as u32 * 1000, true), now - 8500, Some(Some(*id))).unwrap();
+    }
+    assert_eq!(tt.settle_challenges().unwrap(), 0, "the first run only marks what had already ended");
+    assert_eq!(tt.profile(ids[0]).unwrap().recent.iter().filter(|e| e.kind.starts_with("challenge:")).count(), 0);
+    let _ = old;
+
+    // One that ends later is paid, once.
+    tt.create_challenge(&new("Hot Lap", now - 5000, now - 1000)).unwrap();
+    for (i, id) in ids.iter().enumerate() {
+        tt.record_lap_for(&lap(100_000 + i as u32 * 1000, true), now - 3000, Some(Some(*id))).unwrap();
+    }
+    let before: Vec<i64> = ids.iter().map(|id| tt.profile(*id).unwrap().coins).collect();
+    assert_eq!(tt.settle_challenges().unwrap(), 3);
+    assert_eq!(tt.settle_challenges().unwrap(), 0, "never paid twice");
+    let after: Vec<i64> = ids.iter().map(|id| tt.profile(*id).unwrap().coins).collect();
+    let rules = &progress::rewards().challenge;
+    let scale = rules.scale(3);
+    assert_eq!(after[0] - before[0], (rules.placings[0].coins as f64 * scale).round() as i64);
+    assert_eq!(after[2] - before[2], (rules.placings[2].coins as f64 * scale).round() as i64);
+    assert!(tt.profile(ids[0]).unwrap().recent.iter().any(|e| e.kind == "challenge:1:Hot Lap"));
 }

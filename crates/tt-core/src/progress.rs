@@ -19,6 +19,30 @@ pub struct Pay {
     pub coins: i64,
 }
 
+/// What a challenge pays when it ends (`rewards.json`, `challenge`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChallengePay {
+    /// 1st, 2nd, 3rd... in order.
+    pub placings: Vec<Pay>,
+    /// Everyone else with a counted lap.
+    pub participation: Pay,
+    /// A challenge with fewer drivers than this pays nothing, so one driver cannot farm it alone.
+    pub min_entrants: u32,
+    /// Every driver beyond `min_entrants` makes each payout this much bigger (0.1 is 10%)...
+    pub scale_per_entrant: f64,
+    /// ...up to this multiple of the base payout.
+    pub max_scale: f64,
+}
+
+impl ChallengePay {
+    /// How much the field size multiplies the payouts.
+    pub fn scale(&self, entrants: u32) -> f64 {
+        let extra = f64::from(entrants.saturating_sub(self.min_entrants));
+        (1.0 + self.scale_per_entrant * extra).min(self.max_scale)
+    }
+}
+
 /// One thing the shop sells (`rewards.json`). Free items (price 0) belong to everyone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,7 +57,7 @@ pub struct ShopEntry {
 
 /// Everything that decides how fast XP and coins come in and what things cost. It is `crates/tt-core/rewards.json`,
 /// compiled into the app, so a balance change ships with the next update.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Rewards {
     /// A valid, timed lap.
@@ -49,6 +73,7 @@ pub struct Rewards {
     pub daily_lap_cap: i64,
     /// Each level costs this much more than the one before: with 100 it takes 100, 300, 600, 1000, 1500 XP in total.
     pub level_xp_step: i64,
+    pub challenge: ChallengePay,
     pub shop: Vec<ShopEntry>,
 }
 
@@ -61,6 +86,14 @@ impl Rewards {
         }
         self.daily_lap_cap = self.daily_lap_cap.max(0);
         self.level_xp_step = self.level_xp_step.max(1);
+        let c = &mut self.challenge;
+        for p in c.placings.iter_mut().chain(std::iter::once(&mut c.participation)) {
+            p.xp = p.xp.max(0);
+            p.coins = p.coins.max(0);
+        }
+        c.min_entrants = c.min_entrants.max(1);
+        c.scale_per_entrant = c.scale_per_entrant.max(0.0);
+        c.max_scale = c.max_scale.max(1.0);
         for e in &mut self.shop {
             e.price = e.price.max(0);
             e.min_level = e.min_level.max(1);
@@ -79,6 +112,28 @@ static RULES: LazyLock<Rewards> =
 /// The rules in force: `crates/tt-core/rewards.json` as it was when the app was built.
 pub fn rewards() -> &'static Rewards {
     &RULES
+}
+
+/// What each driver on a finished challenge's board is paid: `(driver, ledger kind, xp, coins)`. The kind is
+/// `challenge:<place>:<name>` for a placing and `challenge:entry:<name>` for taking part. Guest laps are never paid.
+pub fn challenge_payouts(rules: &ChallengePay, name: &str, board: &[crate::model::LeaderboardEntry]) -> Vec<(crate::model::DriverId, String, i64, i64)> {
+    let entrants = board.iter().filter(|e| e.driver_id.is_some()).count() as u32;
+    if entrants < rules.min_entrants {
+        return Vec::new();
+    }
+    let scale = rules.scale(entrants);
+    let scaled = |v: i64| (v as f64 * scale).round() as i64;
+    board
+        .iter()
+        .filter_map(|e| {
+            let driver = e.driver_id?;
+            let place = e.position as usize;
+            match rules.placings.get(place.wrapping_sub(1)) {
+                Some(p) if place >= 1 => Some((driver, format!("challenge:{place}:{name}"), scaled(p.xp), scaled(p.coins))),
+                _ => Some((driver, format!("challenge:entry:{name}"), scaled(rules.participation.xp), scaled(rules.participation.coins))),
+            }
+        })
+        .collect()
 }
 
 /// Total XP needed to reach `level` (level 1 is 0). Each level costs `level_xp_step` more than the one before.
@@ -128,7 +183,8 @@ mod tests {
     #[test]
     fn the_bundled_rules_parse_and_make_sense() {
         let r = rewards();
-        assert_eq!((r.clean_lap.xp, r.clean_lap.coins), (10, 1));
+        assert!(r.clean_lap.xp > 0 && r.clean_lap.coins > 0);
+        assert!(!r.challenge.placings.is_empty() && r.challenge.max_scale >= 1.0);
         assert!(r.daily_lap_cap > 0 && r.level_xp_step > 0);
         // Every item is in a known slot, once, and each slot has something free to start with.
         let mut seen = std::collections::HashSet::new();
@@ -145,10 +201,12 @@ mod tests {
     fn nonsense_values_are_pulled_back_into_range() {
         let json = r#"{ "cleanLap": { "xp": -5, "coins": -1 }, "firstLap": { "xp": 1, "coins": 1 }, "personalBest": { "xp": 1, "coins": 1 },
             "trackRecord": { "xp": 1, "coins": 1 }, "dailyLapCap": -3, "levelXpStep": 0,
+            "challenge": { "placings": [{ "xp": -1, "coins": 5 }], "participation": { "xp": 1, "coins": 1 }, "minEntrants": 0, "scalePerEntrant": -1, "maxScale": 0 },
             "shop": [{ "slot": "shell", "id": "x", "price": -9, "minLevel": 0 }] }"#;
         let r = Rewards::from_json(json).unwrap();
         assert_eq!((r.clean_lap.xp, r.clean_lap.coins, r.level_xp_step, r.daily_lap_cap), (0, 0, 1, 0));
         assert_eq!((r.shop[0].price, r.shop[0].min_level), (0, 1));
+        assert_eq!((r.challenge.placings[0].xp, r.challenge.min_entrants, r.challenge.scale_per_entrant, r.challenge.max_scale), (0, 1, 0.0, 1.0));
         assert!(Rewards::from_json("not json").is_err());
     }
 

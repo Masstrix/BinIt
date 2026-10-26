@@ -909,7 +909,42 @@ impl BinIt {
     pub fn end_challenge(&self, id: ChallengeId) -> Result<()> {
         self.store().set_challenge_end(id, Some(now_ms()))?;
         self.emit(AppEvent::ChallengesChanged);
+        self.settle_challenges()?;
         Ok(())
+    }
+
+    /// Pays every challenge that has ended and not been paid yet: see `progress::challenge_payouts`. Safe to call as
+    /// often as you like (each challenge is paid once). The first time it runs, challenges that had already ended are
+    /// marked settled without paying, so turning this on does not hand out coins for old contests.
+    pub fn settle_challenges(&self) -> Result<usize> {
+        const STARTED: &str = "challenge_rewards_started_v1";
+        let now = now_ms();
+        let mut paid = 0;
+        {
+            let store = self.store();
+            let first_run = store.setting(STARTED)?.is_none();
+            for c in store.challenges()?.iter().filter(|c| c.ends_at.is_some_and(|end| end <= now)) {
+                let flag = format!("challenge_settled_{}", c.id);
+                if store.setting(&flag)?.is_some() {
+                    continue;
+                }
+                let payouts = if first_run {
+                    Vec::new()
+                } else {
+                    let board = store.leaderboard(&challenge_query(c))?;
+                    progress::challenge_payouts(&progress::rewards().challenge, &c.name, &board)
+                };
+                store.settle_challenge(&flag, &payouts, c.ends_at.unwrap_or(now))?;
+                paid += payouts.len();
+            }
+            if first_run {
+                store.set_setting(STARTED, Some("1"))?;
+            }
+        }
+        if paid > 0 {
+            self.emit(AppEvent::ChallengesChanged);
+        }
+        Ok(paid)
     }
 
     pub fn delete_challenge(&self, id: ChallengeId) -> Result<()> {
