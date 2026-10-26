@@ -11,9 +11,9 @@ import { Crown, Helmet } from "./Helmet";
 import { QrCode } from "./QrCode";
 
 const card = {
-  borderRadius: 18,
-  background: "rgba(13,18,36,0.85)",
-  border: "1px solid rgba(169,174,255,0.25)",
+  borderRadius: 24,
+  background: "var(--panel)",
+  boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
 } as const;
 
 export interface OverlayData {
@@ -62,7 +62,7 @@ export function useOverlayData(): OverlayData {
   const standing = seat ? board.find((e) => e.driverId === seat.id) : undefined;
   const named = (e: LeaderboardEntry) => {
     const d = e.driverId != null ? drivers.get(e.driverId) : undefined;
-    return { name: d?.name ?? "Guest", color: d?.color ?? "#9AA3C7", timeMs: e.timeMs, driverId: e.driverId };
+    return { name: d?.name ?? "Guest", color: d?.color ?? "#8F99B3", timeMs: e.timeMs, driverId: e.driverId };
   };
   const ranked = (e: LeaderboardEntry) => ({
     ...named(e),
@@ -74,7 +74,7 @@ export function useOverlayData(): OverlayData {
   if (pb && pb.position > 5) comboTop.push(ranked(pb));
   return {
     driverName: seat?.name ?? "Guest",
-    driverColor: seat?.color ?? "#9AA3C7",
+    driverColor: seat?.color ?? "#8F99B3",
     pbMs: pb?.timeMs ?? null,
     challengeName: challenge?.name ?? null,
     position: standing?.position ?? null,
@@ -95,23 +95,23 @@ export function useOverlayData(): OverlayData {
 /** Example data so the layout editor always shows what every widget looks like. */
 export const MOCK_DATA: OverlayData = {
   driverName: "Sam",
-  driverColor: "#FF9F6B",
+  driverColor: "#FF8A4C",
   pbMs: 102318,
   challengeName: "Imola Hot Lap Week",
   position: 2,
   gapMs: 204,
   top3: [
-    { name: "Jess", color: "#4FC3FF", timeMs: 102114 },
-    { name: "Sam", color: "#FF9F6B", timeMs: 102318 },
-    { name: "Priya", color: "#FF7AC6", timeMs: 102870 },
+    { name: "Jess", color: "#2FA8FF", timeMs: 102114 },
+    { name: "Sam", color: "#FF8A4C", timeMs: 102318 },
+    { name: "Priya", color: "#FF5FA2", timeMs: 102870 },
   ],
   comboLabel: "Imola · GP",
   game: "acevo",
   comboTop: [
-    { position: 1, name: "Jess", color: "#4FC3FF", timeMs: 102114, gapMs: 0, isSeat: false },
-    { position: 2, name: "Sam", color: "#FF9F6B", timeMs: 102318, gapMs: 204, isSeat: true },
-    { position: 3, name: "Priya", color: "#FF7AC6", timeMs: 102870, gapMs: 756, isSeat: false },
-    { position: 4, name: "Tom", color: "#4BE3A6", timeMs: 103555, gapMs: 1441, isSeat: false },
+    { position: 1, name: "Jess", color: "#2FA8FF", timeMs: 102114, gapMs: 0, isSeat: false },
+    { position: 2, name: "Sam", color: "#FF8A4C", timeMs: 102318, gapMs: 204, isSeat: true },
+    { position: 3, name: "Priya", color: "#FF5FA2", timeMs: 102870, gapMs: 756, isSeat: false },
+    { position: 4, name: "Tom", color: "#4FD39A", timeMs: 103555, gapMs: 1441, isSeat: false },
     { position: 5, name: "Alex", color: "#FFC93C", timeMs: 104020, gapMs: 1906, isSeat: false },
   ],
   timing: {
@@ -179,7 +179,7 @@ function StripStat({ label, value, color, extra, icon }: { label: string; value:
 /** Driver / PB / challenge position, merged into one slim strip when they share a section. */
 export function StripCard({ items, data, itemProps }: { items: WidgetId[]; data: OverlayData; itemProps?: ItemProps }) {
   return (
-    <div style={{ ...card, display: "flex", alignItems: "center", gap: 14, padding: items[0] === "driver" ? "8px 16px 8px 8px" : "8px 16px", whiteSpace: "nowrap" }}>
+    <div style={{ ...card, borderRadius: 999, display: "flex", alignItems: "center", gap: 14, padding: items[0] === "driver" ? "8px 18px 8px 8px" : "8px 20px", whiteSpace: "nowrap" }}>
       {items.map((w, i) => (
         <span key={w} style={{ display: "flex", alignItems: "center", gap: 14 }}>
           {i > 0 && <span style={{ width: 1, height: 28, background: "var(--line)" }} />}
@@ -187,7 +187,7 @@ export function StripCard({ items, data, itemProps }: { items: WidgetId[]; data:
             {w === "driver" && (
               <>
                 <Helmet color={data.driverColor} size={40} seed={data.driverName} mood={data.lapInvalid ? "binned" : "focus"} />
-                <span style={{ font: "800 18px var(--font-display)" }}>{data.driverName}</span>
+                <span style={{ font: "700 20px var(--font-display)", letterSpacing: "-0.02em" }}>{data.driverName}</span>
                 <span className="kbd" style={{ background: "var(--line)", color: "var(--text-2)" }}>F8</span>
               </>
             )}
@@ -229,7 +229,7 @@ export function StandingsCard({ data }: { data: OverlayData }) {
   );
 }
 
-const SECTOR_COLOURS = { purple: "#C38BFF", green: "#4BE3A6", yellow: "#FFC93C", current: "#EEF0FF", pending: "#2A3456" };
+const SECTOR_COLOURS = { purple: "#B79BFF", green: "#4FD39A", yellow: "#FFC93C", current: "#E8EBF4", pending: "#262D3B" };
 
 /** Delta to the reference lap plus one bar per sector (purple / green / yellow). */
 export function TimingCard({ data }: { data: OverlayData }) {
@@ -245,17 +245,17 @@ export function TimingCard({ data }: { data: OverlayData }) {
   const d = t.deltaMs;
   const cut = data.lapInvalid;
   return (
-    <div style={{ ...card, padding: "10px 14px", minWidth: 240, display: "flex", flexDirection: "column", gap: 8, ...(cut ? { border: "1px solid rgba(255,107,138,0.7)", background: "rgba(48,14,28,0.88)" } : {}) }}>
+    <div style={{ ...card, padding: "10px 14px", minWidth: 240, display: "flex", flexDirection: "column", gap: 8, ...(cut ? { boxShadow: "inset 0 0 0 1.5px rgba(255,122,146,0.7), 0 8px 30px rgba(0,0,0,0.35)", background: "#2A1420" } : {}) }}>
       {cut && (
         <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, color: "#FF6B8A" }}>{data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : `${words(data.game).lap.toUpperCase()} INVALID`}</span>
-          <span style={{ fontSize: 11, color: "#FF8BA3", fontWeight: 600 }}>WON'T BE TIMED</span>
+          <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, color: "#FF7A92" }}>{data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : `${words(data.game).lap.toUpperCase()} INVALID`}</span>
+          <span style={{ fontSize: 11, color: "#FF7A92", fontWeight: 600 }}>WON'T BE TIMED</span>
         </span>
       )}
       <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, ...(cut ? { opacity: 0.55, textDecoration: "line-through" } : {}) }}>
         {t.reference ? (
           <>
-            <span className="mono" style={{ fontSize: 24, color: cut ? "#FF8BA3" : deltaColour(d) }}>{deltaText(d)}</span>
+            <span className="mono" style={{ fontSize: 24, color: cut ? "#FF7A92" : deltaColour(d) }}>{deltaText(d)}</span>
             <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>VS {t.reference.toUpperCase()}</span>
           </>
         ) : (
@@ -284,7 +284,7 @@ export function TimingCard({ data }: { data: OverlayData }) {
 }
 
 function deltaColour(ms: number | null) {
-  return ms === null ? "var(--muted)" : ms <= 0 ? "#4BE3A6" : "#FF6B8A";
+  return ms === null ? "var(--muted)" : ms <= 0 ? "#4FD39A" : "#FF7A92";
 }
 
 function deltaText(ms: number | null) {
@@ -319,7 +319,7 @@ export function GapTowerCard({ data, orientation = "vertical" }: { data: Overlay
       {r.position}
     </span>
   );
-  const seatStyle = (r: (typeof rows)[number]) => (r.isSeat ? { background: "rgba(255,159,107,0.2)", boxShadow: "inset 0 0 0 1px rgba(255,159,107,0.55)" } : {});
+  const seatStyle = (r: (typeof rows)[number]) => (r.isSeat ? { background: "var(--tint)", color: "var(--peri-1)" } : {});
   return (
     <div
       style={{
@@ -445,7 +445,7 @@ export function GapMonitorCard({ data, orientation = "vertical" }: { data: Overl
                 style={{
                   display: "block",
                   borderRadius: s * 0.3,
-                  boxShadow: c.isSeat ? "0 0 0 2px #0D1224, 0 0 0 4px var(--peach)" : "0 0 0 2px #0D1224",
+                  boxShadow: c.isSeat ? "0 0 0 2px #161B24, 0 0 0 4px var(--violet)" : "0 0 0 2px #161B24",
                 }}
               >
                 <Helmet color={c.color} size={s} seed={c.driverId ?? c.name} />
@@ -511,7 +511,7 @@ export function LeaderboardCard({ data }: { data: OverlayData }) {
               padding: "2px 6px",
               margin: "0 -6px",
               borderRadius: 8,
-              background: r.isSeat ? "rgba(255,159,107,0.18)" : undefined,
+              background: r.isSeat ? "var(--tint)" : undefined,
             }}
           >
             <span style={{ width: 18, fontWeight: 800, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}>{r.position}</span>
@@ -537,13 +537,13 @@ export interface Toast {
 
 export const TOAST_MS = 4000;
 const TONES: Record<Toast["tone"], { bg: string; fg: string; badge: string }> = {
-  pb: { bg: "#4BE3A6", fg: "#062A1C", badge: "PB" },
-  record: { bg: "#FFC93C", fg: "#2A1F00", badge: "REC" },
-  lead: { bg: "#FF9F6B", fg: "#2A1406", badge: "P1" },
-  cut: { bg: "#FF6B8A", fg: "#2A0610", badge: "CUT" },
-  lap: { bg: "#151C33", fg: "#EEF0FF", badge: "LAP" },
-  out: { bg: "#232D52", fg: "#EEF0FF", badge: "OUT" },
-  in: { bg: "#232D52", fg: "#EEF0FF", badge: "IN" },
+  pb: { bg: "#4FD39A", fg: "#04140D", badge: "PB" },
+  record: { bg: "#B79BFF", fg: "#150B2E", badge: "REC" },
+  lead: { bg: "#2A2B58", fg: "#C9C9FF", badge: "P1" },
+  cut: { bg: "#FF7A92", fg: "#2A0610", badge: "CUT" },
+  lap: { bg: "#161B24", fg: "#E8EBF4", badge: "LAP" },
+  out: { bg: "#1E2430", fg: "#E8EBF4", badge: "OUT" },
+  in: { bg: "#1E2430", fg: "#E8EBF4", badge: "IN" },
 };
 
 export function ToastCard({ toast, animate = true }: { toast: Toast; animate?: boolean }) {
@@ -555,15 +555,16 @@ export function ToastCard({ toast, animate = true }: { toast: Toast; animate?: b
         display: "flex",
         alignItems: "center",
         gap: 14,
-        padding: "12px 20px 12px 12px",
-        borderRadius: 20,
+        padding: "12px 24px 12px 12px",
+        borderRadius: 999,
         background: tone.bg,
         color: tone.fg,
+        boxShadow: "0 10px 34px rgba(0,0,0,0.4)",
         whiteSpace: "nowrap",
         animation: animate ? `tt-toast ${TOAST_MS}ms ease forwards` : undefined,
       }}
     >
-      <span style={{ width: 46, height: 46, borderRadius: 14, background: "#0D1224", color: tone.fg === "#EEF0FF" ? "#A9AEFF" : tone.bg, display: "grid", placeItems: "center", font: "800 13px var(--font-display)" }}>
+      <span style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(0,0,0,0.16)", color: "inherit", display: "grid", placeItems: "center", font: "700 12px var(--font-mono)" }}>
         {tone.badge}
       </span>
       <span style={{ display: "flex", flexDirection: "column" }}>

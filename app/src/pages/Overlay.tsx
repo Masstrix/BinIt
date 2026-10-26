@@ -184,7 +184,7 @@ function Switcher({ onClose, keyHandler }: { onClose: () => void; keyHandler: Re
               <span className="muted" style={{ fontWeight: 500, fontSize: 16 }}>Just start typing, then Enter</span>
             )}
           </div>
-          {name && <span className="kbd" style={{ background: "var(--violet)", color: "#fff" }}>Enter</span>}
+          {name && <span className="kbd" style={{ background: "var(--violet)", color: "var(--violet-ink)" }}>Enter</span>}
         </div>
         {error && <span className="error">{error}</span>}
       </div>
