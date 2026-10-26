@@ -98,7 +98,7 @@ export function Overlay() {
   const showWidgets = devGame != null || ((status?.connected || !isTauri) && (phaseOk || !isTauri));
 
   return (
-    <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", fontFamily: "var(--font-body)" }}>
+    <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", fontFamily: "var(--font-body)", userSelect: "none", WebkitUserSelect: "none", cursor: "default" }}>
       {showWidgets &&
         ANCHORS.map((a) => {
           const items = layout.sections[a];

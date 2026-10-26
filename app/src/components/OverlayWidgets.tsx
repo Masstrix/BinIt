@@ -14,6 +14,9 @@ const card = {
   borderRadius: 24,
   background: "var(--panel)",
   boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
+  // Text on an overlay is never something to select or drag.
+  userSelect: "none",
+  WebkitUserSelect: "none",
 } as const;
 
 export interface OverlayData {
@@ -327,7 +330,7 @@ const REF_NAME: Record<string, string> = { pb: "PB", best: "Leader" };
 export function TimingCard({ data, mode }: { data: OverlayData; mode?: string }) {
   const t = data.timing;
   const refs = t?.references ?? [];
-  const [shown, next, select] = useTimingReference(refs.map((r) => r.kind), mode);
+  const [shown, , select] = useTimingReference(refs.map((r) => r.kind), mode);
   if (data.outLap || !t) {
     return data.outLap ? (
       <div style={{ ...card, padding: "14px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -342,10 +345,7 @@ export function TimingCard({ data, mode }: { data: OverlayData; mode?: string })
   const several = refs.length > 1;
   return (
     <div
-      data-hit={several ? "" : undefined}
-      onClick={several ? next : undefined}
-      title={several ? "Click to switch between your PB and the fastest lap" : undefined}
-      style={{ ...card, borderRadius: 28, padding: "16px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 10, ...(several ? { cursor: "pointer", pointerEvents: "auto" as const } : {}), ...(cut ? { boxShadow: "inset 0 0 0 1.5px rgba(255,122,146,0.7), 0 8px 30px rgba(0,0,0,0.35)", background: "#2A1420" } : {}) }}>
+      style={{ ...card, borderRadius: 28, padding: "16px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 10, ...(cut ? { boxShadow: "inset 0 0 0 1.5px rgba(255,122,146,0.7), 0 8px 30px rgba(0,0,0,0.35)", background: "#2A1420" } : {}) }}>
       {cut && (
         <span style={{ font: "500 11px var(--font-mono)", letterSpacing: "0.06em", color: "var(--red)" }}>
           {data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : `${words(data.game).lap.toUpperCase()} INVALID`} · WON'T COUNT
@@ -355,20 +355,25 @@ export function TimingCard({ data, mode }: { data: OverlayData; mode?: string })
         <span style={{ display: "flex", gap: 6 }}>
           {refs.map((r) => {
             const on = r.kind === shown;
-            return (
-              <span
+            const look = { flex: 1, textAlign: "center" as const, padding: "4px 0", borderRadius: 999, font: "500 11px var(--font-mono)", background: on ? "var(--tint)" : "var(--panel-2)", color: on ? "var(--peri-1)" : "var(--muted)" };
+            // Only the pills can be clicked (and only when there is more than one lap to choose between).
+            return several ? (
+              <button
                 key={r.kind}
-                role={several ? "button" : undefined}
-                onClick={
-                  several
-                    ? (e) => {
-                        e.stopPropagation();
-                        select(r.kind);
-                      }
-                    : undefined
-                }
-                style={{ flex: 1, textAlign: "center", padding: "4px 0", borderRadius: 999, font: "500 11px var(--font-mono)", background: on ? "var(--tint)" : "var(--panel-2)", color: on ? "var(--peri-1)" : "var(--muted)" }}
+                type="button"
+                data-hit=""
+                aria-pressed={on}
+                title={`Show the delta against ${r.kind === "pb" ? "your PB" : "the fastest lap"}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  select(r.kind);
+                }}
+                style={{ ...look, border: 0, cursor: "pointer", pointerEvents: "auto" }}
               >
+                {REF_NAME[r.kind] ?? r.label}
+              </button>
+            ) : (
+              <span key={r.kind} style={look}>
                 {REF_NAME[r.kind] ?? r.label}
               </span>
             );
