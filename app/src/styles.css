@@ -53,6 +53,8 @@ h1 { font-size: clamp(28px, 3vw, 34px); line-height: 1.1; }
 h2 { font-size: 22px; line-height: 1.2; }
 /* The font shorthand resets this, so force it: digits keep a fixed width so timers do not jitter. */
 * { font-variant-numeric: tabular-nums !important; }
+/* A + or − in the number font sits low against the digits; lift it to their middle. */
+.sign { display: inline-block; transform: translateY(-0.08em); }
 .mono { font-family: var(--font-mono); font-weight: 500; letter-spacing: -0.02em; }
 .muted { color: var(--muted); }
 

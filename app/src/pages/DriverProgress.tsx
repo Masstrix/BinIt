@@ -4,6 +4,7 @@ import { Helmet } from "../components/Helmet";
 import { Picker, type PickerItem } from "../components/Picker";
 import { byDay, groupCombos, progressOf, runningBest, sectorProgress, summarize, tierOf, type ComboLaps } from "../driverStats";
 import { carName, lapTime, trackName } from "../format";
+import { Signed } from "../components/Signed";
 
 const secs = (ms: number) => (ms / 1000).toFixed(3);
 const dayLabel = (ms: number) => new Date(ms).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
@@ -195,7 +196,7 @@ function ComboProgress({ combo }: { combo: ComboLaps }) {
                 </span>
                 {diff !== null && diff !== 0 && (
                   <span className="mono" style={{ fontSize: 14, color: diff < 0 ? "var(--mint)" : "var(--muted)" }}>
-                    {diff < 0 ? "-" : "+"}{secs(Math.abs(diff))}
+                    <Signed text={`${diff < 0 ? "−" : "+"}${secs(Math.abs(diff))}`} />
                   </span>
                 )}
                 <span className="mono" style={{ fontWeight: 700 }}>{lapTime(d.best)}</span>

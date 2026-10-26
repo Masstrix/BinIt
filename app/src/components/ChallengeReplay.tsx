@@ -7,6 +7,7 @@ import { lapTime } from "../format";
 import { Helmet } from "./Helmet";
 import { cameraAt, MapViewControls, TrackMap, useMapView } from "./TrackMap";
 import { GapLadder, initials } from "./GapLadder";
+import { Signed } from "./Signed";
 
 /** Seconds to linger on the finished picture before the replay starts over. */
 const HOLD_MS = 2000;
@@ -209,7 +210,7 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
                 <span className="replay-name">{nameOf(r)}</span>
                 <span className="mono muted">{lapTime(r.timeMs)}</span>
                 <span className="mono replay-gap" style={{ color: r === leader ? "var(--gold)" : gap > 0 ? "var(--red)" : "var(--muted)" }}>
-                  {r === leader ? (finished ? "P1" : "leader") : `+${(gap / 1000).toFixed(3)}`}
+                  {r === leader ? (finished ? "P1" : "leader") : <Signed text={`+${(gap / 1000).toFixed(3)}`} />}
                 </span>
               </button>
             ))}

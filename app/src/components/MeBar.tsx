@@ -5,6 +5,7 @@ import { readStored, writeStored } from "../persist";
 import { Helmet } from "./Helmet";
 import { Modal } from "./Modal";
 import { useSeatSwitcher } from "./SeatSwitcher";
+import { Signed } from "./Signed";
 
 const RING_R = 24;
 const RING_C = 2 * Math.PI * RING_R;
@@ -80,7 +81,7 @@ export function MeBar() {
           {driving ? (
             <>
               <span className="mono me-time">{lapTime(live?.currentLapMs)}</span>
-              <span className="me-sub me-good">{delta != null ? `${delta <= 0 ? "−" : "+"}${(Math.abs(delta) / 1000).toFixed(3)} on your best` : "Driving"}</span>
+              <span className="me-sub me-good">{delta != null ? <Signed text={`${delta <= 0 ? "−" : "+"}${(Math.abs(delta) / 1000).toFixed(3)} on your best`} /> : "Driving"}</span>
             </>
           ) : (
             <>

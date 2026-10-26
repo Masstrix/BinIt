@@ -9,6 +9,7 @@ import { orientationFor, styleOf, WIDGETS, type Anchor, type Orientation, type O
 import { BASE, gapText as ladderGap, place, room } from "./GapLadder";
 import { Helmet } from "./Helmet";
 import { QrCode } from "./QrCode";
+import { Signed } from "./Signed";
 
 const card = {
   borderRadius: 24,
@@ -193,7 +194,7 @@ function StripStat({ label, value, color, extra, icon }: { label: string; value:
     <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
       <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>{icon}{label}</span>
       <span className="mono" style={{ fontSize: 16, color }}>
-        {value} {extra && <span style={{ color: "var(--peach)" }}>{extra}</span>}
+        {value} {extra && <span style={{ color: "var(--peach)" }}><Signed text={extra} /></span>}
       </span>
     </span>
   );
@@ -267,7 +268,7 @@ function RankRow({ position, name, color, seed, right, isSeat, rightColor }: { p
       <span style={{ font: "600 12px var(--font-mono)", width: 14, color: isSeat ? "var(--peri-1)" : placeColour }}>{position}</span>
       <Helmet color={color} size={26} seed={seed ?? name} />
       <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: isSeat ? 700 : 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
-      <span className="mono" style={{ fontSize: 13, color: rightColor }}>{right}</span>
+      <span className="mono" style={{ fontSize: 13, color: rightColor }}><Signed text={right} /></span>
     </span>
   );
 }
@@ -468,12 +469,12 @@ function WaveNumber({ text, switchKey, color, enabled }: { text: string; switchK
   const chars = (t: string, cls: string, after = 0) =>
     [...t].map((c, i) => (
       <span key={i} className={cls} style={{ display: "inline-block", whiteSpace: "pre", animationDelay: `${after + i * WAVE_STEP_MS}ms` }}>
-        {c}
+        {i === 0 && t.length > 1 && /\d/.test(t[1]) ? <Signed text={c} /> : c}
       </span>
     ));
   return (
     <span className="mono" style={{ position: "relative", display: "inline-block", overflow: "hidden", padding: "4px 0", margin: "-4px 0", font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.03em", color }}>
-      {leaving ? chars(text, "tt-in", WAVE_OUT_MS) : text}
+      {leaving ? chars(text, "tt-in", WAVE_OUT_MS) : <Signed text={text} />}
       {leaving && (
         <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 4, pointerEvents: "none", whiteSpace: "pre" }}>
           {chars(leaving, "tt-out")}
@@ -592,7 +593,7 @@ function deltaColour(ms: number | null) {
 }
 
 function deltaText(ms: number | null) {
-  return ms === null ? "--.---" : `${ms <= 0 ? "-" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
+  return ms === null ? "--.---" : `${ms <= 0 ? "−" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
 }
 
 /**
@@ -647,7 +648,7 @@ export function GapTowerCard({ data, orientation = "vertical" }: { data: Overlay
                 <span style={{ flex: 1, height: 4, borderRadius: 2, background: r.color }} />
               </span>
               <span style={{ fontSize: 14, fontWeight: r.isSeat ? 800 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 110 }}>{r.name}</span>
-              <span className="mono" style={{ fontSize: 13, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}>{gapText(r)}</span>
+              <span className="mono" style={{ fontSize: 13, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}><Signed text={gapText(r)} /></span>
             </span>
           ) : (
             <span style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 8px 3px 3px", borderRadius: 12, ...seatStyle(r) }}>
@@ -725,7 +726,7 @@ export function GapMonitorCard({ data, orientation = "vertical" }: { data: Overl
               whiteSpace: "nowrap",
             }}
           >
-            {ladderGap(intervals[i])}
+            <Signed text={ladderGap(intervals[i])} />
           </span>
         ))}
         {/* Back of the pack first so the front is drawn on top. */}

@@ -6,6 +6,7 @@ import type { SectorStatus } from "../api";
 import { Helmet } from "./Helmet";
 import { words } from "../vocab";
 import { TrackMap } from "./TrackMap";
+import { Signed } from "./Signed";
 
 /**
  * Where the car is on track right now. Shown to anyone watching (including office
@@ -20,7 +21,7 @@ const SECTOR_COLOURS: Record<SectorStatus, string> = {
   pending: "#2a3140",
 };
 
-const deltaText = (ms: number) => `${ms <= 0 ? "-" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
+const deltaText = (ms: number) => `${ms <= 0 ? "−" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
 
 /**
  * The path driven so far while the map is still being learned. The app records it (so it survives a page
@@ -104,7 +105,7 @@ export function LiveMap() {
               </div>
               <span className="mono sector-time">{x.timeMs ? (x.timeMs / 1000).toFixed(3) : "-.---"}</span>
               <span className="mono sector-delta" style={{ color: x.deltaMs === null ? "var(--muted)" : x.deltaMs <= 0 ? "var(--mint)" : "var(--red)" }}>
-                {x.deltaMs === null ? " " : deltaText(x.deltaMs)}
+                {x.deltaMs === null ? " " : <Signed text={deltaText(x.deltaMs)} />}
               </span>
             </div>
           ))}

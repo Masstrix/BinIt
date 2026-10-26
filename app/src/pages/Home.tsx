@@ -5,6 +5,7 @@ import { LiveMap } from "../components/LiveMap";
 import { useSeatSwitcher } from "../components/SeatSwitcher";
 import { cap, words } from "../vocab";
 import { ago, carName, countdown, gap, LAP_BADGE, lapKind, lapTime, trackName } from "../format";
+import { Signed } from "../components/Signed";
 
 export function Home() {
   const { status, drivers, recentLaps } = useAppState();
@@ -64,7 +65,7 @@ export function Home() {
           {status?.live?.driving && status.live.timing?.deltaMs != null && !cutLap && (
             <>
               <span className={`delta-pill${status.live.timing.deltaMs > 0 ? " slower" : ""}`}>
-                {status.live.timing.deltaMs <= 0 ? "−" : "+"}{(Math.abs(status.live.timing.deltaMs) / 1000).toFixed(3)}
+                <Signed text={`${status.live.timing.deltaMs <= 0 ? "−" : "+"}${(Math.abs(status.live.timing.deltaMs) / 1000).toFixed(3)}`} />
               </span>
               <span className="muted now-lap-ref">vs {status.live.timing.reference ?? "your best"}</span>
             </>

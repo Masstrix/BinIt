@@ -9,6 +9,7 @@ import { Helmet } from "./Helmet";
 import { TrackFilters, trackKey, useTrackSelection } from "./TrackFilters";
 import { GapLadder } from "./GapLadder";
 import { cameraAt, MapViewControls, pointAlong, TrackMap, useMapView } from "./TrackMap";
+import { Signed } from "./Signed";
 
 const THROTTLE = "#4fd39a";
 const BRAKE = "#ff7a92";
@@ -404,7 +405,7 @@ function LapCard({
           <span className="mono la-lap-clock">{lapTime(info.timeMs)}</span>
           {diff !== null && (
             <span className="mono" style={{ fontSize: 12, color: diff > 0 ? BRAKE : diff < 0 ? THROTTLE : "var(--muted)" }} title="Against the comparison lap">
-              {diff === 0 ? "same time" : `${diff > 0 ? "+" : "−"}${(Math.abs(diff) / 1000).toFixed(3)}`}
+              {diff === 0 ? "same time" : <Signed text={`${diff > 0 ? "+" : "−"}${(Math.abs(diff) / 1000).toFixed(3)}`} />}
             </span>
           )}
         </Dropdown>
@@ -1150,7 +1151,7 @@ function Chart({ label, hint, h, what, children }: { label: string; hint: string
 function Read({ label, value, a, b, chars, unit, color, pair = false }: { label: string; value?: string | null; a?: string | null; b?: string | null; chars: number; unit?: string; color?: string; pair?: boolean }) {
   // This lap's number is right aligned against the "/", the comparison's left aligned after it.
   const cell = (text: string | null | undefined, c?: string, align: "right" | "left" = "right") => (
-    <span className="la-v" style={{ width: `${chars}ch`, textAlign: align, color: text ? c : "var(--muted)" }}>{text ?? "–"}</span>
+    <span className="la-v" style={{ width: `${chars}ch`, textAlign: align, color: text ? c : "var(--muted)" }}>{text ? <Signed text={text} /> : "–"}</span>
   );
   return (
     <div className="la-read">
@@ -1194,7 +1195,7 @@ function Sectors({ a, b, rally }: { a: LapInfo; b: LapInfo; rally: boolean }) {
               <span className="mono" style={{ color: LAP_A }}>{lapTime(s).replace(/^0:/, "")}</span>
               <span className="mono" style={{ color: LAP_B, fontSize: 13 }}>{lapTime(b.sectorsMs[i]).replace(/^0:/, "")}</span>
               <span className="mono" style={{ fontSize: 13, color: d > 0 ? BRAKE : d < 0 ? THROTTLE : "var(--muted)" }}>
-                {d === 0 ? "—" : `${d > 0 ? "+" : "−"}${(Math.abs(d) / 1000).toFixed(3)}`}
+                {d === 0 ? "—" : <Signed text={`${d > 0 ? "+" : "−"}${(Math.abs(d) / 1000).toFixed(3)}`} />}
               </span>
             </div>
           );
