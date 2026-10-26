@@ -83,8 +83,8 @@ export function LeaderboardPage() {
 
   return (
     <>
-      <div className="head" style={{ alignItems: "center" }}>
-        <h1>Leaderboard</h1>
+      <div className="page-head" style={{ alignItems: "center" }}>
+        <h1>Leaderboards</h1>
       </div>
 
       {tracks.length === 0 ? (

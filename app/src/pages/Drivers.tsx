@@ -28,7 +28,7 @@ export function DriversPage({ path = "/drivers" }: { path?: string }) {
   if (open) return <DriverProgress id={Number(open[1])} />;
   return (
     <>
-      <div className="head" style={{ alignItems: "center" }}>
+      <div className="page-head" style={{ alignItems: "center" }}>
         <h1>Drivers</h1>
         <button className="btn" onClick={() => setAdding(true)}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
