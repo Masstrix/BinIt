@@ -13,6 +13,7 @@ export function ShopPage() {
 
   return (
     <>
+      <ShopHeader title="Shop" coins={shop?.coins ?? null} />
       {ready && !driver && (
         <section className="card" style={{ alignItems: "center", textAlign: "center", padding: "40px 24px" }}>
           <h2>{local ? "Nobody is in the seat" : "Who are you?"}</h2>
@@ -20,7 +21,6 @@ export function ShopPage() {
           <a className="btn big" href="#/you">Profile</a>
         </section>
       )}
-      <ShopHeader title="Shop" coins={shop?.coins ?? null} />
       {driver && shop && <Grid driver={driver} shop={shop} refresh={refresh} />}
       {driver && !shop && <div className="empty">Loading…</div>}
     </>

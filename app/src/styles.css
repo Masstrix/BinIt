@@ -1443,3 +1443,9 @@ a.garage-coins { text-decoration: none; }
 .garage-slots { display: flex; gap: 8px; flex-wrap: wrap; }
 .garage-slots .chip { cursor: pointer; text-decoration: none; }
 .garage-slots .chip[aria-pressed="true"] { background: var(--tint); color: var(--peri-1); }
+
+/* On phones the whole page scrolls and the banner is stuck to the top, so the header sticks just under it. */
+@media (max-width: 640px) {
+  .shop-header { top: 84px; margin-top: 0; padding: 14px 0 8px; box-shadow: 0 -10px 0 var(--bg); }
+  .garage-preview { position: static; }
+}
