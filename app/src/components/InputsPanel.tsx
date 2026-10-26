@@ -3,9 +3,9 @@ import type { LiveInputs } from "../api";
 import { useAppState } from "../api";
 
 const WINDOW_MS = 10_000;
-const THROTTLE = "#4BE3A6";
-const BRAKE = "#FF6B8A";
-const CLUTCH = "#A9AEFF";
+const THROTTLE = "#4fd39a";
+const BRAKE = "#ff7a92";
+const CLUTCH = "#c9c9ff";
 
 interface Sample {
   t: number;

@@ -23,7 +23,7 @@ export function TelemetryPage({ path }: { path: string }) {
 
   return (
     <>
-      <div className="head" style={{ alignItems: "center" }}>
+      <div className="page-head" style={{ alignItems: "center" }}>
         <h1>Telemetry</h1>
         <div className="segmented" role="group" aria-label="View">
           <button aria-pressed={view === "live"} onClick={() => setPicked("live")}>

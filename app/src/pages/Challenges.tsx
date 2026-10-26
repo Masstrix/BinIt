@@ -1,16 +1,19 @@
 import { cap, words } from "../vocab";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { api, challengeMatches, isActive, useAppState, useCatalogue, useDriverMap, useFetch, useTrackMaps, type Challenge, type Prize } from "../api";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useRankMotion } from "../rankMotion";
+import { api, challengeMatches, isActive, useAppState, useCatalogue, useDriverMap, useFetch, useTrackMaps, type Challenge, type Driver, type LeaderboardEntry, type Prize } from "../api";
 import { carItems, findMap, splitTrackValue, TrackThumb, trackItems } from "../catalogueItems";
 import { ChallengeReplay } from "../components/ChallengeReplay";
 import { GameIcon, GameLabel } from "../components/GameIcon";
 import { Helmet } from "../components/Helmet";
+import { BASE, place, room } from "../components/GapLadder";
+import { Signed } from "../components/Signed";
 import { useCompactTable } from "../useCompactTable";
 import { Dropdown } from "../components/Dropdown";
 import { DateTimePicker } from "../components/DateTimePicker";
 import { Modal } from "../components/Modal";
 import { Picker } from "../components/Picker";
-import { Podium } from "../components/Podium";
+import { keyOf, Podium } from "../components/Podium";
 import { ago, bestSectors, carName, countdown, gameName, gap, gridMinWidth, lapTime, ordinal, SECTOR_MINT, SECTOR_PURPLE, sectorColor, SUPPORTED_GAMES, trackName, whenLabel } from "../format";
 
 type EndPreset = "lunch" | "five" | "friday" | "custom" | "never";
@@ -73,6 +76,15 @@ function prizeFor(c: Challenge, position: number, total: number): string | undef
   );
 }
 
+function NewButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button className="btn" onClick={onClick}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+      New challenge
+    </button>
+  );
+}
+
 export function ChallengesPage({ path }: { path: string }) {
   const { challenges, status } = useAppState();
   const [creating, setCreating] = useState(false);
@@ -92,13 +104,12 @@ export function ChallengesPage({ path }: { path: string }) {
 
   return (
     <>
-      <div className="head" style={{ alignItems: "center" }}>
-        <h1>Challenges</h1>
-        <button className="btn" onClick={() => setCreating(true)}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-          New challenge
-        </button>
-      </div>
+      {!shown && (
+        <div className="page-head" style={{ alignItems: "center" }}>
+          <h1>Challenges</h1>
+          <NewButton onClick={() => setCreating(true)} />
+        </div>
+      )}
 
       {running.length > 1 && (
         <nav className="ch-picker" aria-label="Running challenges">
@@ -115,7 +126,7 @@ export function ChallengesPage({ path }: { path: string }) {
       )}
 
       {shown ? (
-        <ChallengeView key={shown.id} challenge={shown} />
+        <ChallengeView key={shown.id} challenge={shown} onNew={() => setCreating(true)} />
       ) : (
         <section className="card" style={{ alignItems: "center", textAlign: "center", padding: "56px 24px" }}>
           <h2>No challenge running</h2>
@@ -148,7 +159,41 @@ export function ChallengesPage({ path }: { path: string }) {
   );
 }
 
-function ChallengeView({ challenge: c }: { challenge: Challenge }) {
+/**
+ * Everyone's gap to the leader, down a rail: the leader at the top and each driver below by how far behind they
+ * are (the same spacing the replay's ladder uses, so a tight fight still shows next to a long gap).
+ */
+function GapsCard({ board, drivers, seat }: { board: LeaderboardEntry[]; drivers: Map<number, Driver>; seat: number | null }) {
+  const intervals = board.slice(1).map((e, i) => e.timeMs - board[i].timeMs);
+  const size = Math.max(BASE, intervals.reduce((sum, ms) => sum + room(ms), 0));
+  const y = board.length ? place(intervals, size) : [];
+  return (
+    <section className="card ch-gaps" aria-label="Gaps to the leader">
+      <h2>Gaps to the leader</h2>
+      {board.length === 0 ? (
+        <div className="empty">Nobody has set a time yet.</div>
+      ) : (
+        <div className="ch-gaps-rail" style={{ minHeight: Math.max(250, board.length * 58) }}>
+          {board.map((e, i) => {
+            const d = e.driverId != null ? drivers.get(e.driverId) : undefined;
+            const color = d?.color ?? "#5b6578";
+            return (
+              <div key={keyOf(e)} className="ch-gap-row" style={{ top: `${8 + y[i] * 80}%` }}>
+                <span className="ch-gap-tile" style={{ background: `${color}2E` }}>
+                  <Helmet color={color} look={d?.look} size={36} tile={false} seed={d?.id} mood={i === 0 ? "happy" : "idle"} />
+                </span>
+                <span className="ch-gap-name" style={e.driverId != null && e.driverId === seat ? { color } : undefined}>{d?.name ?? "Guest"}</span>
+                <span className="mono muted ch-gap-val">{i === 0 ? "leader" : <Signed text={gap(e.gapMs)} />}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ChallengeView({ challenge: c, onNew }: { challenge: Challenge; onNew: () => void }) {
   const { status } = useAppState();
   const drivers = useDriverMap();
   const board = useFetch(() => api.challengeLeaderboard(c.id), [c.id]) ?? [];
@@ -158,52 +203,58 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
   const sectors = bestSectors(board);
   const cols = `44px minmax(150px, 1fr) ${hasPrizes ? "minmax(100px, 0.6fr) " : ""}132px 64px ${sectors.map(() => "56px ").join("")}44px`;
   const { ref: tableRef, compact } = useCompactTable(gridMinWidth(cols));
+  // The podium, the gaps and the table below them move together when somebody changes place.
+  const motion = useRef<HTMLDivElement>(null);
+  const flash = useRankMotion(board.map(keyOf), motion, true, String(c.id));
+  const [view, setView] = useState<"times" | "replay">("times");
+  const rules = [
+    trackName(c.track, c.layout),
+    c.car ? carName(c.car) : "Any car",
+    c.validOnly ? `only clean ${words(c.game).laps} count` : null,
+    c.maxLaps ? `${c.maxLaps} ${words(c.game).laps} each` : null,
+  ].filter(Boolean);
 
   return (
-    <>
-    <section className="card ch-view" aria-label={c.name}>
-      <div className="head" style={{ alignItems: "flex-start" }}>
+    <div className="ch-stack" ref={motion}>
+      <div className="page-head ch-head">
         <div style={{ minWidth: 0 }}>
-          <div className="label" style={{ color: live ? "var(--peach)" : "var(--muted)" }}>{live ? "Running" : "Finished"}</div>
-          <div className="ch-title">
-            <TrophyBadge />
-            <h2 className="ch-name">{c.name}</h2>
-          </div>
-          <div className="ch-rules">
-            <span className="chip plain"><GameLabel game={c.game} size={18} /></span>
-            <span className="chip plain">{trackName(c.track, c.layout)}</span>
-            <span className="chip plain">{c.car ? carName(c.car) : "Any car"}</span>
-            {c.validOnly && <span className="chip plain">Valid {words(c.game).laps} only</span>}
-            {c.maxLaps && <span className="chip plain">{c.maxLaps} {words(c.game).laps} each</span>}
-          </div>
+          <h1 className="ch-name">{c.name}</h1>
+          <span className="muted ch-sub"><GameLabel game={c.game} size={18} /> · {rules.join(" · ")}</span>
         </div>
         <div className="ch-clock">
+          <span className="chip plain mono" title={c.endsAt ? whenLabel(c.endsAt) : undefined}>
+            {live ? (c.endsAt ? `Ends in ${countdown(c.endsAt)}` : "Runs until ended") : `Ended ${c.endsAt ? whenLabel(c.endsAt) : ""}`}
+          </span>
           {live ? (
-            <>
-              <span className="label">{c.endsAt ? "Ends in" : "Runs until ended"}</span>
-              {c.endsAt && <span className="mono ch-countdown" title={whenLabel(c.endsAt)}>{countdown(c.endsAt)}</span>}
-              <button className="btn ghost" onClick={() => confirm(`End "${c.name}" now?`) && api.endChallenge(c.id)}>End now</button>
-            </>
+            <button className="btn ghost" onClick={() => confirm(`End "${c.name}" now?`) && api.endChallenge(c.id)}>End now</button>
           ) : (
-            <>
-              <span className="label">Ended</span>
-              <span style={{ fontWeight: 600 }}>{c.endsAt ? whenLabel(c.endsAt) : ""}</span>
-              <button className="btn ghost" onClick={() => confirm(`Delete "${c.name}" for good?`) && api.deleteChallenge(c.id).then(() => (location.hash = "#/challenges"))}>
-                Delete
-              </button>
-            </>
+            <button className="btn ghost" onClick={() => confirm(`Delete "${c.name}" for good?`) && api.deleteChallenge(c.id).then(() => (location.hash = "#/challenges"))}>
+              Delete
+            </button>
           )}
+          <NewButton onClick={onNew} />
         </div>
       </div>
 
-      <Podium
-        entries={board}
-        drivers={drivers}
-        scale={230}
-        big
-        prizes={[1, 2, 3].map((p) => prizeFor(c, p, board.length))}
-      />
+      {board.length > 0 && (
+        <div className="segmented ch-views" role="group" aria-label="View">
+          <button type="button" aria-pressed={view === "times"} onClick={() => setView("times")}>Times</button>
+          <button type="button" aria-pressed={view === "replay"} onClick={() => setView("replay")}>Replay</button>
+        </div>
+      )}
 
+      <div className="ch-top">
+        {view === "replay" && board.length > 0 ? (
+          <ChallengeReplay challenge={c} />
+        ) : (
+          <section className="card ch-podium" aria-label="Podium">
+            <Podium entries={board} drivers={drivers} prizes={[1, 2, 3].map((p) => prizeFor(c, p, board.length))} />
+          </section>
+        )}
+        <GapsCard board={board} drivers={drivers} seat={live ? seat : null} />
+      </div>
+
+    <section className="card ch-view" aria-label={`${c.name} standings`}>
       {board.length === 0 ? (
         <div className="empty">No {words(c.game).laps} yet. First one to set a time takes the crown.</div>
       ) : (
@@ -221,19 +272,24 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
           </div>
           {board.map((e) => {
             const d = e.driverId != null ? drivers.get(e.driverId) : undefined;
-            const color = d?.color ?? "#5B6488";
+            const color = d?.color ?? "#5b6578";
             const me = live && e.driverId != null && e.driverId === seat;
             const prize = prizeFor(c, e.position, board.length);
             const podium = e.position <= 3;
             return (
               <div
-                key={e.lapId}
+                key={keyOf(e)}
+                data-flip={`r:${keyOf(e)}`}
+                data-mv={flash(keyOf(e)).mv || undefined}
                 className={`lb-grid lb-row${podium ? ` place place-${e.position}` : ""}`}
                 style={{ gridTemplateColumns: cols, ...(me && !podium ? { background: `${color}1F`, borderColor: `${color}73` } : {}) }}
               >
+                {!!flash(keyOf(e)).gain && <span className="mv-badge">▲ {flash(keyOf(e)).gain}</span>}
                 <span className="lb-pos">{e.position}</span>
                 <span className="lb-c-driver" style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
-                  <Helmet color={color} size={podium ? 52 : 44} seed={d?.id} mood={e.position === 1 ? "happy" : "idle"} />
+                  <span data-flip={`h:${keyOf(e)}`} style={{ display: "flex" }}>
+                    <Helmet color={color} look={d?.look} size={podium ? 52 : 44} seed={d?.id} mood={e.position === 1 ? "happy" : "idle"} />
+                  </span>
                   <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
                     <span className="lb-name">{d?.name ?? "Guest"}</span>
                     <span className="lb-meta" style={{ color: me ? color : "var(--muted)" }}>
@@ -273,8 +329,7 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
         </div>
       )}
     </section>
-    {board.length > 0 && <ChallengeReplay challenge={c} />}
-    </>
+    </div>
   );
 }
 

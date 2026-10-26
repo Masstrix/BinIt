@@ -1,20 +1,20 @@
 import { useState } from "react";
-import { api, useAppState, useFetch, type Driver, type DriverRating } from "../api";
+import { api, useAppState, useFetch, type Device, type Driver, type DriverRating } from "../api";
+import { ago } from "../format";
 import { TIER_ORDER, tierByKey, tierOf } from "../driverStats";
 import { Helmet } from "../components/Helmet";
 import { Modal } from "../components/Modal";
-import { useSeatSwitcher } from "../components/SeatSwitcher";
 import { DriverProgress } from "./DriverProgress";
 
 export const PALETTE = [
   ["#FF9F6B", "Peach"],
   ["#4FC3FF", "Sky"],
   ["#FF7AC6", "Pink"],
-  ["#4BE3A6", "Mint"],
+  ["#4fd39a", "Mint"],
   ["#FFC93C", "Gold"],
-  ["#B18CFF", "Violet"],
-  ["#FF6B8A", "Red"],
-  ["#EEF0FF", "White"],
+  ["#b79bff", "Violet"],
+  ["#ff7a92", "Red"],
+  ["#e8ebf4", "White"],
 ] as const;
 
 export function DriversPage({ path = "/drivers" }: { path?: string }) {
@@ -28,7 +28,7 @@ export function DriversPage({ path = "/drivers" }: { path?: string }) {
   if (open) return <DriverProgress id={Number(open[1])} />;
   return (
     <>
-      <div className="head" style={{ alignItems: "center" }}>
+      <div className="page-head" style={{ alignItems: "center" }}>
         <h1>Drivers</h1>
         <button className="btn" onClick={() => setAdding(true)}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
@@ -46,7 +46,7 @@ export function DriversPage({ path = "/drivers" }: { path?: string }) {
         )}
         {drivers.length > 0 && (
           <span className="muted" style={{ fontSize: 13 }}>
-            Grouped by speed score: 100 means quickest on every track and car you share with others, and each point below is about 1% slower.
+            Grouped by speed score: 100 means quickest on every track and car you share with others, and each point below is about 1% slower. Open a driver for their profile.
           </span>
         )}
         {TIER_ORDER.map((key) => {
@@ -78,7 +78,7 @@ export function DriversPage({ path = "/drivers" }: { path?: string }) {
   );
 }
 
-function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+export function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 10 }} role="group" aria-label="Helmet colour">
       {PALETTE.map(([hex, label]) => (
@@ -119,7 +119,7 @@ function NewDriverForm({ onDone }: { onDone: () => void }) {
       className="modal-form"
       onSubmit={(e) => {
         e.preventDefault();
-        submit(true);
+        submit(false);
       }}
     >
       <div className="modal-body" style={{ alignItems: "center", textAlign: "center", gap: 18 }}>
@@ -139,72 +139,92 @@ function NewDriverForm({ onDone }: { onDone: () => void }) {
         <span className="muted" style={{ fontSize: 13 }}>No passwords: anyone can pick any name. Play fair.</span>
       </div>
       <div className="modal-foot">
-        <button className="btn ghost" type="button" disabled={!name.trim() || busy} onClick={() => submit(false)}>Just add</button>
-        <button className="btn big" type="submit" disabled={!name.trim() || busy}>Let's race</button>
+        <button className="btn ghost" type="button" disabled={!name.trim() || busy} onClick={() => submit(true)}>Add and drive now</button>
+        <button className="btn big" type="submit" disabled={!name.trim() || busy}>Add driver</button>
       </div>
     </form>
   );
 }
 
 function DriverCard({ driver, seated, rating }: { driver: Driver; seated: boolean; rating?: DriverRating }) {
-  const seat = useSeatSwitcher();
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(driver.name);
-  const [color, setColor] = useState(driver.color);
-  const [error, setError] = useState<string | null>(null);
-
-  if (editing) {
-    return (
-      <div className="driver-card editing">
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" maxLength={32} />
-        <ColorPicker value={color} onChange={setColor} />
-        {error && <span className="error">{error}</span>}
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            className="btn"
-            onClick={async () => {
-              try {
-                await api.updateDriver(driver.id, name, color);
-                setEditing(false);
-              } catch (e) {
-                setError((e as Error).message);
-              }
-            }}
-          >
-            Save
-          </button>
-          <button className="btn ghost" onClick={() => setEditing(false)}>Cancel</button>
-        </div>
-      </div>
-    );
-  }
-
   const fastestOn = rating?.fastestOn ?? 0;
+  // The whole card opens their profile: the level, bests and stickers, and (from this PC) editing and phones.
   return (
-    <div className="driver-card" data-seated={seated || undefined}>
-      <div className="dc-top">
-        <Helmet color={driver.color} size={52} seed={driver.id} />
-        <a className="dc-name driver-link" href={`#/drivers/${driver.id}`} title={`See how ${driver.name} has improved`}>
-          <span style={{ fontWeight: 700, fontSize: 17, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{driver.name}</span>
-          <span className="dc-sub">
-            {seated && <span style={{ color: "var(--peach)" }}>in the seat</span>}
-            {seated && fastestOn > 0 && " · "}
-            {fastestOn > 0 && <span className="muted">fastest on {fastestOn}</span>}
-          </span>
-        </a>
-        {rating?.score != null && (
-          <span className="speed-score" title={`Speed score from ${rating.combos} shared ${rating.combos === 1 ? "track and car" : "tracks and cars"}`}>
-            <span className="mono">{rating.score.toFixed(1)}</span>
-            <span className="label">speed</span>
-          </span>
-        )}
-      </div>
-      <span className="driver-actions">
-        <a className="chip plain" href={`#/drivers/${driver.id}`}>Progress</a>
-        {!seated && <button className="chip plain" onClick={() => seat.choose(driver)}>Drive</button>}
-        <button className="chip plain" onClick={() => setEditing(true)}>Edit</button>
+    <a className="driver-card" href={`#/you/${driver.id}`} data-seated={seated || undefined} title={`Open ${driver.name}'s profile`}>
+      <span className="dc-tile" style={{ background: `${driver.color}2E` }}>
+        <Helmet color={driver.color} look={driver.look} size={60} tile={false} seed={driver.id} mood={seated ? "happy" : "idle"} />
       </span>
-      {seat.dialog}
-    </div>
+      <span className="dc-title">{driver.name}</span>
+      {seated && (
+        <span className="dc-seat">
+          <i /> in the seat
+        </span>
+      )}
+      {rating?.score != null ? (
+        <span className="dc-score" title={`Speed score from ${rating.combos} shared ${rating.combos === 1 ? "track and car" : "tracks and cars"}`}>
+          <span className="mono">{rating.score.toFixed(1)}</span>
+          <span className="label">speed</span>
+        </span>
+      ) : (
+        <span className="muted" style={{ fontSize: 14 }}>Not rated yet</span>
+      )}
+      {fastestOn > 0 && <span className="muted dc-fast">Fastest on {fastestOn} {fastestOn === 1 ? "track" : "tracks"}</span>}
+    </a>
+  );
+}
+
+/** The phones paired to a driver: pair one more, sign one out, or sign them all out (a lost phone). */
+export function PhonesDialog({ driver }: { driver: Driver }) {
+  const [tick, setTick] = useState(0);
+  const list = useFetch<Device[]>(() => api.driverDevices(driver.id), [driver.id, tick]);
+  const [share, setShare] = useState<{ code: string; expiresAt: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (f: () => Promise<unknown>) => {
+    setError(null);
+    try {
+      await f();
+      setTick((t) => t + 1);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <>
+      <div className="modal-body">
+        {list == null ? (
+          <span className="muted">Loading…</span>
+        ) : list.length === 0 ? (
+          <p className="muted" style={{ margin: 0 }}>
+            No phone is paired. The first phone to pick {driver.name} claims them; after that, another phone needs a code.
+          </p>
+        ) : (
+          <div className="list">
+            {list.map((d) => (
+              <div className="list-row" key={d.id}>
+                <span className="grow">
+                  <span>{d.label}</span>
+                  <span className="muted" style={{ fontSize: 13 }}>paired {ago(d.createdAt)} · last used {ago(d.lastSeen)}</span>
+                </span>
+                <button className="chip plain" onClick={() => run(() => api.signOutDevice(d.id))}>Sign out</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {share && (
+          <div className="pair-code" role="status">
+            <span className="muted">On the phone, pick {driver.name} and enter</span>
+            <span className="mono pair-code-digits">{share.code.slice(0, 3)} {share.code.slice(3)}</span>
+            <span className="muted">It works once, for 5 minutes.</span>
+          </div>
+        )}
+        {error && <span className="error">{error}</span>}
+      </div>
+      <div className="modal-foot">
+        {list != null && list.length > 0 && (
+          <button className="btn ghost" onClick={() => confirm(`Sign every phone out of ${driver.name}?`) && run(() => api.signOutDriver(driver.id))}>Sign all out</button>
+        )}
+        <button className="btn" onClick={() => run(async () => setShare(await api.pairCode(driver.id)))}>Pair a phone</button>
+      </div>
+    </>
   );
 }

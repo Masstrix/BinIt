@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{ConnectInfo, Path, Query, State};
-use axum::http::{StatusCode, Uri, header};
+use axum::http::{HeaderMap, StatusCode, Uri, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -52,6 +52,16 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/drivers", get(drivers).post(add_driver))
         .route("/drivers/ratings", get(driver_ratings))
         .route("/drivers/{id}", put(update_driver))
+        .route("/drivers/{id}/profile", get(driver_profile))
+        .route("/drivers/{id}/shop", get(driver_shop))
+        .route("/drivers/{id}/shop/buy", post(buy_item))
+        .route("/drivers/{id}/look", put(set_look))
+        .route("/drivers/{id}/pair-code", post(pair_code))
+        .route("/drivers/{id}/devices", get(driver_devices).delete(sign_out_driver))
+        .route("/devices/{id}", delete(sign_out_device))
+        .route("/me", get(me))
+        .route("/me/pair", post(pair_me))
+        .route("/me/logout", post(logout_me))
         .route("/drivers/{id}/laps", get(driver_laps))
         .route("/seat", put(set_seat))
         .route("/laps/recent", get(recent_laps))
@@ -271,11 +281,214 @@ struct UpdateDriver {
 }
 
 async fn update_driver(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     State(c): State<Ctx>,
     Path(id): Path<DriverId>,
     Json(body): Json<UpdateDriver>,
-) -> ApiResult<tt_core::Driver> {
-    Ok(Json(c.tt.update_driver(id, &body.name, &body.color)?))
+) -> Result<Json<tt_core::Driver>, Response> {
+    // A driver with a paired phone can only be changed from the PC or from that phone.
+    // A driver nobody has claimed stays open to everyone, as it always was.
+    if c.tt.driver_is_claimed(id).map_err(bad_request)? {
+        may_manage(&c, &headers, addr, id)?;
+    }
+    c.tt.update_driver(id, &body.name, &body.color).map(Json).map_err(bad_request)
+}
+
+/// Level, XP, coins, bests and stickers: what the You page shows. Open to everyone, like the leaderboards.
+async fn driver_profile(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<tt_core::Profile> {
+    Ok(Json(c.tt.profile(id)?))
+}
+
+/// The Garage and shop for one driver: balance, level, what they own and wear, every price.
+async fn driver_shop(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<tt_core::ShopState> {
+    Ok(Json(c.tt.shop(id)?))
+}
+
+#[derive(Deserialize)]
+struct BuyItem {
+    slot: String,
+    id: String,
+}
+
+/// Spending coins is guarded like editing: a driver with a paired phone can only buy from the PC or that phone.
+async fn buy_item(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    State(c): State<Ctx>,
+    Path(id): Path<DriverId>,
+    Json(body): Json<BuyItem>,
+) -> Result<Json<tt_core::ShopState>, Response> {
+    if c.tt.driver_is_claimed(id).map_err(bad_request)? {
+        may_manage(&c, &headers, addr, id)?;
+    }
+    c.tt.buy(id, &body.slot, &body.id).map(Json).map_err(bad_request)
+}
+
+async fn set_look(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    State(c): State<Ctx>,
+    Path(id): Path<DriverId>,
+    Json(look): Json<tt_core::Look>,
+) -> Result<Json<tt_core::Driver>, Response> {
+    if c.tt.driver_is_claimed(id).map_err(bad_request)? {
+        may_manage(&c, &headers, addr, id)?;
+    }
+    c.tt.set_look(id, &look).map(Json).map_err(bad_request)
+}
+
+// ---- paired phones ---------------------------------------------------------------------------
+
+/// The header a paired phone sends with every request (see `deviceToken` in app/src/api.ts).
+const DEVICE_HEADER: &str = "x-device-token";
+
+fn token_of(headers: &HeaderMap) -> Option<&str> {
+    headers.get(DEVICE_HEADER).and_then(|v| v.to_str().ok()).map(str::trim).filter(|t| !t.is_empty())
+}
+
+/// The driver this request's phone is paired to, if any.
+fn paired_driver(c: &Ctx, headers: &HeaderMap) -> anyhow::Result<Option<tt_core::Driver>> {
+    match token_of(headers) {
+        Some(token) => Ok(c.tt.device_for_token(token)?.map(|(_, driver)| driver)),
+        None => Ok(None),
+    }
+}
+
+fn forbidden(message: &str) -> Response {
+    (StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": message }))).into_response()
+}
+
+/// Allowed from the PC itself, or from a phone paired to this driver.
+fn may_manage(c: &Ctx, headers: &HeaderMap, addr: SocketAddr, driver: DriverId) -> Result<(), Response> {
+    if addr.ip().is_loopback() {
+        return Ok(());
+    }
+    match paired_driver(c, headers).map_err(bad_request)? {
+        Some(d) if d.id == driver => Ok(()),
+        _ => Err(forbidden("this driver belongs to another phone: do it on the PC or on their phone")),
+    }
+}
+
+/// A short name for the phone, from what the browser says it is.
+fn device_label(headers: &HeaderMap) -> &'static str {
+    let ua = headers.get(header::USER_AGENT).and_then(|v| v.to_str().ok()).unwrap_or("");
+    if ua.contains("iPhone") {
+        "iPhone"
+    } else if ua.contains("iPad") {
+        "iPad"
+    } else if ua.contains("Android") {
+        "Android phone"
+    } else if ua.contains("Windows") {
+        "Windows PC"
+    } else if ua.contains("Macintosh") {
+        "Mac"
+    } else {
+        "Phone"
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Me {
+    /// Who this phone is paired to; null when it is not paired (or was signed out).
+    driver: Option<tt_core::Driver>,
+    /// True for the PC itself (the desktop app), which can manage every driver.
+    local: bool,
+}
+
+async fn me(ConnectInfo(addr): ConnectInfo<SocketAddr>, headers: HeaderMap, State(c): State<Ctx>) -> ApiResult<Me> {
+    Ok(Json(Me { driver: paired_driver(&c, &headers)?, local: addr.ip().is_loopback() }))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PairBody {
+    driver_id: DriverId,
+    code: Option<String>,
+}
+
+#[derive(Serialize)]
+struct Paired {
+    token: String,
+    driver: tt_core::Driver,
+}
+
+async fn pair_me(headers: HeaderMap, State(c): State<Ctx>, Json(body): Json<PairBody>) -> Result<Json<Paired>, Response> {
+    match c.tt.pair_device(body.driver_id, body.code.as_deref(), device_label(&headers)) {
+        Ok((token, driver)) => Ok(Json(Paired { token, driver })),
+        Err(e) => match e.downcast_ref::<tt_core::pairing::PairError>() {
+            Some(kind) => {
+                let code = if matches!(kind, tt_core::pairing::PairError::CodeNeeded) { "codeNeeded" } else { "badCode" };
+                Err((StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": kind.to_string(), "code": code }))).into_response())
+            }
+            None => Err(bad_request(e)),
+        },
+    }
+}
+
+async fn logout_me(headers: HeaderMap, State(c): State<Ctx>) -> ApiResult<bool> {
+    Ok(Json(match token_of(&headers) {
+        Some(token) => c.tt.unpair_token(token)?,
+        None => false,
+    }))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PairCode {
+    code: String,
+    expires_at: tt_core::Timestamp,
+}
+
+/// A one-time code to pair one more phone with this driver. From the PC or from a phone already paired to them.
+async fn pair_code(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    State(c): State<Ctx>,
+    Path(id): Path<DriverId>,
+) -> Result<Json<PairCode>, Response> {
+    if c.tt.driver_is_claimed(id).map_err(bad_request)? {
+        may_manage(&c, &headers, addr, id)?;
+    }
+    let (code, expires_at) = c.tt.new_pair_code(id).map_err(bad_request)?;
+    Ok(Json(PairCode { code, expires_at }))
+}
+
+async fn driver_devices(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    State(c): State<Ctx>,
+    Path(id): Path<DriverId>,
+) -> Result<Json<Vec<tt_core::Device>>, Response> {
+    may_manage(&c, &headers, addr, id)?;
+    let all = c.tt.devices().map_err(bad_request)?;
+    Ok(Json(all.into_iter().filter(|d| d.driver_id == id).collect()))
+}
+
+/// Signs every phone out of a driver (a lost phone): the next one to claim them wins.
+async fn sign_out_driver(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    State(c): State<Ctx>,
+    Path(id): Path<DriverId>,
+) -> Result<Json<usize>, Response> {
+    may_manage(&c, &headers, addr, id)?;
+    c.tt.remove_driver_devices(id).map(Json).map_err(bad_request)
+}
+
+async fn sign_out_device(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    State(c): State<Ctx>,
+    Path(id): Path<i64>,
+) -> Result<Json<bool>, Response> {
+    let Some(device) = c.tt.devices().map_err(bad_request)?.into_iter().find(|d| d.id == id) else {
+        return Ok(Json(false));
+    };
+    may_manage(&c, &headers, addr, device.driver_id)?;
+    c.tt.remove_device(id).map_err(bad_request)?;
+    Ok(Json(true))
 }
 
 #[derive(Deserialize)]

@@ -4,6 +4,7 @@ import { Helmet } from "../components/Helmet";
 import { Picker, type PickerItem } from "../components/Picker";
 import { byDay, groupCombos, progressOf, runningBest, sectorProgress, summarize, tierOf, type ComboLaps } from "../driverStats";
 import { carName, lapTime, trackName } from "../format";
+import { Signed } from "../components/Signed";
 
 const secs = (ms: number) => (ms / 1000).toFixed(3);
 const dayLabel = (ms: number) => new Date(ms).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
@@ -41,7 +42,7 @@ export function DriverProgress({ id }: { id: number }) {
       <a href="#/drivers" className="back-link">← Drivers</a>
       <div className="head" style={{ alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-          <Helmet color={driver.color} size={64} seed={driver.id} />
+          <Helmet color={driver.color} look={driver.look} size={64} seed={driver.id} />
           <div style={{ minWidth: 0 }}>
             <h1 style={{ overflowWrap: "anywhere" }}>{driver.name}</h1>
             <span className="muted">{status?.seat === driver.id ? "In the seat now" : "Progress over time"}</span>
@@ -195,7 +196,7 @@ function ComboProgress({ combo }: { combo: ComboLaps }) {
                 </span>
                 {diff !== null && diff !== 0 && (
                   <span className="mono" style={{ fontSize: 14, color: diff < 0 ? "var(--mint)" : "var(--muted)" }}>
-                    {diff < 0 ? "-" : "+"}{secs(Math.abs(diff))}
+                    <Signed text={`${diff < 0 ? "−" : "+"}${secs(Math.abs(diff))}`} />
                   </span>
                 )}
                 <span className="mono" style={{ fontWeight: 700 }}>{lapTime(d.best)}</span>

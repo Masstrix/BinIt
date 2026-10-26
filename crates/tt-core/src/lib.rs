@@ -4,10 +4,14 @@
 pub mod catalogue;
 pub mod live;
 pub mod model;
+pub mod pairing;
+pub mod progress;
+pub mod shop;
 mod store;
 pub mod trackmap;
 
 use std::path::{Path, PathBuf};
+use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -139,6 +143,11 @@ struct Runtime {
     void_pending: bool,
     /// The car has crossed the line on a lap that should be reported shortly (out laps aren't reported by the game).
     wrap_waiting: bool,
+    /// The game published a lap's result before the live readings showed the car crossing the line: that
+    /// crossing is already accounted for.
+    wrap_skip: bool,
+    /// Who was in the seat as the car crossed the line, for the result that arrives after it.
+    wrap_driver: Option<Option<DriverId>>,
     last_progress: f32,
     last_out_lap: bool,
     /// The stage clock at the previous live reading, to notice a restart.
@@ -161,6 +170,8 @@ pub struct BinIt {
     store: Mutex<Store>,
     runtime: Mutex<Runtime>,
     events: broadcast::Sender<AppEvent>,
+    /// One-time codes for pairing another phone to a driver: driver -> (code, runs out at). Never stored.
+    pair_codes: Mutex<HashMap<DriverId, (String, Timestamp)>>,
 }
 
 pub fn now_ms() -> Timestamp {
@@ -198,7 +209,7 @@ impl BinIt {
 
     fn with_store(store: Store) -> Self {
         let (events, _) = broadcast::channel(256);
-        Self { previous_version: Mutex::default(), catalogue_paths: Mutex::default(), store: Mutex::new(store), runtime: Mutex::new(Runtime::default()), events }
+        Self { previous_version: Mutex::default(), catalogue_paths: Mutex::default(), store: Mutex::new(store), runtime: Mutex::new(Runtime::default()), events, pair_codes: Mutex::default() }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<AppEvent> {
@@ -356,6 +367,209 @@ impl BinIt {
         Ok(driver)
     }
 
+    // ---- paired phones -----------------------------------------------------
+
+    /// Pairs a phone with a driver and returns its token (shown once; only a hash is kept).
+    ///
+    /// A driver nobody has claimed can be claimed by anyone, like typing a name on the rig. Once a phone is
+    /// paired, another one needs the driver's one-time `code` (see `new_pair_code`).
+    pub fn pair_device(&self, driver_id: DriverId, code: Option<&str>, label: &str) -> Result<(String, Driver)> {
+        let store = self.store();
+        let driver = store.driver(driver_id)?.ok_or_else(|| anyhow::anyhow!("no such driver"))?;
+        if store.device_count(driver_id)? > 0 {
+            let Some(code) = code.map(str::trim).filter(|c| !c.is_empty()) else {
+                return Err(pairing::PairError::CodeNeeded.into());
+            };
+            let mut codes = self.pair_codes.lock().expect("pair codes mutex poisoned");
+            match codes.get(&driver_id) {
+                Some((expected, until)) if *until > now_ms() && expected == code => {
+                    codes.remove(&driver_id);
+                }
+                _ => return Err(pairing::PairError::BadCode.into()),
+            }
+        }
+        let token = pairing::new_token()?;
+        let label: String = label.trim().chars().take(40).collect();
+        store.insert_device(driver_id, &pairing::hash_token(&token), if label.is_empty() { "Phone" } else { &label }, now_ms())?;
+        drop(store);
+        self.emit(AppEvent::DriversChanged);
+        Ok((token, driver))
+    }
+
+    /// A six digit code that lets one more phone pair with this driver, for the next few minutes.
+    pub fn new_pair_code(&self, driver_id: DriverId) -> Result<(String, Timestamp)> {
+        if self.store().driver(driver_id)?.is_none() {
+            bail!("no such driver");
+        }
+        let code = pairing::new_code()?;
+        let until = now_ms() + pairing::CODE_TTL_MS;
+        self.pair_codes.lock().expect("pair codes mutex poisoned").insert(driver_id, (code.clone(), until));
+        Ok((code, until))
+    }
+
+    /// Who a phone's token belongs to (and note that it was just used).
+    pub fn device_for_token(&self, token: &str) -> Result<Option<(Device, Driver)>> {
+        let store = self.store();
+        let Some(device) = store.device_by_hash(&pairing::hash_token(token))? else { return Ok(None) };
+        let Some(driver) = store.driver(device.driver_id)? else { return Ok(None) };
+        let now = now_ms();
+        if now - device.last_seen > 60_000 {
+            store.touch_device(device.id, now)?;
+        }
+        Ok(Some((device, driver)))
+    }
+
+    /// The phone logs itself out: its token stops working.
+    pub fn unpair_token(&self, token: &str) -> Result<bool> {
+        let store = self.store();
+        let Some(device) = store.device_by_hash(&pairing::hash_token(token))? else { return Ok(false) };
+        store.delete_device(device.id)?;
+        drop(store);
+        self.emit(AppEvent::DriversChanged);
+        Ok(true)
+    }
+
+    pub fn devices(&self) -> Result<Vec<Device>> {
+        self.store().devices()
+    }
+
+    /// Signs one phone out (from the PC, or from the driver's own phone).
+    pub fn remove_device(&self, id: i64) -> Result<()> {
+        self.store().delete_device(id)?;
+        self.emit(AppEvent::DriversChanged);
+        Ok(())
+    }
+
+    /// Signs every phone out of a driver, e.g. after one was lost. The next phone to claim them wins.
+    pub fn remove_driver_devices(&self, driver_id: DriverId) -> Result<usize> {
+        let n = self.store().delete_driver_devices(driver_id)?;
+        self.pair_codes.lock().expect("pair codes mutex poisoned").remove(&driver_id);
+        self.emit(AppEvent::DriversChanged);
+        Ok(n)
+    }
+
+    /// Whether any phone is paired to this driver (an unpaired driver can be edited by anyone, as before).
+    pub fn driver_is_claimed(&self, driver_id: DriverId) -> Result<bool> {
+        Ok(self.store().device_count(driver_id)? > 0)
+    }
+
+    // ---- Garage ------------------------------------------------------------
+
+    /// The shop as one driver sees it: balance, level, what they own and wear, and every price.
+    pub fn shop(&self, driver_id: DriverId) -> Result<ShopState> {
+        let store = self.store();
+        let driver = store.driver(driver_id)?.ok_or_else(|| anyhow::anyhow!("no such driver"))?;
+        let (xp, coins) = store.point_totals(driver_id)?;
+        let items = shop::CATALOGUE
+            .iter()
+            .map(|i| ShopItem { id: i.id.to_string(), slot: i.slot.to_string(), price: i.price, min_level: i.min_level })
+            .collect();
+        Ok(ShopState { coins, level: progress::level_of(xp), owned: store.owned_items(driver_id)?, look: driver.look, items })
+    }
+
+    /// Buys an item with coins. Fails when it is free, already owned, above the driver's level or too dear.
+    pub fn buy(&self, driver_id: DriverId, slot: &str, id: &str) -> Result<ShopState> {
+        {
+            let store = self.store();
+            let entry = shop::item(slot, id).ok_or_else(|| anyhow::anyhow!("no such item"))?;
+            if entry.price == 0 {
+                bail!("that one is free");
+            }
+            let key = shop::key(slot, id);
+            if store.owned_items(driver_id)?.contains(&key) {
+                bail!("you already own that");
+            }
+            let (xp, coins) = store.point_totals(driver_id)?;
+            if progress::level_of(xp) < entry.min_level {
+                bail!("that needs level {}", entry.min_level);
+            }
+            if coins < entry.price {
+                bail!("not enough coins: {} needed, you have {coins}", entry.price);
+            }
+            store.buy_item(driver_id, &key, entry.price, now_ms())?;
+        }
+        self.emit(AppEvent::DriversChanged);
+        self.shop(driver_id)
+    }
+
+    /// Wears a look. Everything in it must exist and be free or owned.
+    pub fn set_look(&self, driver_id: DriverId, look: &Look) -> Result<Driver> {
+        let store = self.store();
+        let owned = store.owned_items(driver_id)?;
+        let clean = shop::check_look(&owned, look).map_err(|e| anyhow::anyhow!(e))?;
+        store.set_look(driver_id, &clean)?;
+        let driver = store.driver(driver_id)?.ok_or_else(|| anyhow::anyhow!("no such driver"))?;
+        drop(store);
+        self.emit(AppEvent::DriversChanged);
+        Ok(driver)
+    }
+
+    // ---- profile ---------------------------------------------------------
+
+    /// Level, XP, coins, bests and stickers for the You page.
+    pub fn profile(&self, driver_id: DriverId) -> Result<Profile> {
+        let driver = self.store().driver(driver_id)?.ok_or_else(|| anyhow::anyhow!("no such driver"))?;
+        let laps = self.driver_laps(driver_id)?;
+        let store = self.store();
+        let (xp, coins) = store.point_totals(driver_id)?;
+        let level = progress::level_of(xp);
+        let recent = store.recent_point_events(driver_id, 8)?;
+
+        let clean_laps = laps.iter().filter(|l| l.valid).count() as u32;
+        let attempts = laps.iter().filter(|l| l.valid || matches!(l.untimed_reason.as_deref(), None | Some("cut"))).count() as u32;
+        let clean_percent = if attempts == 0 { 100 } else { (f64::from(clean_laps) * 100.0 / f64::from(attempts)).round() as u32 };
+        let mut tracks: Vec<(&str, &str, &str)> =
+            laps.iter().filter(|l| l.valid).map(|l| (l.combo.game.as_str(), l.combo.track.as_str(), l.combo.layout.as_str())).collect();
+        tracks.sort_unstable();
+        tracks.dedup();
+
+        // Where each of this driver's bests ranks among everyone's.
+        let all = store.profile_best_times()?;
+        drop(store);
+        let mut bests: Vec<ProfileBest> = all
+            .iter()
+            .filter(|(_, d, _)| *d == driver_id)
+            .map(|(combo, _, time)| {
+                let rivals: Vec<u32> = all.iter().filter(|(c, _, _)| c == combo).map(|(_, _, t)| *t).collect();
+                ProfileBest { combo: combo.clone(), time_ms: *time, position: 1 + rivals.iter().filter(|t| *t < time).count() as u32, of: rivals.len() as u32 }
+            })
+            .collect();
+        bests.sort_by(|a, b| (&a.combo.game, &a.combo.track, &a.combo.layout, &a.combo.car).cmp(&(&b.combo.game, &b.combo.track, &b.combo.layout, &b.combo.car)));
+
+        let streak_days = streak_days(laps.iter().filter(|l| l.valid).map(|l| l.recorded_at), now_ms());
+        let holds_a_record = bests.iter().any(|b| b.position == 1 && b.of > 1);
+        let sticker = |id: &str, name: &str, hint: &str, earned: bool| Sticker { id: id.into(), name: name.into(), hint: hint.into(), earned };
+        let stickers = vec![
+            sticker("first-lap", "First lap", "Set a clean lap", clean_laps >= 1),
+            sticker("ten-clean", "10 clean laps", "Ten laps with no cuts", clean_laps >= 10),
+            sticker("fifty-clean", "50 clean laps", "Fifty laps with no cuts", clean_laps >= 50),
+            sticker("explorer", "3 tracks", "Set a clean lap on three tracks", tracks.len() >= 3),
+            sticker("record", "Track record", "Hold the fastest lap on a track and car", holds_a_record),
+            sticker("streak", "3-day streak", "Drive three days in a row", streak_days >= 3),
+            sticker("clean-sweep", "Clean sweep", "Ten attempts, none cut", attempts >= 10 && clean_laps == attempts),
+            sticker("regular", "Level 5", "Reach level 5", level >= 5),
+        ];
+
+        Ok(Profile {
+            driver,
+            level,
+            title: progress::title_for(level).into(),
+            next_title: progress::title_for(level + 1).into(),
+            xp,
+            level_start_xp: progress::xp_for_level(level),
+            next_level_xp: progress::xp_for_level(level + 1),
+            coins,
+            attempts,
+            clean_laps,
+            clean_percent,
+            tracks: tracks.len() as u32,
+            streak_days,
+            bests,
+            stickers,
+            recent,
+        })
+    }
+
     pub fn seat(&self) -> Result<Option<DriverId>> {
         Ok(self.store().setting(SEAT_KEY)?.and_then(|v| v.parse().ok()))
     }
@@ -375,8 +589,11 @@ impl BinIt {
             // Swapping drivers part-way round a lap would let someone take over a good lap (or dump a bad
             // one on somebody else), so the lap in progress is voided for everybody.
             let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
+            // A swap in the moment between the car crossing the line and the game publishing the lap that
+            // just ended is a swap at the line: the new driver has the whole new lap, so it isn't voided.
+            let at_the_line = rt.wrap_waiting || rt.wrap_skip;
             let on_track = rt.session_info.is_some() && rt.live.as_ref().is_some_and(|l| l.phase == "driving" || l.phase == "paused");
-            if on_track {
+            if on_track && !at_the_line {
                 rt.lap_driver_changed = true;
             }
         }
@@ -582,8 +799,16 @@ impl BinIt {
     }
 
     fn record_lap_at(&self, completed: &CompletedLap, now: Timestamp) -> Result<LapResult> {
+        self.record_lap_for(completed, now, None)
+    }
+
+    /// `driver` names who drove it when that is known (`Some(None)` = a guest); otherwise it is whoever is in the seat.
+    fn record_lap_for(&self, completed: &CompletedLap, now: Timestamp, driver: Option<Option<DriverId>>) -> Result<LapResult> {
         let combo = combo_of(&completed.session);
-        let driver_id = self.seat()?;
+        let driver_id = match driver {
+            Some(d) => d,
+            None => self.seat()?,
+        };
         let store = self.store();
 
         let challenges: Vec<Challenge> =
@@ -645,11 +870,15 @@ impl BinIt {
                 gap_to_leader_ms: now_standing.map(|s| s.1),
             });
         }
+        let awards = match driver_id {
+            Some(id) if lap.valid => award_lap(&store, id, &lap, &combo, personal_best, combo_record, now)?,
+            _ => Awards::default(),
+        };
         drop(store);
         // New bests / PB change what live timing compares against.
         self.refresh_timing()?;
 
-        let result = LapResult { lap, personal_best, combo_record, sector_status, challenges: standings };
+        let result = LapResult { lap, personal_best, combo_record, sector_status, challenges: standings, awards };
         self.emit(AppEvent::LapRecorded { result: result.clone() });
         Ok(result)
     }
@@ -751,14 +980,25 @@ impl BinIt {
                 self.emit(AppEvent::Session { session: Some(view) });
             }
             GameEvent::LapCompleted(mut lap) => {
-                let changed = {
+                let (changed, driver) = {
                     let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
                     // The lap's result can arrive a moment after the car crossed the line: by then a new
                     // lap has begun, and a swap made in that gap belongs to the new lap, not this one.
+                    // A crossing whose result never came (the lap was abandoned, or a stage restarted) lapses once the
+                    // car is well past the line: a void is for the lap it was made in and never rolls onto the next.
+                    let stale = rt.wrap_waiting && rt.last_progress >= 0.5;
+                    if stale {
+                        rt.wrap_waiting = false;
+                        rt.void_pending = false;
+                        rt.wrap_driver = None;
+                    }
                     if std::mem::take(&mut rt.wrap_waiting) {
-                        std::mem::take(&mut rt.void_pending)
+                        (std::mem::take(&mut rt.void_pending), rt.wrap_driver.take())
                     } else {
-                        std::mem::take(&mut rt.lap_driver_changed)
+                        // The result came first: the car is still just short of the line in the live readings,
+                        // and the crossing they are about to show is this lap's, not a new one to wait on.
+                        rt.wrap_skip = rt.last_progress > 0.9;
+                        (std::mem::take(&mut rt.lap_driver_changed), None)
                     }
                 };
                 // Only a lap that would have counted (or been a failed attempt) needs voiding; out, in and
@@ -770,9 +1010,11 @@ impl BinIt {
                     lap.trace = None;
                 }
                 self.learn_map(&lap)?;
-                self.record_lap(&lap)?;
+                // The lap belongs to whoever was driving as it ended, even if the seat changed hands since.
+                self.record_lap_for(&lap, now_ms(), driver)?;
             }
             GameEvent::Live(LiveState { driving, phase, current_lap_ms, lap_valid, out_lap, lap_progress, position, inputs }) => {
+                let mut crossed = false;
                 let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
                 let timing = if out_lap {
                     rt.timing.pause();
@@ -796,11 +1038,14 @@ impl BinIt {
                 // Crossing the line starts a new lap. A swap during an out lap (a handover in the pits) is
                 // fine: that lap isn't timed. A swap during a timed lap voids it when its result arrives.
                 if rt.last_progress > 0.9 && lap_progress < 0.1 {
-                    if rt.last_out_lap {
+                    if std::mem::take(&mut rt.wrap_skip) {
+                        // Its result has already been dealt with.
+                    } else if rt.last_out_lap {
                         rt.lap_driver_changed = false;
                     } else {
                         rt.void_pending = std::mem::take(&mut rt.lap_driver_changed);
                         rt.wrap_waiting = true;
+                        crossed = true;
                     }
                 }
                 rt.last_progress = lap_progress;
@@ -810,6 +1055,10 @@ impl BinIt {
                 let live = LiveView { driving, phase: phase.key(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
                 rt.live = Some(live.clone());
                 drop(rt);
+                if crossed {
+                    let seat = self.seat()?;
+                    self.runtime.lock().expect("runtime mutex poisoned").wrap_driver = Some(seat);
+                }
                 self.emit(AppEvent::Live { live });
             }
         }
@@ -872,17 +1121,25 @@ impl BinIt {
                 },
                 None => None,
             };
-            let reference = match pb {
-                Some(r) => Some(r),
-                None => match store.best_profile(&combo, None)? {
-                    Some(p) => {
-                        let l = label(&p, store.best_valid_time(&combo, None, -1)?, "Best");
-                        Some((p, l))
-                    }
-                    None => None,
-                },
+            let best = match store.best_profile(&combo, None)? {
+                Some(p) => {
+                    let l = label(&p, store.best_valid_time(&combo, None, -1)?, "Best");
+                    Some((p, l))
+                }
+                None => None,
             };
-            TimingContext { boundaries, reference, best_overall, best_driver }
+            // The driver's own best leads; the fastest lap by anyone is offered too when it is a different lap.
+            let others: Vec<_> = match (&pb, &best) {
+                (Some((mine, _)), Some((fastest, _))) if mine.total_ms() != fastest.total_ms() => best.iter().cloned().collect(),
+                _ => Vec::new(),
+            };
+            let reference = pb.or(best);
+            // Everyone else who has a lap to race against, for the gap tower's live mode.
+            let mut ids: Vec<DriverId> = rows.iter().filter_map(|(who, _)| *who).filter(|id| Some(*id) != seat).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            let field = ids.into_iter().filter_map(|id| store.best_profile(&combo, Some(id)).ok().flatten().map(|p| (id, p))).collect();
+            TimingContext { boundaries, reference, others, best_overall, best_driver, field }
         };
         self.runtime.lock().expect("runtime mutex poisoned").timing.configure(ctx);
         Ok(())
@@ -970,3 +1227,56 @@ fn standing(store: &Store, c: &Challenge, driver_id: Option<DriverId>, now: Time
 
 #[cfg(test)]
 mod tests;
+
+/// Pays a driver for a valid lap: see `progress` for what each thing is worth.
+fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal_best: bool, combo_record: bool, now: Timestamp) -> Result<Awards> {
+    use progress::*;
+    let first_here = store.best_valid_time(combo, Some(driver), lap.id)?.is_none();
+    let xp_before = store.point_totals(driver)?.0;
+    let mut awards = Awards::default();
+    let mut give = |kind: &str, xp: i64, coins: i64, reason: &str| -> Result<()> {
+        store.insert_point_event(driver, kind, xp, coins, Some(lap.id), now)?;
+        awards.xp += xp;
+        awards.coins += coins;
+        awards.reasons.push(reason.to_string());
+        Ok(())
+    };
+    if first_here {
+        give("first", FIRST_XP, FIRST_COINS, "First lap here")?;
+    }
+    if store.lap_awards_since(driver, combo, now - DAY_MS)? < LAP_CAP_PER_DAY {
+        give("lap", LAP_XP, LAP_COINS, "Clean lap")?;
+    }
+    if personal_best && !first_here {
+        give("pb", PB_XP, PB_COINS, "Personal best")?;
+    }
+    if combo_record && store.others_have_valid_lap(combo, driver, lap.id)? {
+        give("record", RECORD_XP, RECORD_COINS, "Track record")?;
+    }
+    let level_after = level_of(xp_before + awards.xp);
+    if level_after > level_of(xp_before) {
+        awards.level_up = Some(level_after);
+    }
+    Ok(awards)
+}
+
+/// Consecutive days, ending today or yesterday, with at least one of `times` (UTC days).
+fn streak_days(times: impl Iterator<Item = Timestamp>, now: Timestamp) -> u32 {
+    let mut days: Vec<i64> = times.map(|t| t.div_euclid(progress::DAY_MS)).collect();
+    days.sort_unstable();
+    days.dedup();
+    let today = now.div_euclid(progress::DAY_MS);
+    let Some(&last) = days.last() else { return 0 };
+    if today - last > 1 {
+        return 0;
+    }
+    let mut streak = 1;
+    for pair in days.windows(2).rev() {
+        if pair[1] - pair[0] == 1 {
+            streak += 1;
+        } else {
+            break;
+        }
+    }
+    streak
+}

@@ -7,11 +7,12 @@ import { lapTime } from "../format";
 import { Helmet } from "./Helmet";
 import { cameraAt, MapViewControls, TrackMap, useMapView } from "./TrackMap";
 import { GapLadder, initials } from "./GapLadder";
+import { Signed } from "./Signed";
 
 /** Seconds to linger on the finished picture before the replay starts over. */
 const HOLD_MS = 2000;
 const SPEEDS = [1, 2, 4] as const;
-const GUEST = "#9AA3C7";
+const GUEST = "#8f99b3";
 
 /** How far round the lap (0..1) a car with this timing profile is after `t` ms. */
 function progressAt(profile: number[], t: number): number {
@@ -148,7 +149,7 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
           <div className={`livemap-frame${racers.length > 1 ? " with-ladder" : ""}`}>
             {racers.length > 1 && (
               <GapLadder
-                cars={state.map(({ r, finished }, i) => ({ key: r.lapId, color: colorOf(r), name: nameOf(r), short: initials(nameOf(r)), icon: <Helmet color={colorOf(r)} size={26} tile={false} seed={r.driverId ?? undefined} />, gapMs: ladder[i], faded: finished }))}
+                cars={state.map(({ r, finished }, i) => ({ key: r.lapId, color: colorOf(r), name: nameOf(r), short: initials(nameOf(r)), icon: <Helmet color={colorOf(r)} look={r.driverId != null ? drivers.get(r.driverId)?.look : undefined} size={26} tile={false} seed={r.driverId ?? undefined} />, gapMs: ladder[i], faded: finished }))}
               />
             )}
             <div className="ladder-map">
@@ -209,7 +210,7 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
                 <span className="replay-name">{nameOf(r)}</span>
                 <span className="mono muted">{lapTime(r.timeMs)}</span>
                 <span className="mono replay-gap" style={{ color: r === leader ? "var(--gold)" : gap > 0 ? "var(--red)" : "var(--muted)" }}>
-                  {r === leader ? (finished ? "P1" : "leader") : `+${(gap / 1000).toFixed(3)}`}
+                  {r === leader ? (finished ? "P1" : "leader") : <Signed text={`+${(gap / 1000).toFixed(3)}`} />}
                 </span>
               </button>
             ))}

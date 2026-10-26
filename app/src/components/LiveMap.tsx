@@ -6,6 +6,7 @@ import type { SectorStatus } from "../api";
 import { Helmet } from "./Helmet";
 import { words } from "../vocab";
 import { TrackMap } from "./TrackMap";
+import { Signed } from "./Signed";
 
 /**
  * Where the car is on track right now. Shown to anyone watching (including office
@@ -13,14 +14,14 @@ import { TrackMap } from "./TrackMap";
  * shows lap progress instead.
  */
 const SECTOR_COLOURS: Record<SectorStatus, string> = {
-  purple: "#C38BFF",
-  green: "#4BE3A6",
+  purple: "#b79bff",
+  green: "#4fd39a",
   yellow: "#FFC93C",
-  current: "#EEF0FF",
-  pending: "#3A4672",
+  current: "#e8ebf4",
+  pending: "#2a3140",
 };
 
-const deltaText = (ms: number) => `${ms <= 0 ? "-" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
+const deltaText = (ms: number) => `${ms <= 0 ? "−" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
 
 /**
  * The path driven so far while the map is still being learned. The app records it (so it survives a page
@@ -43,7 +44,8 @@ function useLearningPath(active: boolean, key: string): [number, number][] {
   return path.key === key ? path.points : [];
 }
 
-export function LiveMap() {
+/** `placeholder` keeps an empty card in place while nobody is driving (the Home page), instead of showing nothing. */
+export function LiveMap({ placeholder = false }: { placeholder?: boolean }) {
   const { status } = useAppState();
   const drivers = useDriverMap();
   const session = status?.session ?? null;
@@ -52,7 +54,25 @@ export function LiveMap() {
   const maps = useTrackMaps(session?.game ?? null);
   const map = session ? findMap(maps, session.track, session.layout) : undefined;
   const learned = useLearningPath(!!session && !!live?.driving && !map, session ? `${session.game}|${session.track}|${session.layout}|${session.car}` : "");
-  if (!session || !live?.driving) return null;
+  if (!session || !live?.driving) {
+    if (!placeholder) return null;
+    return (
+      <section className="card livemap livemap-idle" aria-label="Live map">
+        <div className="head" style={{ alignItems: "center" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+            <Helmet color="#8f99b3" size={40} mood="idle" />
+            <div style={{ minWidth: 0 }}>
+              <div className="label">Live</div>
+              <h2 style={{ marginTop: 2 }}>No one driving</h2>
+            </div>
+          </div>
+        </div>
+        <div className="livemap-frame">
+          <span className="muted" style={{ textAlign: "center" }}>The live map shows up here when someone is on track.</span>
+        </div>
+      </section>
+    );
+  }
 
   const setView = (patch: { rotate?: number; mirror?: boolean }) =>
     map && api.setMapView({ game: map.game, track: map.track, layout: map.layout, rotate: map.rotate, mirror: map.mirror, ...patch });
@@ -65,13 +85,13 @@ export function LiveMap() {
     <section className="card livemap" aria-label="Live map">
       <div className="head" style={{ alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-          <Helmet color={driver?.color ?? "#9AA3C7"} size={40} seed={driver?.id} />
+          <Helmet color={driver?.color ?? "#8f99b3"} look={driver?.look} size={40} seed={driver?.id} />
           <div style={{ minWidth: 0 }}>
             <div className="label" style={{ color: "var(--peach)" }}>{w.rally ? "Live on the stage" : "Live on track"}</div>
             <h2 style={{ marginTop: 2, overflowWrap: "anywhere" }}>{driver?.name ?? "Guest"}</h2>
           </div>
         </div>
-        <span className="chip plain mono" style={{ fontSize: 16, ...(!live.outLap && !live.lapValid ? { background: "rgba(255,107,138,0.18)", color: "#FF8BA3" } : {}) }}>
+        <span className="chip plain mono" style={{ fontSize: 16, ...(!live.outLap && !live.lapValid ? { background: "rgba(255,107,138,0.18)", color: "#ff7a92" } : {}) }}>
           {live.outLap ? `Out ${w.lap}` : !live.lapValid ? <><s style={{ opacity: 0.7 }}>{lapTime(live.currentLapMs)}</s>&nbsp;{live.voidReason === "driverChange" ? "Driver changed" : "Invalid"}</> : lapTime(live.currentLapMs)}
         </span>
       </div>
@@ -104,7 +124,7 @@ export function LiveMap() {
               </div>
               <span className="mono sector-time">{x.timeMs ? (x.timeMs / 1000).toFixed(3) : "-.---"}</span>
               <span className="mono sector-delta" style={{ color: x.deltaMs === null ? "var(--muted)" : x.deltaMs <= 0 ? "var(--mint)" : "var(--red)" }}>
-                {x.deltaMs === null ? " " : deltaText(x.deltaMs)}
+                {x.deltaMs === null ? " " : <Signed text={deltaText(x.deltaMs)} />}
               </span>
             </div>
           ))}

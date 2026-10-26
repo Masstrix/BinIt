@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useId, useMemo, useState, type CSSProperties } from "react";
+import { DECAL_AT, decalById, faceById, shellById, stripeById, type Look } from "../looks";
 
 /**
  * How the driver looks through the visor: `happy` for a win, `binned` for a lap the game threw out,
  * `focus` while they're in the seat, `wink` for a cheeky moment.
  */
-export type HelmetMood = "idle" | "happy" | "binned" | "focus" | "wink";
+export type HelmetMood = "idle" | "happy" | "binned" | "focus" | "wink" | "sleepy" | "wide" | "angry" | "peaked" | "stars" | "hearts" | "cash";
 
-function Eyes({ mood }: { mood: HelmetMood }) {
+export function Eyes({ mood }: { mood: HelmetMood }) {
   const arc = { fill: "none", stroke: "#fff", strokeWidth: 1.6, strokeLinecap: "round" } as const;
   switch (mood) {
     case "happy":
@@ -20,6 +21,37 @@ function Eyes({ mood }: { mood: HelmetMood }) {
         <>
           <ellipse cx="31.4" cy="20.5" rx="1.7" ry="2.6" fill="#fff" />
           <path d="M37 21.4Q38.8 19.4 40.6 21.4" {...arc} />
+        </>
+      );
+    case "sleepy":
+      return <path d="M29.6 20.6Q31.4 22.8 33.2 20.6M37 20.6Q38.8 22.8 40.6 20.6" {...arc} />;
+    case "wide":
+      return (
+        <>
+          <ellipse cx="31.4" cy="20.5" rx="2.4" ry="3.5" fill="#fff" />
+          <ellipse cx="38.8" cy="20.5" rx="2.4" ry="3.5" fill="#fff" />
+        </>
+      );
+    case "angry":
+      return (
+        <>
+          <ellipse cx="31.4" cy="21.2" rx="1.6" ry="2.2" fill="#fff" />
+          <ellipse cx="38.8" cy="21.2" rx="1.6" ry="2.2" fill="#fff" />
+          <path d="M28.8 17.2L33.6 18.8M41.4 17.2L36.6 18.8" {...arc} strokeWidth={1.4} />
+        </>
+      );
+    case "peaked":
+      return <path d="M29.4 21.8L31.4 18.6L33.4 21.8M36.8 21.8L38.8 18.6L40.8 21.8" {...arc} strokeWidth={1.7} strokeLinejoin="round" />;
+    case "stars":
+      return <path d="M31.4 17.4L32.3 19.6L34.5 20.5L32.3 21.4L31.4 23.6L30.5 21.4L28.3 20.5L30.5 19.6ZM38.8 17.4L39.7 19.6L41.9 20.5L39.7 21.4L38.8 23.6L37.9 21.4L35.7 20.5L37.9 19.6Z" fill="#FFE48A" />;
+    case "hearts":
+      return <path d="M31.4 23.2C28.6 21.3 28.8 18.6 30.5 18.6C31 18.6 31.3 18.9 31.4 19.3C31.5 18.9 31.8 18.6 32.3 18.6C34 18.6 34.2 21.3 31.4 23.2ZM38.8 23.2C36 21.3 36.2 18.6 37.9 18.6C38.4 18.6 38.7 18.9 38.8 19.3C38.9 18.9 39.2 18.6 39.7 18.6C41.4 18.6 41.6 21.3 38.8 23.2Z" fill="#FF6FA3" />;
+    case "cash":
+      return (
+        <>
+          <circle cx="31.4" cy="20.5" r="2.5" fill="#FFC93C" />
+          <circle cx="38.8" cy="20.5" r="2.5" fill="#FFC93C" />
+          <path d="M31.4 19L30.4 20.8H31.6L31.2 22L32.4 20.2H31.2Z M38.8 19L37.8 20.8H39L38.6 22L39.8 20.2H38.6Z" fill="#8A5405" />
         </>
       );
     default:
@@ -43,6 +75,12 @@ function seeded(seed: string) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+/** Where the galaxy shell's stars sit (x, y, size, twinkle delay). Size under 0.8 is a pin-prick; bigger is a four-point star. */
+const STARS: [number, number, number, number][] = [
+  [16, 14, 0.4, 0], [22, 10, 0.4, 1.1], [30, 9, 0.9, 0.4], [37, 11, 0.4, 1.7], [14, 22, 0.4, 0.7], [19, 27, 1.1, 1.3], [26, 32, 0.4, 0.2],
+  [33, 35, 0.4, 1.9], [41, 33, 0.9, 0.9], [44, 27, 0.4, 1.5], [21, 19, 0.4, 0.5], [12, 30, 0.4, 2.1], [28, 14, 0.4, 1.2], [35, 38, 0.4, 0.6],
+];
 
 const AMBIENT: HelmetMood[] = ["happy", "wink", "focus"];
 
@@ -93,20 +131,62 @@ function useAmbientMood(base: HelmetMood, seed: string): HelmetMood {
  * The eyes are alive: they blink, glance about and pull faces, on a rhythm unique to `seed`
  * (pass the driver's id; it defaults to the colour).
  */
-export function Helmet({ color, size = 48, tile = true, mood = "idle", seed }: { color: string; size?: number; tile?: boolean; mood?: HelmetMood; seed?: string | number }) {
+export function Helmet({ color, size = 48, tile = true, mood = "idle", seed, round = false, look, moment = false }: { color: string; /** A one-off reaction (a level-up, a switch) that should show its own face instead of the driver's default. */ moment?: boolean; /** What is equipped (gradient shell, decal, stripe, number); without it the helmet is plain `color`. */ look?: Look; size?: number; tile?: boolean; mood?: HelmetMood; seed?: string | number; /** The tile is a circle instead of a rounded square. */ round?: boolean }) {
   const key = String(seed ?? color);
   const { vars } = useMemo(() => personality(key), [key]);
-  const face = useAmbientMood(mood, key);
-  const blinks = face === "idle" || face === "focus";
+  // The default face is the driver's own choice of how they look: it stands in for the resting and "in the seat"
+  // faces wherever they appear. Only a binned lap and one-off reactions (`moment`) show something else.
+  const chosen = look?.face && mood !== "binned" && !moment ? (faceById(look.face)?.mood as HelmetMood | undefined) : undefined;
+  const face = useAmbientMood(chosen ?? mood, key);
+  const blinks = face === "idle" || face === "focus" || face === "wide" || face === "angry";
+  const gradId = `helmet-shell-${useId().replace(/:/g, "")}`;
+  const shell = shellById(look?.shell);
+  const decal = decalById(look?.decal);
+  const stripe = stripeById(look?.stripe);
+  const at = DECAL_AT[look?.decalAt ?? "side"];
   const svg = (
     <svg className={face === "binned" ? "helmet-shake" : undefined} width={tile ? size * 0.76 : size} height={tile ? size * 0.76 : size} viewBox="0 0 48 48" aria-hidden="true">
       {/* Full-face shell: the straight underside rises from the chin to the nape, as on a race helmet. */}
-      <path d="M11.2 34C7.4 26.4 8 15.6 15.6 10.2C21.6 6 31.6 5.6 38 9C43 11.8 46.2 17 46.6 23L46.6 31.4C46.6 36.4 44.6 39.6 40.8 40L13.4 35.6C12.4 35.4 11.6 34.8 11.2 34Z" fill={color} />
-      <path d="M11.2 34L13.4 35.6L40.8 40C43 39.8 44.6 38.6 45.6 36.8L11.6 31.4Z" fill="#0D1224" opacity="0.25" />
-      <path d="M24.2 14.8H44.4C45.6 17 46.3 19.6 46.6 22.6V26.2H25.4C22.8 26.2 21.4 24.4 21.8 22L22.6 17C22.8 15.6 23.4 14.8 24.2 14.8Z" fill="#0D1224" />
-      <circle cx="18" cy="20.6" r="1.6" fill="#0D1224" opacity="0.5" />
+      {shell && (
+        <defs>
+          <clipPath id={`${gradId}-clip`}>
+            <path d="M11.2 34C7.4 26.4 8 15.6 15.6 10.2C21.6 6 31.6 5.6 38 9C43 11.8 46.2 17 46.6 23L46.6 31.4C46.6 36.4 44.6 39.6 40.8 40L13.4 35.6C12.4 35.4 11.6 34.8 11.2 34Z" />
+          </clipPath>
+          <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
+            {shell.stops.map((c, i) => (
+              <stop key={i} offset={shell.stops.length === 1 ? 0 : i / (shell.stops.length - 1)} stopColor={c} />
+            ))}
+          </linearGradient>
+        </defs>
+      )}
+      <path d="M11.2 34C7.4 26.4 8 15.6 15.6 10.2C21.6 6 31.6 5.6 38 9C43 11.8 46.2 17 46.6 23L46.6 31.4C46.6 36.4 44.6 39.6 40.8 40L13.4 35.6C12.4 35.4 11.6 34.8 11.2 34Z" fill={shell ? `url(#${gradId})` : color} />
+      <path d="M11.2 34L13.4 35.6L40.8 40C43 39.8 44.6 38.6 45.6 36.8L11.6 31.4Z" fill="#0e1117" opacity="0.25" />
+      {shell?.stars && (
+        <g clipPath={`url(#${gradId}-clip)`}>
+          {STARS.map(([x, y, r, delay], i) =>
+            r >= 0.8 ? (
+              <path key={i} className="helmet-star" style={{ animationDelay: `${delay}s` }} d={`M${x} ${y - r * 2}L${x + r * 0.5} ${y - r * 0.5}L${x + r * 2} ${y}L${x + r * 0.5} ${y + r * 0.5}L${x} ${y + r * 2}L${x - r * 0.5} ${y + r * 0.5}L${x - r * 2} ${y}L${x - r * 0.5} ${y - r * 0.5}Z`} fill="#fff" />
+            ) : (
+              <circle key={i} className="helmet-star" style={{ animationDelay: `${delay}s` }} cx={x} cy={y} r={0.55} fill="#fff" />
+            ),
+          )}
+        </g>
+      )}
+      {stripe && stripe.paths.map((d, i) => <path key={i} d={d} fill="none" stroke="#fff" strokeWidth={stripe.width} strokeLinecap="round" strokeDasharray={stripe.dash} />)}
+      {decal && (
+        <g transform={`translate(${at.x} ${at.y}) scale(${at.s})`}>
+          <path d={decal.path} fill={look?.decalColor ?? "#fff"} />
+        </g>
+      )}
+      {look?.number != null && (
+        <text x="19.4" y="33" textAnchor="middle" fontFamily="Archivo, sans-serif" fontStyle="italic" fontWeight={800} fontSize="8.6" fill="#fff">
+          {look.number}
+        </text>
+      )}
+      <path d="M24.2 14.8H44.4C45.6 17 46.3 19.6 46.6 22.6V26.2H25.4C22.8 26.2 21.4 24.4 21.8 22L22.6 17C22.8 15.6 23.4 14.8 24.2 14.8Z" fill="#0e1117" />
+      <circle cx="18" cy="20.6" r="1.6" fill="#0e1117" opacity="0.5" />
       <path d="M13 28C12.4 19.6 17 12.6 25.4 10.4" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" opacity="0.55" />
-      <path d="M36.6 32.4L43.6 33.5M37.2 35.2L42.6 36.1" stroke="#0D1224" strokeWidth="1.3" strokeLinecap="round" opacity="0.45" />
+      <path d="M36.6 32.4L43.6 33.5M37.2 35.2L42.6 36.1" stroke="#0e1117" strokeWidth="1.3" strokeLinecap="round" opacity="0.45" />
       <g className="helmet-look" style={vars}>
         <g key={face} className="helmet-pop">
           <g className={blinks ? "helmet-blink" : undefined}>
@@ -118,7 +198,7 @@ export function Helmet({ color, size = 48, tile = true, mood = "idle", seed }: {
   );
   if (!tile) return svg;
   return (
-    <span className="helmet-tile" style={{ width: size, height: size, borderRadius: size * 0.3, background: `${color}33` }}>
+    <span className="helmet-tile" style={{ width: size, height: size, borderRadius: round ? "50%" : size * 0.3, background: `${color}33` }}>
       {svg}
     </span>
   );

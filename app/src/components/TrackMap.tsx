@@ -186,7 +186,7 @@ export function TrackMap({
       {segments &&
         sectors!.boundaries.slice(1, -1).map((b, i) => {
           const p = points[closed ? Math.round(b * points.length) % points.length : Math.min(Math.round(b * points.length), points.length - 1)];
-          return <circle key={i} cx={p[0]} cy={p[1]} r={u * 1.3} fill="#EEF0FF" />;
+          return <circle key={i} cx={p[0]} cy={p[1]} r={u * 1.3} fill="#e8ebf4" />;
         })}
       <circle cx={geo.start[0]} cy={geo.start[1]} r={u * 1.8} fill="var(--mint)" />
       {!closed && <circle cx={geo.end[0]} cy={geo.end[1]} r={u * 1.8} fill="var(--peach)" />}

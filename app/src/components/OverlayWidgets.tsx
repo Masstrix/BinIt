@@ -1,36 +1,51 @@
 // Presentational overlay widgets. The real overlay feeds them live data; the layout
 // editor renders the same components, scaled down, as its preview.
 
-import { useCallback, useEffect, useState, type HTMLAttributes, type ReactNode } from "react";
-import { api, type LiveTiming, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
+import { useCallback, useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
+import { useRankMotion, useTrends, type Flash } from "../rankMotion";
+import { api, isTauri, type LiveTiming, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
 import { lapKind, lapTime, trackName } from "../format";
 import { words } from "../vocab";
 import { orientationFor, styleOf, WIDGETS, type Anchor, type Orientation, type OverlayLayout, type WidgetId } from "../overlayLayout";
 import { BASE, gapText as ladderGap, place, room } from "./GapLadder";
-import { Crown, Helmet } from "./Helmet";
+import { CelebrationView, type Celebration } from "./Celebrations";
+import { useDevCelebrate } from "../devOverlay";
+import { Helmet } from "./Helmet";
+import type { Look } from "../looks";
 import { QrCode } from "./QrCode";
+import { Signed } from "./Signed";
 
 const card = {
-  borderRadius: 18,
-  background: "rgba(13,18,36,0.85)",
-  border: "1px solid rgba(169,174,255,0.25)",
+  borderRadius: 24,
+  background: "var(--panel)",
+  boxShadow: "0 8px 30px rgba(0,0,0,0.35)",
+  // Text on an overlay is never something to select or drag.
+  userSelect: "none",
+  WebkitUserSelect: "none",
 } as const;
 
 export interface OverlayData {
   driverName: string;
   driverColor: string;
+  driverLook?: Look;
   pbMs: number | null;
   challengeName: string | null;
   position: number | null;
   gapMs: number | null;
-  top3: { name: string; color: string; timeMs: number }[];
+  top3: { name: string; color: string; look?: Look; timeMs: number }[];
+  /** The running challenge's top five (and the driver's own row when outside them), for the podium + list style. */
+  challengeTop: { position: number; name: string; color: string; look?: Look; timeMs: number; gapMs: number; isSeat: boolean; driverId?: number | null }[];
+  /** When the running challenge ends (null = no end). */
+  challengeEndsAt: number | null;
   /** "Mount Panorama · GP" style label for the track leaderboard. */
   comboLabel: string | null;
   /** The game being played, so the wording can follow it (laps or stages). */
   game: string | null;
   /** Top 5 on the current track + car, plus the seated driver's row if outside it. */
-  comboTop: { position: number; name: string; color: string; timeMs: number; gapMs: number; isSeat: boolean; driverId?: number | null }[];
+  comboTop: { position: number; name: string; color: string; look?: Look; timeMs: number; gapMs: number; isSeat: boolean; driverId?: number | null }[];
   timing: LiveTiming | null;
+  /** Each other driver's best lap at this point of the lap (the gap tower's live mode); empty off the track. */
+  field: { name: string; color: string; look?: Look; ghostMs: number; driverId?: number }[];
   /** The running lap clock, for when there's no reference lap to show a delta against. */
   lapMs: number;
   /** The game has invalidated the lap in progress (a cut): it won't be timed. */
@@ -62,7 +77,7 @@ export function useOverlayData(): OverlayData {
   const standing = seat ? board.find((e) => e.driverId === seat.id) : undefined;
   const named = (e: LeaderboardEntry) => {
     const d = e.driverId != null ? drivers.get(e.driverId) : undefined;
-    return { name: d?.name ?? "Guest", color: d?.color ?? "#9AA3C7", timeMs: e.timeMs, driverId: e.driverId };
+    return { name: d?.name ?? "Guest", color: d?.color ?? "#8F99B3", look: d?.look, timeMs: e.timeMs, driverId: e.driverId };
   };
   const ranked = (e: LeaderboardEntry) => ({
     ...named(e),
@@ -72,18 +87,30 @@ export function useOverlayData(): OverlayData {
   });
   const comboTop = (comboBoard ?? []).slice(0, 5).map(ranked);
   if (pb && pb.position > 5) comboTop.push(ranked(pb));
+  const challengeTop = board.slice(0, 5).map(ranked);
+  if (standing && standing.position > 5) challengeTop.push(ranked(standing));
   return {
     driverName: seat?.name ?? "Guest",
-    driverColor: seat?.color ?? "#9AA3C7",
+    driverColor: seat?.color ?? "#8F99B3",
+    driverLook: seat?.look,
     pbMs: pb?.timeMs ?? null,
     challengeName: challenge?.name ?? null,
     position: standing?.position ?? null,
     gapMs: standing?.gapMs ?? null,
     top3: board.slice(0, 3).map(named),
+    challengeTop,
+    challengeEndsAt: challenge?.endsAt ?? null,
     comboLabel: session ? `${trackName(session.track, session.layout)}` : null,
     game: session?.game ?? null,
     comboTop,
     timing: status?.live?.driving ? status.live.timing : null,
+    field:
+      status?.live?.driving && !status.live.outLap
+        ? (status.live.timing?.field ?? []).map((g) => {
+            const d = drivers.get(g.driverId);
+            return { name: d?.name ?? "Guest", color: d?.color ?? "#8F99B3", look: d?.look, ghostMs: g.ghostMs, driverId: g.driverId };
+          })
+        : [],
     lapMs: status?.live?.currentLapMs ?? 0,
     lapInvalid: !!(status?.live?.driving && !status.live.outLap && !status.live.lapValid),
     lapVoidReason: status?.live?.voidReason ?? null,
@@ -92,31 +119,99 @@ export function useOverlayData(): OverlayData {
   };
 }
 
+/**
+ * Development only: the example standings after Tom (fourth) sets faster laps. Step 1 takes him to second, which
+ * pushes Priya off the podium; step 2 takes him past Jess to the lead.
+ */
+export function withDevClimb(data: OverlayData, step: number): OverlayData {
+  if (step <= 0) return data;
+  const time = step >= 2 ? 102050 : 102240;
+  const rank = <T extends { name: string; timeMs: number; position: number; gapMs: number }>(rows: T[]): T[] => {
+    const sorted = rows.map((r) => (r.name === "Tom" ? { ...r, timeMs: time } : r)).sort((a, b) => a.timeMs - b.timeMs);
+    return sorted.map((r, i) => ({ ...r, position: i + 1, gapMs: r.timeMs - sorted[0].timeMs }));
+  };
+  const challengeTop = rank(data.challengeTop);
+  const comboTop = rank(data.comboTop);
+  return { ...data, challengeTop, comboTop, top3: challengeTop.slice(0, 3).map(({ name, color, timeMs }) => ({ name, color, timeMs })) };
+}
+
+/**
+ * Development only: the example lap running, so the gap tower's live mode can be watched. `t` is seconds into a 70 s
+ * lap that repeats; the others' best laps are a little quicker or slower than Sam's, so they trade places.
+ */
+export function withDevLive(data: OverlayData, t: number): OverlayData {
+  const p = (t % 70) / 70;
+  const lapMs = Math.round(p * 70_000);
+  const pace = (factor: number, wobble: number, phase: number) => Math.round(lapMs * factor + Math.sin(p * 9 + phase) * wobble * p);
+  return {
+    ...data,
+    lapMs,
+    timing: data.timing ? { ...data.timing } : data.timing,
+    field: [
+      { name: "Jess", color: "#2FA8FF", ghostMs: pace(0.985, 380, 0) },
+      { name: "Priya", color: "#FF5FA2", ghostMs: pace(0.996, 520, 1.5) },
+      { name: "Tom", color: "#4FD39A", ghostMs: pace(1.012, 640, 3) },
+      { name: "Alex", color: "#FFC93C", ghostMs: pace(1.03, 300, 4.5) },
+    ],
+  };
+}
+
+/**
+ * The drivers the gap tower lists. Static: the best laps set on this track and car. Live: this lap raced against
+ * everyone else's best, point by point, so it starts level at the line and spreads out as the lap goes on.
+ */
+function useTowerRows(data: OverlayData, live: boolean): { rows: OverlayData["comboTop"]; racing: boolean } {
+  const racing = live && data.timing != null && !data.outLap && data.field.length > 0;
+  if (!racing) return { rows: data.comboTop, racing: false };
+  const all = [
+    { name: data.driverName, color: data.driverColor, look: data.driverLook, timeMs: data.lapMs, isSeat: true, driverId: undefined as number | undefined },
+    ...data.field.map((f) => ({ name: f.name, color: f.color, look: f.look, timeMs: f.ghostMs, isSeat: false, driverId: f.driverId })),
+  ].sort((a, b) => a.timeMs - b.timeMs || (a.isSeat ? -1 : b.isSeat ? 1 : 0));
+  const lead = all[0].timeMs;
+  const ranked = all.map((r, i) => ({ ...r, position: i + 1, gapMs: r.timeMs - lead }));
+  const top = ranked.slice(0, 5);
+  const mine = ranked.find((r) => r.isSeat);
+  if (mine && mine.position > 5) top.push(mine);
+  return { rows: top, racing: true };
+}
+
 /** Example data so the layout editor always shows what every widget looks like. */
 export const MOCK_DATA: OverlayData = {
   driverName: "Sam",
-  driverColor: "#FF9F6B",
+  driverColor: "#FF8A4C",
   pbMs: 102318,
   challengeName: "Imola Hot Lap Week",
   position: 2,
   gapMs: 204,
   top3: [
-    { name: "Jess", color: "#4FC3FF", timeMs: 102114 },
-    { name: "Sam", color: "#FF9F6B", timeMs: 102318 },
-    { name: "Priya", color: "#FF7AC6", timeMs: 102870 },
+    { name: "Jess", color: "#2FA8FF", timeMs: 102114 },
+    { name: "Sam", color: "#FF8A4C", timeMs: 102318 },
+    { name: "Priya", color: "#FF5FA2", timeMs: 102870 },
   ],
+  challengeTop: [
+    { position: 1, name: "Jess", color: "#2FA8FF", timeMs: 102114, gapMs: 0, isSeat: false },
+    { position: 2, name: "Sam", color: "#FF8A4C", timeMs: 102318, gapMs: 204, isSeat: true },
+    { position: 3, name: "Priya", color: "#FF5FA2", timeMs: 102870, gapMs: 756, isSeat: false },
+    { position: 4, name: "Tom", color: "#4FD39A", timeMs: 103555, gapMs: 1441, isSeat: false },
+    { position: 5, name: "Alex", color: "#FFC93C", timeMs: 104020, gapMs: 1906, isSeat: false },
+  ],
+  challengeEndsAt: Date.now() + (2 * 24 + 4) * 3600_000,
   comboLabel: "Imola · GP",
   game: "acevo",
   comboTop: [
-    { position: 1, name: "Jess", color: "#4FC3FF", timeMs: 102114, gapMs: 0, isSeat: false },
-    { position: 2, name: "Sam", color: "#FF9F6B", timeMs: 102318, gapMs: 204, isSeat: true },
-    { position: 3, name: "Priya", color: "#FF7AC6", timeMs: 102870, gapMs: 756, isSeat: false },
-    { position: 4, name: "Tom", color: "#4BE3A6", timeMs: 103555, gapMs: 1441, isSeat: false },
+    { position: 1, name: "Jess", color: "#2FA8FF", timeMs: 102114, gapMs: 0, isSeat: false },
+    { position: 2, name: "Sam", color: "#FF8A4C", timeMs: 102318, gapMs: 204, isSeat: true },
+    { position: 3, name: "Priya", color: "#FF5FA2", timeMs: 102870, gapMs: 756, isSeat: false },
+    { position: 4, name: "Tom", color: "#4FD39A", timeMs: 103555, gapMs: 1441, isSeat: false },
     { position: 5, name: "Alex", color: "#FFC93C", timeMs: 104020, gapMs: 1906, isSeat: false },
   ],
   timing: {
     deltaMs: -142,
     reference: "PB",
+    references: [
+      { kind: "pb", label: "PB", deltaMs: -142 },
+      { kind: "best", label: "Best", deltaMs: 61 },
+    ],
     currentSector: 2,
     sectors: [
       { timeMs: 33902, deltaMs: -215, status: "purple" },
@@ -124,6 +219,12 @@ export const MOCK_DATA: OverlayData = {
       { timeMs: null, deltaMs: null, status: "current" },
     ],
   },
+  field: [
+    { name: "Jess", color: "#2FA8FF", ghostMs: 70200 },
+    { name: "Priya", color: "#FF5FA2", ghostMs: 71100 },
+    { name: "Tom", color: "#4FD39A", ghostMs: 72300 },
+    { name: "Alex", color: "#FFC93C", ghostMs: 74000 },
+  ],
   lapMs: 71500,
   lapInvalid: false,
   lapVoidReason: null,
@@ -170,27 +271,44 @@ function StripStat({ label, value, color, extra, icon }: { label: string; value:
     <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
       <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>{icon}{label}</span>
       <span className="mono" style={{ fontSize: 16, color }}>
-        {value} {extra && <span style={{ color: "var(--peach)" }}>{extra}</span>}
+        {value} {extra && <span style={{ color: "var(--peach)" }}><Signed text={extra} /></span>}
       </span>
     </span>
   );
 }
 
 /** Driver / PB / challenge position, merged into one slim strip when they share a section. */
-export function StripCard({ items, data, itemProps }: { items: WidgetId[]; data: OverlayData; itemProps?: ItemProps }) {
+export function StripCard({ items, data, itemProps, onDriverClick }: { items: WidgetId[]; data: OverlayData; itemProps?: ItemProps; onDriverClick?: () => void }) {
   return (
-    <div style={{ ...card, display: "flex", alignItems: "center", gap: 14, padding: items[0] === "driver" ? "8px 16px 8px 8px" : "8px 16px", whiteSpace: "nowrap" }}>
+    <div style={{ ...card, borderRadius: 999, display: "flex", alignItems: "center", gap: 14, padding: items[0] === "driver" ? "8px 18px 8px 8px" : "8px 20px", whiteSpace: "nowrap" }}>
       {items.map((w, i) => (
         <span key={w} style={{ display: "flex", alignItems: "center", gap: 14 }}>
           {i > 0 && <span style={{ width: 1, height: 28, background: "var(--line)" }} />}
           <span data-widget={w} {...itemProps?.(w)} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {w === "driver" && (
-              <>
-                <Helmet color={data.driverColor} size={40} seed={data.driverName} mood={data.lapInvalid ? "binned" : "focus"} />
-                <span style={{ font: "800 18px var(--font-display)" }}>{data.driverName}</span>
-                <span className="kbd" style={{ background: "var(--line)", color: "var(--text-2)" }}>F8</span>
-              </>
-            )}
+            {w === "driver" && (() => {
+              const who = (
+                <>
+                  <Helmet color={data.driverColor} look={data.driverLook} size={40} seed={data.driverName} mood={data.lapInvalid ? "binned" : "focus"} round />
+                  <span style={{ font: "700 20px var(--font-display)", letterSpacing: "-0.02em" }}>{data.driverName}</span>
+                  <span className="kbd" style={{ background: "var(--line)", color: "var(--text-2)" }}>F8</span>
+                </>
+              );
+              // In the real overlay the driver can be clicked to pick someone else (the same picker as F8).
+              return onDriverClick ? (
+                <button
+                  type="button"
+                  className="tt-hit"
+                  data-hit=""
+                  title="Pick a different driver"
+                  onClick={onDriverClick}
+                  style={{ display: "flex", alignItems: "center", gap: 12, border: 0, background: "none", padding: 0, margin: 0, color: "inherit", font: "inherit", cursor: "pointer", pointerEvents: "auto", borderRadius: 999 }}
+                >
+                  {who}
+                </button>
+              ) : (
+                who
+              );
+            })()}
             {w === "pb" && <StripStat label="PB" value={lapTime(data.pbMs)} color="var(--mint)" />}
             {w === "challenge" && (
               <StripStat
@@ -207,75 +325,350 @@ export function StripCard({ items, data, itemProps }: { items: WidgetId[]; data:
   );
 }
 
-export function StandingsCard({ data }: { data: OverlayData }) {
+/** One place in a ranking: used by the track leaderboard and the challenge list so they look alike. */
+function RankRow({ position, name, color, look, seed, right, isSeat, rightColor, flip, mv }: { position: number; name: string; color: string; look?: Look; seed?: string | number; right: string; isSeat: boolean; rightColor?: string; flip?: string; mv?: Flash }) {
+  const placeColour = position === 1 ? "#FFE14D" : position === 3 ? "#FF8A4C" : "var(--muted)";
   return (
-    <div style={{ ...card, padding: "10px 14px", minWidth: 230, display: "flex", flexDirection: "column", gap: 6 }}>
-      <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-        <Trophy />
-        <span style={{ font: "800 13px var(--font-display)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {data.challengeName ?? "No challenge running"}
+    <span
+      data-flip={flip ? `r:${flip}` : undefined}
+      data-mv={mv?.mv || undefined}
+      style={{
+        position: "relative",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        minHeight: 36,
+        padding: "0 8px",
+        margin: "0 -8px",
+        borderRadius: 12,
+        background: isSeat ? "var(--tint)" : "transparent",
+        color: isSeat ? "var(--peri-1)" : "var(--text)",
+      }}
+    >
+      <span style={{ font: "600 12px var(--font-mono)", width: 14, color: isSeat ? "var(--peri-1)" : placeColour }}>{position}</span>
+      <span data-flip={flip ? `h:${flip}` : undefined} style={{ display: "flex" }}>
+        <Helmet color={color} look={look} size={26} seed={seed ?? name} />
+      </span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: isSeat ? 700 : 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+      <span className="mono" style={{ fontSize: 13, color: rightColor }}><Signed text={right} /></span>
+      {!!mv?.gain && <span className="mv-badge">▲ {mv.gain}</span>}
+    </span>
+  );
+}
+
+/** "2d 04h" / "3h 12m": how long a challenge has left, short enough for a chip. */
+function timeLeft(until: number, now = Date.now()): string {
+  const s = Math.max(0, Math.floor((until - now) / 1000));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return d > 0 ? `${d}d ${String(h).padStart(2, "0")}h` : `${h}h ${String(m).padStart(2, "0")}m`;
+}
+
+export function StandingsCard({ data, mode }: { data: OverlayData; mode?: string }) {
+  const [, redraw] = useState(0);
+  // The countdown only changes by the minute.
+  useEffect(() => {
+    if (data.challengeEndsAt == null) return;
+    const t = window.setInterval(() => redraw((n) => n + 1), 30_000);
+    return () => window.clearInterval(t);
+  }, [data.challengeEndsAt]);
+  const below = mode === "list" ? data.challengeTop.filter((r) => r.position > 3) : [];
+  const box = useRef<HTMLDivElement>(null);
+  const flash = useRankMotion([...data.top3.map((r) => r.name), ...below.map((r) => r.name)], box, true, data.challengeName ?? "");
+  // Second, first, third, left to right: the winner's step is the tallest.
+  const steps = [
+    { place: 2, h: 34 },
+    { place: 1, h: 48 },
+    { place: 3, h: 24 },
+  ];
+  return (
+    <div ref={box} style={{ ...card, borderRadius: 28, padding: "14px 16px", width: 260, display: "flex", flexDirection: "column", gap: 12 }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        <span style={{ flex: "none", width: 28, height: 28, borderRadius: 10, background: "rgba(255,201,60,0.15)", display: "grid", placeItems: "center" }}>
+          <Trophy size={16} />
+        </span>
+        <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2, lineHeight: 1.15 }}>
+          {/* The time left shares the caption's line, so the name below can use the whole width. */}
+          <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ font: "500 10px var(--font-mono)", letterSpacing: "0.1em", color: "var(--muted)" }}>CHALLENGE</span>
+            {data.challengeEndsAt != null && (
+              <span style={{ font: "600 12px var(--font-mono)", padding: "3px 10px", borderRadius: 999, background: "var(--panel-2)", color: "var(--text)", whiteSpace: "nowrap" }}>
+                {timeLeft(data.challengeEndsAt)}
+              </span>
+            )}
+          </span>
+          <span style={{ font: "700 14px var(--font-display)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {data.challengeName ?? "No challenge running"}
+          </span>
         </span>
       </span>
-      {data.top3.length === 0 && <span className="muted" style={{ fontSize: 13 }}>No {words(data.game).laps} yet</span>}
-      {data.top3.map((r, i) => (
-        <span key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14 }}>
-          <span style={{ width: 16, fontWeight: 800, color: i === 0 ? "var(--gold)" : "var(--text-2)" }}>{i + 1}</span>
-          {i === 0 ? <Crown size={14} /> : <span style={{ width: 14 }} />}
-          <span style={{ flex: 1, fontWeight: 600 }}>{r.name}</span>
-          <span className="mono" style={{ fontSize: 14, color: i === 0 ? "var(--gold)" : undefined }}>{lapTime(r.timeMs)}</span>
+      {data.top3.length === 0 ? (
+        <span className="muted" style={{ fontSize: 13 }}>No {words(data.game).laps} yet</span>
+      ) : (
+        <span style={{ display: "flex", alignItems: "flex-end", gap: 6 }}>
+          {steps.map(({ place, h }) => {
+            const r = data.top3[place - 1];
+            return (
+              <span key={place} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
+                {r ? (
+                  <>
+                    <span data-flip={`h:${r.name}`} style={{ position: "relative", display: "flex" }}>
+                      <Helmet color={r.color} look={r.look} size={38} seed={r.name} />
+                      {!!flash(r.name).gain && <span className="mv-badge" style={{ top: -8, right: -14 }}>▲ {flash(r.name).gain}</span>}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 600, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
+                    <span className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>{lapTime(r.timeMs)}</span>
+                  </>
+                ) : (
+                  <span style={{ height: 38 }} />
+                )}
+                <span style={{ width: "100%", height: h, borderRadius: "12px 12px 0 0", background: r ? `${r.color}33` : "var(--panel-2)", display: "flex", justifyContent: "center", paddingTop: 4, font: "700 15px var(--font-display)" }}>
+                  {place}
+                </span>
+              </span>
+            );
+          })}
         </span>
-      ))}
+      )}
+      {below.length > 0 && (
+        <span style={{ display: "flex", flexDirection: "column", borderTop: "1px solid var(--line)", paddingTop: 6 }}>
+          {below.map((r, i) => (
+            <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
+              {i > 0 && r.position - below[i - 1].position > 1 && <span style={{ height: 1, background: "var(--line)", margin: "4px 0" }} />}
+              <RankRow position={r.position} name={r.name} color={r.color} look={r.look} seed={r.driverId ?? r.name} right={`+${(r.gapMs / 1000).toFixed(3)}`} rightColor="var(--muted)" isSeat={r.isSeat} flip={r.name} mv={flash(r.name)} />
+            </span>
+          ))}
+        </span>
+      )}
     </div>
   );
 }
 
-const SECTOR_COLOURS = { purple: "#C38BFF", green: "#4BE3A6", yellow: "#FFC93C", current: "#EEF0FF", pending: "#2A3456" };
+const SECTOR_COLOURS = { purple: "#B79BFF", green: "#4FD39A", yellow: "#FFC93C", current: "#E8EBF4", pending: "#262D3B" };
+
+const CYCLE_MS = 6000;
+/** After a hand switch while cycling, how long it stays before cycling carries on. */
+const HOLD_MS = 15000;
+
+/**
+ * Which reference lap live timing is against. The style (PB, Leader or Cycle) is the starting point; clicking
+ * the widget or a pill, or Ctrl+Shift+T in game, switches by hand. In a fixed style that stays until the style
+ * changes; while cycling it holds for a while and then carries on.
+ */
+function useTimingReference(
+  kinds: string[],
+  mode: string | undefined,
+): [string | undefined, () => void, (kind: string) => void, { ms: number; key: string; held: boolean } | null] {
+  const [tick, setTick] = useState(0);
+  const [held, setHeld] = useState<string | null>(null);
+  const [seq, setSeq] = useState(0);
+  const timer = useRef<number | undefined>(undefined);
+  const list = kinds.join();
+  useEffect(() => setHeld(null), [mode]);
+  useEffect(() => {
+    if (mode !== "cycle" || kinds.length < 2 || held) return;
+    const t = window.setInterval(() => setTick((n) => n + 1), CYCLE_MS);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, list, held]);
+  const base = mode === "cycle" && kinds.length > 1 ? kinds[tick % kinds.length] : mode === "best" && kinds.includes("best") ? "best" : kinds.includes("pb") ? "pb" : kinds[0];
+  const shown = held && kinds.includes(held) ? held : base;
+
+  const select = useCallback(
+    (kind: string) => {
+      setHeld(kind);
+      setSeq((n) => n + 1);
+      window.clearTimeout(timer.current);
+      if (mode === "cycle") {
+        // The lap picked becomes the cycle's place, so when the hold ends it carries on from there rather than
+        // jumping back to wherever the cycle had got to.
+        setTick(Math.max(0, kinds.indexOf(kind)));
+        timer.current = window.setTimeout(() => setHeld(null), HOLD_MS);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mode, list],
+  );
+  const next = useCallback(() => {
+    if (kinds.length > 1) select(kinds[(kinds.indexOf(shown ?? "") + 1) % kinds.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list, shown, select]);
+
+  // Ctrl+Shift+T: the desktop app tells the overlay window (it cannot be clicked over a game).
+  const nextRef = useRef(next);
+  nextRef.current = next;
+  useEffect(() => {
+    if (!isTauri) return;
+    let off: (() => void) | undefined;
+    let gone = false;
+    import("@tauri-apps/api/event").then(({ listen }) =>
+      listen("timing-next", () => nextRef.current()).then((u) => {
+        if (gone) u();
+        else off = u;
+      }),
+    );
+    return () => {
+      gone = true;
+      off?.();
+    };
+  }, []);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  // How long until the next automatic switch (or until cycling resumes after a hand switch), for the countdown ring.
+  const wait = mode === "cycle" && kinds.length > 1 ? { ms: held ? HOLD_MS : CYCLE_MS, key: `${tick}|${held ?? "-"}|${seq}`, held: !!held } : null;
+  return [shown, next, select, wait];
+}
+
+const REF_NAME: Record<string, string> = { pb: "PB", best: "Leader" };
+
+const WAVE_STEP_MS = 45;
+/** The old digit has fully faded by this point, so the digit that replaces it never shares its place. */
+const WAVE_OUT_MS = 170;
+const WAVE_IN_MS = 380;
+
+/** Your best is green and the fastest lap anyone has set is purple, as everywhere else in the app. */
+const REF_COLOUR: Record<string, { fg: string; bg: string; ring: string }> = {
+  pb: { fg: "#6FF0B4", bg: "rgba(79, 211, 154, 0.3)", ring: "rgba(79, 211, 154, 0.75)" },
+  best: { fg: "#CDB8FF", bg: "rgba(183, 155, 255, 0.3)", ring: "rgba(183, 155, 255, 0.75)" },
+};
+
+/**
+ * A number that changes in a wave when `switchKey` changes (the lap it is measured against): the old digits lift
+ * away left to right while the new ones rise in just behind them. Between switches it updates in place, as a live
+ * delta must.
+ */
+function WaveNumber({ text, switchKey, color, enabled }: { text: string; switchKey: string; color: string; enabled: boolean }) {
+  const [leaving, setLeaving] = useState<string | null>(null);
+  const lastText = useRef(text);
+  const lastKey = useRef(switchKey);
+  // Runs before the effect below stores this render's text, so `lastText` is still what was on show.
+  useEffect(() => {
+    if (lastKey.current === switchKey) return;
+    lastKey.current = switchKey;
+    if (!enabled) return;
+    setLeaving(lastText.current);
+    const t = window.setTimeout(() => setLeaving(null), WAVE_OUT_MS + WAVE_IN_MS + 60 + WAVE_STEP_MS * Math.max(text.length, lastText.current.length));
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [switchKey]);
+  useEffect(() => {
+    lastText.current = text;
+  });
+  const chars = (t: string, cls: string, after = 0) =>
+    [...t].map((c, i) => (
+      <span key={i} className={cls} style={{ display: "inline-block", whiteSpace: "pre", animationDelay: `${after + i * WAVE_STEP_MS}ms` }}>
+        {i === 0 && t.length > 1 && /\d/.test(t[1]) ? <Signed text={c} /> : c}
+      </span>
+    ));
+  return (
+    <span className="mono" style={{ position: "relative", display: "inline-block", overflow: "hidden", padding: "4px 0", margin: "-4px 0", font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.03em", color }}>
+      {leaving ? chars(text, "tt-in", WAVE_OUT_MS) : <Signed text={text} />}
+      {leaving && (
+        <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 4, pointerEvents: "none", whiteSpace: "pre" }}>
+          {chars(leaving, "tt-out")}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** A small ring that empties over `ms`: how long until live timing switches to the other lap (muted while a hand switch is held). */
+function CountdownRing({ ms, held, colour }: { ms: number; held: boolean; colour: string }) {
+  const r = 6;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" role="img" aria-label={held ? "Holding your choice" : "Switching soon"} style={{ flex: "none", alignSelf: "center" }}>
+      <circle cx="9" cy="9" r={r} fill="none" stroke="var(--panel-3)" strokeWidth="2.5" />
+      <circle cx="9" cy="9" r={r} fill="none" stroke={held ? "var(--muted)" : colour} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={c} strokeDashoffset="0" transform="rotate(-90 9 9)">
+        <animate attributeName="stroke-dashoffset" from="0" to={c} dur={`${ms / 1000}s`} fill="freeze" />
+      </circle>
+    </svg>
+  );
+}
 
 /** Delta to the reference lap plus one bar per sector (purple / green / yellow). */
-export function TimingCard({ data }: { data: OverlayData }) {
+export function TimingCard({ data, mode }: { data: OverlayData; mode?: string }) {
   const t = data.timing;
+  const refs = t?.references ?? [];
+  const [shown, , select, wait] = useTimingReference(refs.map((r) => r.kind), mode);
   if (data.outLap || !t) {
     return data.outLap ? (
-      <div style={{ ...card, padding: "10px 14px", minWidth: 240, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: 1, color: "var(--muted)" }}>OUT LAP</span>
-        <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>TIMING STARTS AT THE LINE</span>
+      <div style={{ ...card, padding: "14px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ font: "700 20px var(--font-display)", letterSpacing: "-0.02em" }}>Out lap</span>
+        <span style={{ fontSize: 12, color: "var(--muted)" }}>Timing starts at the line</span>
       </div>
     ) : null;
   }
-  const d = t.deltaMs;
+  const current = refs.find((r) => r.kind === shown);
+  const d = current ? current.deltaMs : t.deltaMs;
   const cut = data.lapInvalid;
+  const several = refs.length > 1;
   return (
-    <div style={{ ...card, padding: "10px 14px", minWidth: 240, display: "flex", flexDirection: "column", gap: 8, ...(cut ? { border: "1px solid rgba(255,107,138,0.7)", background: "rgba(48,14,28,0.88)" } : {}) }}>
+    <div
+      style={{ ...card, borderRadius: 28, padding: "16px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 10, ...(cut ? { boxShadow: "inset 0 0 0 1.5px rgba(255,122,146,0.7), 0 8px 30px rgba(0,0,0,0.35)", background: "#2A1420" } : {}) }}>
       {cut && (
-        <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, color: "#FF6B8A" }}>{data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : `${words(data.game).lap.toUpperCase()} INVALID`}</span>
-          <span style={{ fontSize: 11, color: "#FF8BA3", fontWeight: 600 }}>WON'T BE TIMED</span>
+        <span style={{ font: "500 11px var(--font-mono)", letterSpacing: "0.06em", color: "var(--red)" }}>
+          {data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : `${words(data.game).lap.toUpperCase()} INVALID`} · WON'T COUNT
         </span>
       )}
-      <span style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, ...(cut ? { opacity: 0.55, textDecoration: "line-through" } : {}) }}>
+      {refs.length > 0 && !cut && (
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+         {/* The lit pill is one shape that slides to whichever lap is chosen. */}
+         <span style={{ position: "relative", flex: 1, display: "flex", gap: 6, ["--n" as string]: refs.length, ["--i" as string]: Math.max(0, refs.findIndex((r) => r.kind === shown)) }}>
+          <span
+            aria-hidden="true"
+            className="tt-slide"
+            style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 999, background: (REF_COLOUR[shown ?? "pb"] ?? REF_COLOUR.pb).bg, boxShadow: `inset 0 0 0 1.5px ${(REF_COLOUR[shown ?? "pb"] ?? REF_COLOUR.pb).ring}`, transition: "left 0.3s cubic-bezier(0.3, 0.8, 0.3, 1), background 0.3s, box-shadow 0.3s", width: "calc((100% - 6px * (var(--n) - 1)) / var(--n))", left: "calc(var(--i) * ((100% - 6px * (var(--n) - 1)) / var(--n) + 6px))" }}
+          />
+          {refs.map((r) => {
+            const on = r.kind === shown;
+            const look = { position: "relative" as const, flex: 1, textAlign: "center" as const, padding: "5px 0", borderRadius: 999, font: on ? "800 12px var(--font-mono)" : "500 11px var(--font-mono)", letterSpacing: on ? "0.02em" : undefined, background: on ? "transparent" : "var(--panel-2)", color: on ? (REF_COLOUR[r.kind] ?? REF_COLOUR.pb).fg : "var(--muted)", transition: "color 0.25s, background 0.25s" };
+            // Only the pills can be clicked (and only when there is more than one lap to choose between).
+            return several ? (
+              <button
+                key={r.kind}
+                type="button"
+                data-hit=""
+                aria-pressed={on}
+                title={`Show the delta against ${r.kind === "pb" ? "your PB" : "the fastest lap"}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  select(r.kind);
+                }}
+                style={{ ...look, border: 0, cursor: "pointer", pointerEvents: "auto" }}
+              >
+                {REF_NAME[r.kind] ?? r.label}
+              </button>
+            ) : (
+              <span key={r.kind} style={look}>
+                {REF_NAME[r.kind] ?? r.label}
+              </span>
+            );
+          })}
+         </span>
+          {wait && <CountdownRing key={wait.key} ms={wait.ms} held={wait.held} colour={(REF_COLOUR[shown ?? "pb"] ?? REF_COLOUR.pb).fg} />}
+        </span>
+      )}
+      <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, ...(cut ? { opacity: 0.55, textDecoration: "line-through" } : {}) }}>
         {t.reference ? (
-          <>
-            <span className="mono" style={{ fontSize: 24, color: cut ? "#FF8BA3" : deltaColour(d) }}>{deltaText(d)}</span>
-            <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>VS {t.reference.toUpperCase()}</span>
-          </>
+          <WaveNumber text={deltaText(d)} switchKey={shown ?? "-"} enabled={several} color={cut ? "var(--red)" : deltaColour(d)} />
         ) : (
           // First lap on this track: nothing to compare against yet, so show the lap clock.
           <>
-            <span className="mono" style={{ fontSize: 24 }}>{lapTime(data.lapMs)}</span>
-            <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>FIRST {words(data.game).lap.toUpperCase()} · NO REFERENCE</span>
+            <span className="mono" style={{ font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.03em" }}>{lapTime(data.lapMs)}</span>
+            <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>FIRST {words(data.game).lap.toUpperCase()}</span>
           </>
         )}
       </span>
-      <span style={{ display: "flex", gap: 4 }}>
+      <span style={{ display: "flex", gap: 6 }}>
         {t.sectors.map((s, i) => (
-          <span key={i} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-            <span style={{ height: 8, borderRadius: 4, background: SECTOR_COLOURS[s.status], opacity: s.status === "current" ? 0.5 : 1 }} />
-            <span className="mono" style={{ fontSize: 11, lineHeight: 1.2, textAlign: "center", color: s.timeMs ? "var(--text)" : "var(--muted)" }}>
-              {s.timeMs ? (s.timeMs / 1000).toFixed(3) : `S${i + 1}`}
-            </span>
-            {s.deltaMs !== null && (
-              <span className="mono" style={{ fontSize: 10, lineHeight: 1.1, textAlign: "center", color: deltaColour(s.deltaMs) }}>{deltaText(s.deltaMs)}</span>
-            )}
+          <span key={i} style={{ flex: 1, height: 10, borderRadius: 5, background: SECTOR_COLOURS[s.status], opacity: s.status === "current" ? 0.5 : 1 }} />
+        ))}
+      </span>
+      <span style={{ display: "flex", justifyContent: "space-between", gap: 8, font: "500 11px var(--font-mono)", color: "var(--muted)" }}>
+        {t.sectors.map((s, i) => (
+          <span key={i}>
+            S{i + 1} {s.timeMs ? (s.timeMs / 1000).toFixed(2) : "--"}
           </span>
         ))}
       </span>
@@ -284,11 +677,11 @@ export function TimingCard({ data }: { data: OverlayData }) {
 }
 
 function deltaColour(ms: number | null) {
-  return ms === null ? "var(--muted)" : ms <= 0 ? "#4BE3A6" : "#FF6B8A";
+  return ms === null ? "var(--muted)" : ms <= 0 ? "#4FD39A" : "#FF7A92";
 }
 
 function deltaText(ms: number | null) {
-  return ms === null ? "--.---" : `${ms <= 0 ? "-" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
+  return ms === null ? "--.---" : `${ms <= 0 ? "−" : "+"}${(Math.abs(ms) / 1000).toFixed(3)}`;
 }
 
 /**
@@ -297,9 +690,14 @@ function deltaText(ms: number | null) {
  * column it is the tower down the side of the screen; in a row it runs along the top or bottom edge.
  * The seated driver is picked out, and appended after a break when outside the top few.
  */
-export function GapTowerCard({ data, orientation = "vertical" }: { data: OverlayData; orientation?: Orientation }) {
-  const rows = data.comboTop;
+export function GapTowerCard({ data, orientation = "vertical", live = false }: { data: OverlayData; orientation?: Orientation; live?: boolean }) {
+  const { rows, racing } = useTowerRows(data, live);
   const row = orientation === "horizontal";
+  const box = useRef<HTMLDivElement>(null);
+  // Track games have a running order that changes; a rally stage is driven one car at a time, so it stays still.
+  // A rally stage listed by best times stays still; raced live, its order changes as the stage goes on.
+  const flash = useRankMotion(rows.map((r) => r.name), box, racing || !words(data.game).rally, data.comboLabel ?? "");
+  const trend = useTrends(Object.fromEntries(rows.map((r) => [r.name, r.gapMs])), 8);
   const gapText = (r: (typeof rows)[number]) => (r.position === 1 ? lapTime(r.timeMs) : `+${(r.gapMs / 1000).toFixed(3)}`);
   const tag = (r: (typeof rows)[number]) => (
     <span
@@ -319,9 +717,12 @@ export function GapTowerCard({ data, orientation = "vertical" }: { data: Overlay
       {r.position}
     </span>
   );
-  const seatStyle = (r: (typeof rows)[number]) => (r.isSeat ? { background: "rgba(255,159,107,0.2)", boxShadow: "inset 0 0 0 1px rgba(255,159,107,0.55)" } : {});
+  // Live: the seated driver within half a second of the car ahead is about to pass it.
+  const inRange = (r: (typeof rows)[number], i: number) => racing && r.isSeat && i > 0 && r.timeMs - rows[i - 1].timeMs < 500;
+  const seatStyle = (r: (typeof rows)[number]) => (r.isSeat ? { background: "var(--tint)", color: "var(--peri-1)" } : {});
   return (
     <div
+      ref={box}
       style={{
         ...card,
         padding: 6,
@@ -334,23 +735,26 @@ export function GapTowerCard({ data, orientation = "vertical" }: { data: Overlay
     >
       {rows.length === 0 && <span className="muted" style={{ fontSize: 13, padding: "4px 8px" }}>No {words(data.game).laps} yet</span>}
       {rows.map((r, i) => (
-        <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
+        <span key={r.name} style={{ display: "contents" }}>
           {i === 5 && <span style={row ? { width: 1, background: "var(--line)", margin: "2px 2px" } : { height: 1, background: "var(--line)", margin: "1px 4px" }} />}
           {row ? (
-            <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 92, padding: "5px 8px", borderRadius: 12, ...seatStyle(r) }}>
+            <span data-flip={`r:${r.name}`} data-mv={flash(r.name).mv || undefined} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 3, minWidth: 92, padding: "5px 8px", borderRadius: 12, ...seatStyle(r) }}>
+              {!!flash(r.name).gain && <span className="mv-badge">▲ {flash(r.name).gain}</span>}
               <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 {tag(r)}
                 <span style={{ flex: 1, height: 4, borderRadius: 2, background: r.color }} />
               </span>
               <span style={{ fontSize: 14, fontWeight: r.isSeat ? 800 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 110 }}>{r.name}</span>
-              <span className="mono" style={{ fontSize: 13, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}>{gapText(r)}</span>
+              <span className="mono" data-trend={trend[r.name]} style={{ fontSize: 13, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}><Signed text={gapText(r)} /></span>
             </span>
           ) : (
-            <span style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 8px 3px 3px", borderRadius: 12, ...seatStyle(r) }}>
+            <span data-flip={`r:${r.name}`} data-mv={flash(r.name).mv || undefined} data-range={inRange(r, i) || undefined} style={{ position: "relative", display: "flex", alignItems: "center", gap: 8, padding: "3px 8px 3px 3px", borderRadius: 12, ...seatStyle(r) }}>
+              {!!flash(r.name).gain && <span className="mv-badge">▲ {flash(r.name).gain}</span>}
+              {!flash(r.name).gain && inRange(r, i) && <span className="range-tag">IN RANGE</span>}
               {tag(r)}
               <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: r.color, flex: "none" }} />
               <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: r.isSeat ? 800 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
-              <span className="mono" style={{ fontSize: 13, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}>{gapText(r)}</span>
+              <span className="mono" data-trend={trend[r.name]} style={{ fontSize: 13, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}>{gapText(r)}</span>
             </span>
           )}
         </span>
@@ -365,9 +769,13 @@ export function GapTowerCard({ data, orientation = "vertical" }: { data: Overlay
  * driver far back is far), with the gap to the driver ahead written between each pair. In a column it runs
  * down the rail; in a row it runs along it.
  */
-export function GapMonitorCard({ data, orientation = "vertical" }: { data: OverlayData; orientation?: Orientation }) {
-  const cars = [...data.comboTop].sort((a, b) => a.gapMs - b.gapMs);
+export function GapMonitorCard({ data, orientation = "vertical", live = false }: { data: OverlayData; orientation?: Orientation; live?: boolean }) {
+  const { rows: listed } = useTowerRows(data, live);
+  const cars = [...listed].sort((a, b) => a.gapMs - b.gapMs);
   const row = orientation === "horizontal";
+  const rail = useRef<HTMLDivElement>(null);
+  // The cars glide along the rail by themselves (below); this only supplies the green and red rings.
+  const flash = useRankMotion(cars.map((c) => c.name), rail, false, data.comboLabel ?? "");
   const intervals = cars.slice(1).map((c, i) => c.gapMs - cars[i].gapMs);
   const size = Math.max(BASE, intervals.reduce((sum, ms) => sum + room(ms), 0));
   const at = place(intervals, size);
@@ -398,7 +806,7 @@ export function GapMonitorCard({ data, orientation = "vertical" }: { data: Overl
     : { width: sideReach + Math.max(0, ...cars.map((c) => avatar(c) / 2)) + 8 + 34, height: startReach + length + endReach };
   return (
     <div style={{ ...card, padding: 16, display: "flex" }}>
-      <div style={{ position: "relative", ...box }}>
+      <div ref={rail} style={{ position: "relative", ...box }}>
         {/* The rail. */}
         <span
           style={
@@ -409,10 +817,11 @@ export function GapMonitorCard({ data, orientation = "vertical" }: { data: Overl
         />
         {cars.slice(1).map((c, i) => (
           <span
-            key={`gap-${c.position}-${c.name}`}
+            key={`gap-${c.name}`}
             className="mono"
             style={{
               position: "absolute",
+              transition: `${along} 520ms cubic-bezier(.3, 1.25, .4, 1)`,
               [along]: px(mid(i)),
               ...(row ? { top: railAt + 20, transform: "translateX(-50%)" } : { left: railAt + 20, transform: "translateY(-50%)" }),
               fontSize: 11,
@@ -421,7 +830,7 @@ export function GapMonitorCard({ data, orientation = "vertical" }: { data: Overl
               whiteSpace: "nowrap",
             }}
           >
-            {ladderGap(intervals[i])}
+            <Signed text={ladderGap(intervals[i])} />
           </span>
         ))}
         {/* Back of the pack first so the front is drawn on top. */}
@@ -430,10 +839,11 @@ export function GapMonitorCard({ data, orientation = "vertical" }: { data: Overl
           const s = avatar(c);
           return (
             <span
-              key={`${c.position}-${c.name}`}
+              key={c.name}
               title={`${c.position}. ${c.name}`}
               style={{
                 position: "absolute",
+                transition: `${along} 520ms cubic-bezier(.3, 1.25, .4, 1)`,
                 [along]: px(f),
                 ...(row ? { top: railAt, transform: "translate(-50%, -50%)" } : { left: railAt, transform: "translate(-50%, -50%)" }),
                 width: s,
@@ -445,10 +855,18 @@ export function GapMonitorCard({ data, orientation = "vertical" }: { data: Overl
                 style={{
                   display: "block",
                   borderRadius: s * 0.3,
-                  boxShadow: c.isSeat ? "0 0 0 2px #0D1224, 0 0 0 4px var(--peach)" : "0 0 0 2px #0D1224",
+                  transition: "box-shadow 300ms",
+                  boxShadow:
+                    flash(c.name).mv === "up"
+                      ? "0 0 0 2px #161B24, 0 0 0 4px #4FD39A"
+                      : flash(c.name).mv === "down"
+                        ? "0 0 0 2px #161B24, 0 0 0 4px #FF7A92"
+                        : c.isSeat
+                          ? "0 0 0 2px #161B24, 0 0 0 4px var(--violet)"
+                          : "0 0 0 2px #161B24",
                 }}
               >
-                <Helmet color={c.color} size={s} seed={c.driverId ?? c.name} />
+                <Helmet color={c.color} look={c.look} size={s} seed={c.driverId ?? c.name} />
               </span>
               <span
                 className="mono"
@@ -490,40 +908,24 @@ export function QrCard({ data }: { data: OverlayData }) {
 
 /** Top of the leaderboard for what's being driven right now, independent of challenges. */
 export function LeaderboardCard({ data }: { data: OverlayData }) {
+  const box = useRef<HTMLDivElement>(null);
+  const flash = useRankMotion(data.comboTop.map((r) => r.name), box, true, data.comboLabel ?? "");
   return (
-    <div style={{ ...card, padding: "10px 14px", minWidth: 260, display: "flex", flexDirection: "column", gap: 5 }}>
-      <span style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
-        <span style={{ font: "800 13px var(--font-display)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {data.comboLabel ?? "Leaderboard"}
-        </span>
-        <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>THIS CAR</span>
+    <div ref={box} style={{ ...card, borderRadius: 28, padding: "14px 16px", width: 260, display: "flex", flexDirection: "column" }}>
+      <span style={{ font: "500 11px var(--font-mono)", letterSpacing: "0.08em", textTransform: "uppercase", color: "#2FA8FF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {data.comboLabel ?? "Leaderboard"}
       </span>
-      {data.comboTop.length === 0 && <span className="muted" style={{ fontSize: 13 }}>{data.comboLabel ? `No ${words(data.game).laps} yet. Set the first!` : "Waiting for a session"}</span>}
-      {data.comboTop.map((r, i) => (
-        <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
-          {i === 5 && <span style={{ height: 1, background: "var(--line)", margin: "2px 0" }} />}
-          <span
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: 14,
-              padding: "2px 6px",
-              margin: "0 -6px",
-              borderRadius: 8,
-              background: r.isSeat ? "rgba(255,159,107,0.18)" : undefined,
-            }}
-          >
-            <span style={{ width: 18, fontWeight: 800, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}>{r.position}</span>
-            <span style={{ width: 10, height: 10, borderRadius: 3, background: r.color, flex: "none" }} />
-            <span style={{ flex: 1, fontWeight: r.isSeat ? 800 : 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
-            <span className="mono" style={{ fontSize: 12, color: "var(--muted)", width: 58, textAlign: "right" }}>
-              {r.gapMs ? `+${(r.gapMs / 1000).toFixed(3)}` : ""}
-            </span>
-            <span className="mono" style={{ fontSize: 14, color: r.position === 1 ? "var(--gold)" : undefined }}>{lapTime(r.timeMs)}</span>
+      {data.comboTop.length === 0 && (
+        <span className="muted" style={{ fontSize: 13, marginTop: 8 }}>{data.comboLabel ? `No ${words(data.game).laps} yet. Set the first!` : "Waiting for a session"}</span>
+      )}
+      <span style={{ display: "flex", flexDirection: "column", marginTop: 8 }}>
+        {data.comboTop.map((r, i) => (
+          <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
+            {i === 5 && <span style={{ height: 1, background: "var(--line)", margin: "4px 0" }} />}
+            <RankRow position={r.position} name={r.name} color={r.color} look={r.look} seed={r.driverId ?? r.name} right={lapTime(r.timeMs)} rightColor={r.position === 1 && !r.isSeat ? "var(--mint)" : undefined} isSeat={r.isSeat} flip={r.name} mv={flash(r.name)} />
           </span>
-        </span>
-      ))}
+        ))}
+      </span>
     </div>
   );
 }
@@ -537,13 +939,13 @@ export interface Toast {
 
 export const TOAST_MS = 4000;
 const TONES: Record<Toast["tone"], { bg: string; fg: string; badge: string }> = {
-  pb: { bg: "#4BE3A6", fg: "#062A1C", badge: "PB" },
-  record: { bg: "#FFC93C", fg: "#2A1F00", badge: "REC" },
-  lead: { bg: "#FF9F6B", fg: "#2A1406", badge: "P1" },
-  cut: { bg: "#FF6B8A", fg: "#2A0610", badge: "CUT" },
-  lap: { bg: "#151C33", fg: "#EEF0FF", badge: "LAP" },
-  out: { bg: "#232D52", fg: "#EEF0FF", badge: "OUT" },
-  in: { bg: "#232D52", fg: "#EEF0FF", badge: "IN" },
+  pb: { bg: "#4FD39A", fg: "#04140D", badge: "PB" },
+  record: { bg: "#B79BFF", fg: "#150B2E", badge: "REC" },
+  lead: { bg: "#2A2B58", fg: "#C9C9FF", badge: "P1" },
+  cut: { bg: "#FF7A92", fg: "#2A0610", badge: "CUT" },
+  lap: { bg: "#161B24", fg: "#E8EBF4", badge: "LAP" },
+  out: { bg: "#1E2430", fg: "#E8EBF4", badge: "OUT" },
+  in: { bg: "#1E2430", fg: "#E8EBF4", badge: "IN" },
 };
 
 export function ToastCard({ toast, animate = true }: { toast: Toast; animate?: boolean }) {
@@ -555,15 +957,16 @@ export function ToastCard({ toast, animate = true }: { toast: Toast; animate?: b
         display: "flex",
         alignItems: "center",
         gap: 14,
-        padding: "12px 20px 12px 12px",
-        borderRadius: 20,
+        padding: "12px 24px 12px 12px",
+        borderRadius: 999,
         background: tone.bg,
         color: tone.fg,
+        boxShadow: "0 10px 34px rgba(0,0,0,0.4)",
         whiteSpace: "nowrap",
         animation: animate ? `tt-toast ${TOAST_MS}ms ease forwards` : undefined,
       }}
     >
-      <span style={{ width: 46, height: 46, borderRadius: 14, background: "#0D1224", color: tone.fg === "#EEF0FF" ? "#A9AEFF" : tone.bg, display: "grid", placeItems: "center", font: "800 13px var(--font-display)" }}>
+      <span style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(0,0,0,0.16)", color: "inherit", display: "grid", placeItems: "center", font: "700 12px var(--font-mono)" }}>
         {tone.badge}
       </span>
       <span style={{ display: "flex", flexDirection: "column" }}>
@@ -590,6 +993,8 @@ export function useLapToasts(pbMs: number | null): Toast | null {
       const moved = s?.position != null && s.position !== s.previousPosition ? ` · up to P${s.position}` : "";
       let t: Omit<Toast, "id">;
       const kind = lapKind(r.lap);
+      // The big moments (PB, record, the lead) are celebrations now; the Pop-ups slot shows those.
+      if (kind === "timed" && (r.comboRecord || r.personalBest || (s?.position === 1 && s.previousPosition !== 1))) return;
       if (kind === "outLap") t = { tone: "out", title: `Out lap ${lapTime(r.lap.timeMs)}`, detail: "Timing starts now. Good luck!" };
       else if (kind === "inLap") t = { tone: "in", title: `In lap ${lapTime(r.lap.timeMs)}`, detail: "Not timed" };
       else if (kind === "partial") t = { tone: "lap", title: `${lapTime(r.lap.timeMs)} not timed`, detail: `Bin It joined part-way through the ${words(r.lap.game).lap}` };
@@ -598,11 +1003,28 @@ export function useLapToasts(pbMs: number | null): Toast | null {
       else if (s?.position === 1 && s.previousPosition !== 1) t = { tone: "lead", title: `${name} takes the crown`, detail: `${lapTime(r.lap.timeMs)} in ${s.challengeName}` };
       else if (r.personalBest) t = { tone: "pb", title: `New PB ${lapTime(r.lap.timeMs)}`, detail: s?.position ? `P${s.position} in ${s.challengeName}` : `Nice one, ${name}` };
       else t = { tone: "lap", title: lapTime(r.lap.timeMs), detail: pbMs ? `PB is ${lapTime(pbMs)}` : name };
+      // What the lap earned, when it earned something.
+      if (r.awards && r.awards.xp > 0) {
+        t = { ...t, detail: `${t.detail} · +${r.awards.xp} XP${r.awards.levelUp ? ` · level ${r.awards.levelUp}!` : ""}` };
+      }
       setToast({ ...t, id: Date.now() });
     },
     [drivers, pbMs],
   );
   useAppEvent(onEvent);
+
+  // Development builds can fire the quiet pop-ups from the editor too.
+  useDevCelebrate(
+    useCallback((kind: string) => {
+      const mk: Record<string, Omit<Toast, "id">> = {
+        toastOut: { tone: "out", title: "Out lap 1:58.402", detail: "Timing starts now. Good luck!" },
+        toastIn: { tone: "in", title: "In lap 2:03.118", detail: "Not timed" },
+        toastCut: { tone: "cut", title: "1:44.201 not counted", detail: "Lap was cut (track limits)" },
+        toastLap: { tone: "lap", title: "1:43.870", detail: "PB is 1:42.527" },
+      };
+      if (mk[kind]) setToast({ ...mk[kind], id: Date.now() });
+    }, []),
+  );
 
   useEffect(() => {
     if (!toast) return;
@@ -625,16 +1047,25 @@ export function SectionWidgets({
   itemProps,
   anchor,
   styles,
+  onDriverClick,
+  celebration = null,
+  towerMode,
 }: {
   items: WidgetId[];
   data: OverlayData;
   toast: Toast | null;
+  /** A celebration to show in the Pop-ups slot, ahead of the quiet toasts. */
+  celebration?: Celebration | null;
   preview?: boolean;
   itemProps?: ItemProps;
   /** The section these sit in, for a widget (the gap tower) that lays itself out to suit its place. */
   anchor?: Anchor;
   /** The layout's chosen styles, for a widget that comes in more than one. */
   styles?: OverlayLayout["styles"];
+  /** What the gap tower lists (best laps, or this lap raced against them live). */
+  towerMode?: OverlayLayout["towerMode"];
+  /** Makes the driver on the strip clickable (the real overlay only: it opens the driver picker). */
+  onDriverClick?: () => void;
 }) {
   const visible = preview ? items : items.filter((w) => hasContent(w, data));
   const groups: (WidgetId[] | WidgetId)[] = [];
@@ -651,17 +1082,18 @@ export function SectionWidgets({
   return (
     <>
       {groups.map((g) => {
-        if (Array.isArray(g)) return <StripCard key={g.join()} items={g} data={data} itemProps={itemProps} />;
-        if (g === "standings") return wrap(g, <StandingsCard data={data} />);
-        if (g === "timing") return wrap(g, <TimingCard data={data} />);
+        if (Array.isArray(g)) return <StripCard key={g.join()} items={g} data={data} itemProps={itemProps} onDriverClick={onDriverClick} />;
+        if (g === "standings") return wrap(g, <StandingsCard data={data} mode={styleOf({ styles }, "standings")} />);
+        if (g === "timing") return wrap(g, <TimingCard data={data} mode={styleOf({ styles }, "timing")} />);
         if (g === "leaderboard") return wrap(g, <LeaderboardCard data={data} />);
         if (g === "tower") {
           const Tower = styleOf({ styles }, "tower") === "gaps" ? GapMonitorCard : GapTowerCard;
-          return wrap(g, <Tower data={data} orientation={orientationFor(anchor)} />);
+          return wrap(g, <Tower data={data} orientation={orientationFor(anchor)} live={towerMode === "live"} />);
         }
         if (g === "qr") return wrap(g, <QrCard data={data} />);
+        if (celebration) return wrap(g, <CelebrationView key={celebration.id} c={celebration} layout={orientationFor(anchor) === "horizontal" ? "pill" : "card"} />);
         const shown = toast ?? (preview ? MOCK_TOAST : null);
-        return shown ? wrap(g, <ToastCard toast={shown} animate={!preview} />) : null;
+        return shown ? wrap(g, <ToastCard toast={shown} animate={!preview || shown !== MOCK_TOAST} />) : null;
       })}
     </>
   );

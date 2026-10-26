@@ -1,21 +1,27 @@
 import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent } from "react";
-import { isTauri, useAppState } from "../api";
+import { api, isTauri, useAppState } from "../api";
+import { readStored, writeStored } from "../persist";
 import {
   ANCHORS,
   GAME_PROFILES,
   WIDGETS,
   WIDGET_STYLES,
+  MAX_MARGIN,
+  SIDES,
+  TOWER_MODES,
+  defaultMargin,
   anchorBox,
   anchorStyle,
-  hudConflict,
   moveWidget,
   styleOf,
   useOverlayLayout,
   type Anchor,
   type OverlayLayout,
+  type Side,
   type WidgetId,
 } from "../overlayLayout";
 import { GameLabel } from "./GameIcon";
+import { fireDevCelebration, useDevOverlay } from "../devOverlay";
 import { OverlayFocusToggle, OverlayShowPicker, OverlayToggle } from "./OverlayToggle";
 import {
   GapMonitorCard,
@@ -49,6 +55,79 @@ const ANCHOR_NAMES: Record<Anchor, string> = {
   "bottom-center": "Bottom centre",
   "bottom-right": "Bottom right",
 };
+
+/** Where a section grows from when it is drawn bigger: the corner or edge it is pinned to. */
+function growFrom(a: Anchor): string {
+  const x = a.endsWith("left") ? "0%" : a.endsWith("right") ? "100%" : "50%";
+  const y = a.startsWith("top") ? "0%" : a.startsWith("bottom") ? "100%" : "50%";
+  return `${x} ${y}`;
+}
+
+/**
+ * Development builds only: draw the overlay over the desktop for the game picked in the tabs, with example data,
+ * with no game running, so it can be worked on and looked at. It also switches off "only while a game is focused"
+ * (and puts it back when turned off).
+ */
+function DevOverlayToggle({ game }: { game: string }) {
+  const { status } = useAppState();
+  const [dev, setDev] = useDevOverlay();
+  // Picking another game's tab switches the overlay to that game too.
+  useEffect(() => {
+    if (dev && dev !== game) setDev(game);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game]);
+  const flip = async () => {
+    if (dev) {
+      setDev(null);
+      const before = readStored<boolean | null>("devOverlayFocusBefore", null, (v) => typeof v === "boolean");
+      if (before !== null) await api.setOverlayFocusOnly(before).catch(() => {});
+      writeStored("devOverlayFocusBefore", null);
+    } else {
+      writeStored("devOverlayFocusBefore", status?.overlayFocusOnly ?? true);
+      await api.setOverlayEnabled(true).catch(() => {});
+      await api.setOverlayFocusOnly(false).catch(() => {});
+      setDev(game);
+    }
+  };
+  return (
+    <label className="overlay-toggle" title="Development builds only: draws this game's overlay over your desktop with example data, with no game running">
+      <span className="overlay-toggle-label">Dev: show it now</span>
+      <button className="toggle" role="switch" aria-checked={!!dev} aria-label="Draw the overlay now with example data (development only)" onClick={flip} />
+    </label>
+  );
+}
+
+/** Development builds only: play each celebration on the overlay, to look at it. */
+function DevCelebrations() {
+  const kinds: [string, string][] = [
+    ["rankUp", "Rank: Tom climbs"],
+    ["rankReset", "Rank: reset"],
+    ["toastOut", "Out lap"],
+    ["toastIn", "In lap"],
+    ["toastCut", "Cut lap"],
+    ["toastLap", "Plain lap"],
+    ["pb", "PB"],
+    ["record", "Record"],
+    ["lead", "Lead"],
+    ["moved", "Moved up"],
+    ["level", "Level up"],
+    ["sticker", "Sticker"],
+    ["switch", "Switch"],
+    ["switchMoving", "Switch (moving)"],
+  ];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }} role="group" aria-label="Play a celebration (development only)">
+      <span className="muted" style={{ fontSize: 13 }} title="Plays on the overlay. Turn on Dev: show it now to see it.">Dev: simulate</span>
+      {kinds.map(([k, label]) => (
+        <button key={k} type="button" className="chip plain" onClick={() => fireDevCelebration(k)}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const SIDE_LABEL: Record<Side, string> = { top: "From the top", bottom: "From the bottom", left: "From the left", right: "From the right" };
 
 const WIDGET_ORDER = Object.keys(WIDGETS) as WidgetId[];
 
@@ -101,6 +180,44 @@ export function OverlayEditor() {
   const overlayOn = status?.overlayEnabled ?? true;
   const [game, setGame] = useState(status?.game ?? "acevo");
   const { layout, save, reset, custom, profile } = useOverlayLayout(game);
+  // The spacing sliders move the widgets as they are dragged. The overlay follows live: the setting is saved at
+  // most every 100 ms while dragging, and the drag's own value is kept until things have gone quiet.
+  const [draft, setDraft] = useState<OverlayLayout["margins"] | null>(null);
+  const margins = draft ?? layout.margins;
+  const sending = useRef<number | undefined>(undefined);
+  const settle = useRef<number | undefined>(undefined);
+  const latest = useRef<OverlayLayout["margins"]>(undefined);
+  const sent = useRef<OverlayLayout["margins"]>(undefined);
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+  const flush = () => {
+    sending.current = undefined;
+    if (latest.current && latest.current !== sent.current) {
+      sent.current = latest.current;
+      save({ ...layoutRef.current, margins: latest.current });
+      sending.current = window.setTimeout(flush, 100);
+    }
+  };
+  const setMargin = (side: Side, value: number) => {
+    const next = { ...(latest.current ?? draft ?? layout.margins ?? {}), [side]: value };
+    latest.current = next;
+    setDraft(next);
+    if (sending.current === undefined) flush();
+    window.clearTimeout(settle.current);
+    settle.current = window.setTimeout(() => {
+      flush();
+      setDraft(null);
+      latest.current = undefined;
+      sent.current = undefined;
+    }, 700);
+  };
+  useEffect(
+    () => () => {
+      window.clearTimeout(sending.current);
+      window.clearTimeout(settle.current);
+    },
+    [],
+  );
 
   const [selected, setSelected] = useState<WidgetId | null>(null);
   const [dragging, setDragging] = useState<WidgetId | null>(null);
@@ -111,6 +228,22 @@ export function OverlayEditor() {
   const tray = useRef<HTMLDivElement>(null);
   const compact = useMediaQuery("(max-width: 640px)");
   const touch = useMediaQuery("(pointer: coarse), (max-width: 640px)");
+
+  const [zoomed, setZoomed] = useState(false);
+  const zoomFrame = useRef<HTMLDivElement>(null);
+  const [zoomScale, setZoomScale] = useState(0.4);
+  useEffect(() => {
+    const el = zoomFrame.current;
+    if (!zoomed || !el) return;
+    const ro = new ResizeObserver(() => setZoomScale(el.clientWidth / VIRTUAL_W));
+    ro.observe(el);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setZoomed(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [zoomed]);
 
   const frame = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.4);
@@ -130,7 +263,6 @@ export function OverlayEditor() {
 
   const where = (w: WidgetId): Anchor | null => ANCHORS.find((a) => layout.sections[a]?.includes(w)) ?? null;
   const usedSections = ANCHORS.filter((a) => layout.sections[a]?.length);
-  const conflicts = usedSections.map((a) => ({ a, hud: hudConflict(profile, a, layout.sections[a]) })).filter((c) => c.hud);
 
   /** The section under (or nearest to) a point, and where in its order the widget would go. */
   const targetAt = (clientX: number, clientY: number, moving: WidgetId | null): DropTarget | null => {
@@ -142,7 +274,7 @@ export function OverlayEditor() {
     let anchor = ANCHORS[0];
     let best = Infinity;
     for (const a of ANCHORS) {
-      const b = anchorBox(a, profile);
+      const b = anchorBox(a, profile, margins);
       const dx = Math.max(b.x - px, 0, px - (b.x + b.w));
       const dy = Math.max(b.y - py, 0, py - (b.y + b.h));
       const d = dx * dx + dy * dy;
@@ -272,6 +404,26 @@ export function OverlayEditor() {
 
   const showZones = !!dragging || !!selected;
 
+  /** The overlay as it would look on the PC's screen, scaled to `sc`; `props` makes the widgets draggable. */
+  const renderScene = (sc: number, props?: ItemProps, boost = 1) => (
+    <div style={{ position: "absolute", left: 0, top: 0, width: VIRTUAL_W, height: VIRTUAL_H, transform: `scale(${sc})`, transformOrigin: "0 0", zIndex: 2, pointerEvents: "none" }}>
+      <GameBackdrop />
+      {ANCHORS.map((a) => {
+        const items = layout.sections[a];
+        if (!items?.length) return null;
+        return (
+          <div key={a} data-anchor={a} style={{ ...anchorStyle(a, profile, margins), pointerEvents: "auto" }}>
+            {/* On a phone the widgets are drawn bigger than life so they can be read; each grows away from its own edge.
+                The wrapper lays its widgets out like the section does (a column with a gap), or they would run together. */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: anchorStyle(a, profile, margins).alignItems, ...(boost === 1 ? {} : { transform: `scale(${boost})`, transformOrigin: growFrom(a) }) }}>
+              <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={props} anchor={a} styles={layout.styles} towerMode={layout.towerMode} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
   return (
     <section className="card" aria-label="Overlay layout">
       <div className="head" style={{ alignItems: "center" }}>
@@ -280,7 +432,9 @@ export function OverlayEditor() {
           <OverlayToggle />
           <OverlayFocusToggle />
           <OverlayShowPicker />
+          {import.meta.env.DEV && isTauri && <DevOverlayToggle game={game} />}
         </div>
+        {import.meta.env.DEV && <DevCelebrations />}
         <div className="segmented" role="group" aria-label="Game" style={{ flexWrap: "wrap" }}>
           {GAME_PROFILES.map((p) => (
             <button key={p.key} aria-pressed={game === p.key} onClick={() => setGame(p.key)}>
@@ -290,8 +444,10 @@ export function OverlayEditor() {
         </div>
       </div>
 
+      <div className="ed-scroll">
       <div
         ref={frame}
+        className="ed-frame"
         onDragOver={frameDragOver}
         onDragLeave={(e) => {
           if (!frame.current?.contains(e.relatedTarget as Node)) setTarget(null);
@@ -311,8 +467,7 @@ export function OverlayEditor() {
         {/* Section outlines while placing, under the widgets. */}
         {showZones &&
           ANCHORS.map((a) => {
-            const b = anchorBox(a, profile);
-            const hud = hudConflict(profile, a);
+            const b = anchorBox(a, profile, margins);
             const active = target?.anchor === a;
             return (
               <div
@@ -325,8 +480,8 @@ export function OverlayEditor() {
                   width: `${b.w}%`,
                   height: `${b.h}%`,
                   borderRadius: 10,
-                  border: `2px dashed ${active ? "#fff" : hud ? "rgba(255,107,138,0.9)" : "rgba(169,174,255,0.6)"}`,
-                  background: active ? (hud ? "rgba(255,107,138,0.22)" : "rgba(106,88,245,0.28)") : "rgba(13,18,36,0.2)",
+                  border: `2px dashed ${active ? "#fff" : "rgba(169,174,255,0.6)"}`,
+                  background: active ? "rgba(139,139,245,0.28)" : "rgba(14,17,23,0.2)",
                   display: "flex",
                   alignItems: a.startsWith("bottom") ? "flex-start" : "flex-end",
                   justifyContent: "center",
@@ -335,48 +490,14 @@ export function OverlayEditor() {
                   zIndex: 1,
                 }}
               >
-                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 6px", borderRadius: 6, background: "rgba(13,18,36,0.8)", color: hud ? "#FFB3C3" : "var(--text-2)", whiteSpace: "nowrap" }}>
-                  {hud ? `${ANCHOR_NAMES[a]} · game HUD` : ANCHOR_NAMES[a]}
+                <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 6px", borderRadius: 6, background: "rgba(13,18,36,0.8)", color: "var(--text-2)", whiteSpace: "nowrap" }}>
+                  {ANCHOR_NAMES[a]}
                 </span>
               </div>
             );
           })}
 
-        {/* Scaled render of the real overlay widgets (example data). */}
-        <div style={{ position: "absolute", left: 0, top: 0, width: VIRTUAL_W, height: VIRTUAL_H, transform: `scale(${scale})`, transformOrigin: "0 0", zIndex: 2, pointerEvents: "none" }}>
-          <GameBackdrop />
-          {profile.hud.map((z) => (
-            <div
-              key={z.label}
-              style={{
-                position: "absolute",
-                left: `${z.box.x}%`,
-                top: `${z.box.y}%`,
-                width: `${z.box.w}%`,
-                height: `${z.box.h}%`,
-                border: "4px dashed rgba(255,107,138,0.85)",
-                background: "rgba(255,107,138,0.14)",
-                borderRadius: 14,
-                display: "grid",
-                placeItems: "center",
-                color: "#FFD0DA",
-                font: "600 24px var(--font-body)",
-                textAlign: "center",
-              }}
-            >
-              {z.label}
-            </div>
-          ))}
-          {ANCHORS.map((a) => {
-            const items = layout.sections[a];
-            if (!items?.length) return null;
-            return (
-              <div key={a} data-anchor={a} style={{ ...anchorStyle(a, profile), pointerEvents: "auto" }}>
-                <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={itemProps} anchor={a} styles={layout.styles} />
-              </div>
-            );
-          })}
-        </div>
+        {renderScene(scale, itemProps, compact ? 2.4 : 1)}
 
         {/* Where the widget will land. */}
         {dragging && target?.bar && (
@@ -386,6 +507,59 @@ export function OverlayEditor() {
           />
         )}
       </div>
+      </div>
+      <fieldset className="ed-spacing">
+        <legend>Space from the screen edges</legend>
+        {SIDES.map((side) => (
+          <label key={side} className="ed-space-row">
+            <span>{SIDE_LABEL[side]}</span>
+            <input
+              type="range"
+              min={0}
+              max={MAX_MARGIN}
+              step={0.5}
+              value={margins?.[side] ?? defaultMargin(side, profile, layout)}
+              aria-label={`Space from the ${side} of the screen`}
+              style={{ ["--p" as string]: `${((margins?.[side] ?? defaultMargin(side, profile, layout)) / MAX_MARGIN) * 100}%` }}
+              onChange={(e) => setMargin(side, Number(e.target.value))}
+            />
+            <output className="mono">{margins?.[side] ?? defaultMargin(side, profile, layout)}%</output>
+          </label>
+        ))}
+        <button
+          type="button"
+          className="chip plain"
+          disabled={!margins || SIDES.every((s) => margins[s] === undefined)}
+          onClick={() => {
+            window.clearTimeout(sending.current);
+            window.clearTimeout(settle.current);
+            latest.current = undefined;
+            sent.current = undefined;
+            const { margins: _m, ...rest } = layout;
+            setDraft(null);
+            save(rest);
+          }}
+        >
+          Back to the game's spacing
+        </button>
+        <span className="muted ed-space-note">0% puts the widgets right against the edge. Untouched sides keep this game's own spacing, which clears its HUD.</span>
+      </fieldset>
+      {compact && (
+        <button type="button" className="btn ghost ed-enlarge" onClick={() => setZoomed(true)}>
+          Enlarge preview
+        </button>
+      )}
+      {zoomed && (
+        <div className="ed-zoom" role="dialog" aria-label="Overlay preview" onClick={() => setZoomed(false)}>
+          <div className="ed-zoom-turn">
+            <div ref={zoomFrame} className="ed-zoom-frame" style={{ ["--aspect" as string]: ASPECT, aspectRatio: `${VIRTUAL_W} / ${VIRTUAL_H}` }}>
+              {renderScene(zoomScale, undefined, 1.5)}
+            </div>
+          </div>
+          <button type="button" className="btn ed-zoom-close" onClick={() => setZoomed(false)}>Close</button>
+          <span className="ed-zoom-hint">Turn your phone sideways for the right way up</span>
+        </div>
+      )}
 
       <div
         ref={tray}
@@ -463,6 +637,15 @@ export function OverlayEditor() {
                   ))}
                 </div>
               )}
+              {w === "tower" && (
+                <div className="segmented compact" role="group" aria-label="Gap tower data">
+                  {TOWER_MODES.map((o) => (
+                    <button key={o.id} type="button" aria-pressed={(layout.towerMode ?? "static") === o.id} title={o.hint} onClick={() => save({ ...layout, towerMode: o.id })}>
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <span className="muted" style={{ fontSize: 12 }}>{WIDGETS[w].description}</span>
               {touch && <PositionPicker widget={w} at={at} onPick={(to) => place(w, to)} />}
             </div>
@@ -501,14 +684,6 @@ export function OverlayEditor() {
           The overlay is off, so nothing is drawn over the game. F8 still switches drivers. Turn on the spoken name below to hear who was picked.
         </span>
       )}
-      {profile.hud.length === 0 && (
-        <span style={{ fontSize: 13, color: "var(--peach)" }}>The HUD for {profile.name} isn't mapped yet, so there's no overlap warning for this game.</span>
-      )}
-      {conflicts.map((c) => (
-        <span key={c.a} style={{ fontSize: 13, color: "#FF8BA3" }}>
-          {ANCHOR_NAMES[c.a]} overlaps the game's {c.hud?.toLowerCase()}.
-        </span>
-      ))}
       {usedSections.length > 2 && (
         <span style={{ fontSize: 13, color: "var(--peach)" }}>
           {usedSections.length} sections in use. Games already show a lot, so two is usually plenty.
@@ -529,8 +704,8 @@ export function OverlayEditor() {
 /** One widget on its own, with example data, for the tray. */
 function WidgetPreview({ w, data, styles }: { w: WidgetId; data: OverlayData; styles?: OverlayLayout["styles"] }) {
   if (WIDGETS[w].compact) return <StripCard items={[w]} data={data} />;
-  if (w === "standings") return <StandingsCard data={data} />;
-  if (w === "timing") return <TimingCard data={data} />;
+  if (w === "standings") return <StandingsCard data={data} mode={styleOf({ styles }, "standings")} />;
+  if (w === "timing") return <TimingCard data={data} mode={styleOf({ styles }, "timing")} />;
   if (w === "leaderboard") return <LeaderboardCard data={data} />;
   // As a row, so the whole of it fits the tray's small preview whichever style it is in.
   if (w === "tower") return styleOf({ styles }, "tower") === "gaps" ? <GapMonitorCard data={data} orientation="horizontal" /> : <GapTowerCard data={data} orientation="horizontal" />;

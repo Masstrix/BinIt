@@ -21,14 +21,31 @@ export interface OverlayLayout {
   styles?: Partial<Record<WidgetId, string>>;
   /** Say "Sam is driving" when the driver changes (works even when the overlay can't be seen). */
   voice: boolean;
+  /** What the gap tower lists: the best laps set here ("static", the default) or this lap raced against them, live. */
+  towerMode?: TowerMode;
+  /**
+   * How far the widgets sit from each screen edge (% of the screen). 0 is right against the edge. A side that is
+   * not set keeps the game's own spacing, which clears its HUD.
+   */
+  margins?: Partial<Record<Side, number>>;
 }
+
+export type TowerMode = "static" | "live";
+export const TOWER_MODES: { id: TowerMode; label: string; hint: string }[] = [
+  { id: "static", label: "Best laps", hint: "Everyone's best time on this track and car, as on the leaderboard" },
+  { id: "live", label: "Live", hint: "Starts level at the line each lap or stage and shows where you are against everyone's best as you drive" },
+];
+
+export type Side = "top" | "bottom" | "left" | "right";
+export const SIDES: Side[] = ["top", "bottom", "left", "right"];
+export const MAX_MARGIN = 20;
 
 export const WIDGETS: Record<WidgetId, { label: string; description: string; compact: boolean }> = {
   driver: { label: "Driver", description: "Helmet and name of who's in the seat", compact: true },
   pb: { label: "Personal best", description: "Their best lap on this track and car", compact: true },
   challenge: { label: "Challenge position", description: "P2 +0.204 in the running challenge", compact: true },
   timing: { label: "Live timing", description: "Delta to PB and a purple / green / yellow bar per sector", compact: false },
-  standings: { label: "Challenge top 3", description: "Mini podium for the running challenge", compact: false },
+  standings: { label: "Challenge top 3", description: "The running challenge as a mini podium, with the next places listed under it if you like", compact: false },
   leaderboard: { label: "Track leaderboard", description: "Top 5 on this track and car, plus where the driver is", compact: false },
   tower: { label: "Gap tower", description: "The top few drivers and their gaps, in a column or a row depending on where it sits", compact: false },
   qr: { label: "Phone QR code", description: "Scan to open Bin It on a phone: pick the driver, see the standings", compact: false },
@@ -37,6 +54,15 @@ export const WIDGETS: Record<WidgetId, { label: string; description: string; com
 
 /** The styles a widget comes in, first one the default. A widget not listed has just one. */
 export const WIDGET_STYLES: Partial<Record<WidgetId, { id: string; label: string; hint: string }[]>> = {
+  standings: [
+    { id: "podium", label: "Podium", hint: "The top three on a mini podium" },
+    { id: "list", label: "Podium + list", hint: "The podium with the next places listed under it, with their gaps" },
+  ],
+  timing: [
+    { id: "pb", label: "PB", hint: "Always against your own best lap" },
+    { id: "best", label: "Leader", hint: "Always against the fastest lap anyone has set here" },
+    { id: "cycle", label: "Cycle", hint: "Switches between the two every few seconds. In game, Ctrl+Shift+T switches by hand." },
+  ],
   tower: [
     { id: "list", label: "List", hint: "Position, name and gap to the leader, one line each" },
     { id: "gaps", label: "Gaps", hint: "Drivers spaced by their gaps, with the gap between neighbours, like Gran Turismo's B-spec monitor" },
@@ -103,27 +129,39 @@ function edgeOffset(a: Anchor, profile?: GameProfile): number {
   return profile?.edges?.[a] ?? (v === "bottom" ? DEFAULT_BOTTOM : DEFAULT_TOP);
 }
 
-/** The section's approximate area for this game, with its edge offset applied. */
-export function anchorBox(a: Anchor, profile?: GameProfile): Box {
-  const b = ANCHOR_BOX[a];
-  const v = a.split("-")[0];
-  if (v === "top") return { ...b, y: edgeOffset(a, profile) };
-  if (v === "bottom") return { ...b, y: 100 - edgeOffset(a, profile) - b.h };
+const SIDE_GAP = 2;
+
+/** Where a side sits when it has not been set: the game's own spacing for the first section on that side that is used. */
+export function defaultMargin(side: Side, profile: GameProfile, layout: Pick<OverlayLayout, "sections">): number {
+  if (side === "left" || side === "right") return SIDE_GAP;
+  const anchors = ANCHORS.filter((a) => a.startsWith(side));
+  const used = anchors.find((a) => layout.sections[a]?.length) ?? anchors[0];
+  return edgeOffset(used, profile);
+}
+
+/** The section's approximate area for this game, with its edge offset and the chosen spacing applied. */
+export function anchorBox(a: Anchor, profile?: GameProfile, margins?: OverlayLayout["margins"]): Box {
+  const b = { ...ANCHOR_BOX[a] };
+  const [v, h] = a.split("-");
+  if (v === "top") b.y = margins?.top ?? edgeOffset(a, profile);
+  if (v === "bottom") b.y = 100 - (margins?.bottom ?? edgeOffset(a, profile)) - b.h;
+  if (h === "left") b.x = margins?.left ?? SIDE_GAP;
+  if (h === "right") b.x = 100 - (margins?.right ?? SIDE_GAP) - b.w;
   return b;
 }
 
-export function anchorStyle(a: Anchor, profile?: GameProfile): CSSProperties {
+export function anchorStyle(a: Anchor, profile?: GameProfile, margins?: OverlayLayout["margins"]): CSSProperties {
   const [v, h] = a.split("-") as ["top" | "middle" | "bottom", "left" | "center" | "right"];
   const style: CSSProperties = { position: "absolute", display: "flex", flexDirection: "column", gap: 10 };
-  if (v === "top") style.top = `${edgeOffset(a, profile)}%`;
-  if (v === "bottom") style.bottom = `${edgeOffset(a, profile)}%`;
+  if (v === "top") style.top = `${margins?.top ?? edgeOffset(a, profile)}%`;
+  if (v === "bottom") style.bottom = `${margins?.bottom ?? edgeOffset(a, profile)}%`;
   if (v === "middle") style.top = "50%";
   if (h === "left") {
-    style.left = "2%";
+    style.left = `${margins?.left ?? SIDE_GAP}%`;
     style.alignItems = "flex-start";
   }
   if (h === "right") {
-    style.right = "2%";
+    style.right = `${margins?.right ?? SIDE_GAP}%`;
     style.alignItems = "flex-end";
   }
   if (h === "center") {
@@ -202,8 +240,8 @@ function contentHeight(items: WidgetId[], anchor: Anchor): number {
 }
 
 /** The game HUD element a section's content would cover, if any. */
-export function hudConflict(profile: GameProfile, anchor: Anchor, items: WidgetId[] = []): string | null {
-  const box = anchorBox(anchor, profile);
+export function hudConflict(profile: GameProfile, anchor: Anchor, items: WidgetId[] = [], margins?: OverlayLayout["margins"]): string | null {
+  const box = anchorBox(anchor, profile, margins);
   const v = anchor.split("-")[0];
   const h = items.length ? contentHeight(items, anchor) : box.h;
   const content: Box =
@@ -226,7 +264,19 @@ function sanitize(raw: unknown, fallback: OverlayLayout): OverlayLayout {
     const chosen = r.styles?.[w];
     if (WIDGET_STYLES[w]?.some((o) => o.id === chosen)) styles[w] = chosen;
   }
-  return { version: 1, sections, voice: r.voice ?? fallback.voice, ...(Object.keys(styles).length ? { styles } : {}) };
+  const margins: NonNullable<OverlayLayout["margins"]> = {};
+  for (const side of SIDES) {
+    const m = r.margins?.[side];
+    if (typeof m === "number" && m >= 0) margins[side] = Math.min(MAX_MARGIN, Math.round(m * 2) / 2);
+  }
+  return {
+    version: 1,
+    sections,
+    voice: r.voice ?? fallback.voice,
+    ...(Object.keys(styles).length ? { styles } : {}),
+    ...(r.towerMode === "live" ? { towerMode: "live" as const } : {}),
+    ...(Object.keys(margins).length ? { margins } : {}),
+  };
 }
 
 /** The saved layout for a game (or its default), kept live across windows. */

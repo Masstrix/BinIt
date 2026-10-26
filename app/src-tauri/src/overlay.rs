@@ -140,6 +140,11 @@ fn switcher_keys() -> &'static HashMap<u32, (Shortcut, &'static str)> {
     })
 }
 
+/// Ctrl+Shift+T: tells the overlay to show live timing against the next reference lap (PB, then the fastest).
+pub fn next_timing_reference(app: &AppHandle) {
+    let _ = app.emit_to(LABEL, "timing-next", ());
+}
+
 /// Called from the global-shortcut handler. Returns true if the key belonged to the switcher.
 pub fn handle_switcher_key(app: &AppHandle, shortcut: &Shortcut) -> bool {
     if !SWITCHER_OPEN.load(Ordering::SeqCst) {
@@ -398,6 +403,73 @@ pub fn set_visible(app: &AppHandle, visible: bool) {
     if let Err(e) = result {
         eprintln!("[overlay] could not {} the overlay: {e}", if visible { "show" } else { "hide" });
     }
+}
+
+// ---- clickable parts ---------------------------------------------------------------------------
+//
+// The overlay ignores the mouse so it never gets in the way of the game or the desktop. A few widgets can be
+// clicked though (live timing switches reference lap). The page reports where they are, and while the cursor is
+// over one of those spots the window stops ignoring the mouse; it goes back as soon as the cursor leaves. The
+// window never takes focus, so a click can't pull the game out of the foreground.
+
+/// Clickable spots as `[x, y, width, height]` in the overlay page's CSS pixels.
+static HITS: Mutex<Vec<[f64; 4]>> = Mutex::new(Vec::new());
+static CAPTURING: AtomicBool = AtomicBool::new(false);
+
+/// Called by the overlay UI whenever its clickable widgets move, appear or go.
+#[tauri::command]
+pub fn set_hit_regions(rects: Vec<[f64; 4]>) {
+    *HITS.lock().unwrap_or_else(|e| e.into_inner()) = rects;
+}
+
+/// Turns mouse capture on while the cursor is over a clickable spot, and off otherwise.
+#[cfg(windows)]
+pub fn spawn_hit_tester(app: AppHandle) {
+    use windows_sys::Win32::Foundation::POINT;
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos;
+
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(40));
+            // While the driver picker is open it has the mouse (see `set_switcher`); leave it alone.
+            if SWITCHER_OPEN.load(Ordering::SeqCst) {
+                continue;
+            }
+            let spots = HITS.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let want = !spots.is_empty()
+                && window(&app).is_some_and(|w| {
+                    if !w.is_visible().unwrap_or(false) {
+                        return false;
+                    }
+                    let (Ok(pos), scale) = (w.outer_position(), w.scale_factor().unwrap_or(1.0)) else { return false };
+                    let mut p = POINT { x: 0, y: 0 };
+                    // SAFETY: `p` is a valid, writable POINT.
+                    if unsafe { GetCursorPos(&mut p) } == 0 {
+                        return false;
+                    }
+                    let (cx, cy) = (f64::from(p.x), f64::from(p.y));
+                    spots.iter().any(|[x, y, w, h]| {
+                        let (left, top) = (f64::from(pos.x) + x * scale, f64::from(pos.y) + y * scale);
+                        cx >= left && cx < left + w * scale && cy >= top && cy < top + h * scale
+                    })
+                });
+            if want != CAPTURING.load(Ordering::SeqCst)
+                && let Some(w) = window(&app)
+                && w.set_ignore_cursor_events(!want).is_ok()
+            {
+                CAPTURING.store(want, Ordering::SeqCst);
+            }
+        }
+    });
+}
+
+#[cfg(not(windows))]
+pub fn spawn_hit_tester(_app: AppHandle) {}
+
+/// Called by the overlay UI when the driver card is clicked: opens the same picker F8 does.
+#[tauri::command]
+pub fn open_switcher(app: AppHandle) {
+    set_switcher(&app, true);
 }
 
 /// Called by the overlay UI when the switcher closes itself (pick, Esc, add).

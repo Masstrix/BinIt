@@ -2,6 +2,7 @@
 // office browsers all use this; only the base URL differs.
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import type { Look } from "./looks";
 
 export type DriverId = number;
 
@@ -9,6 +10,8 @@ export interface Driver {
   id: DriverId;
   name: string;
   color: string;
+  /** What the driver has equipped in the Garage (not stored by the server yet). */
+  look?: Look;
   createdAt: number;
 }
 
@@ -19,6 +22,21 @@ export interface DriverRating {
   score: number | null;
   combos: number;
   fastestOn: number;
+}
+
+/** A phone paired to a driver (the server keeps only a hash of its token). */
+export interface Device {
+  id: number;
+  driverId: DriverId;
+  label: string;
+  createdAt: number;
+  lastSeen: number;
+}
+
+/** Who this phone is. `local` is the PC itself, which can manage every driver. */
+export interface Me {
+  driver: Driver | null;
+  local: boolean;
 }
 
 export interface Combo {
@@ -228,6 +246,10 @@ export type SectorStatus = "purple" | "green" | "yellow" | "current" | "pending"
 export interface LiveTiming {
   deltaMs: number | null;
   reference: string | null;
+  /** Every lap the delta can be against, the one above first: your PB, then the fastest lap anyone has set when different. */
+  references?: { kind: "pb" | "best"; label: string; deltaMs: number | null }[];
+  /** Every other driver's best lap at this point of the lap, to race the current one against (level at the line). */
+  field?: { driverId: number; ghostMs: number }[];
   currentSector: number;
   /** deltaMs: sector time minus the reference lap's (negative = faster). */
   sectors: { timeMs: number | null; deltaMs: number | null; status: SectorStatus }[];
@@ -264,11 +286,81 @@ export interface ReplayEntry {
   profile: number[] | null;
 }
 
+/** What a lap earned the driver (XP and coins), and why. */
+export interface Awards {
+  xp: number;
+  coins: number;
+  /** The new level, when this lap crossed one. */
+  levelUp: number | null;
+  reasons: string[];
+}
+
 export interface LapResult {
   lap: Lap;
   personalBest: boolean;
   comboRecord: boolean;
   challenges: ChallengeStanding[];
+  awards?: Awards;
+}
+
+export interface PointEvent {
+  id: number;
+  driverId: DriverId;
+  kind: "lap" | "first" | "pb" | "record" | string;
+  xp: number;
+  coins: number;
+  lapId: number | null;
+  at: number;
+}
+
+/** One thing the shop sells. Free items (price 0) belong to everyone. */
+export interface ShopItem {
+  id: string;
+  slot: "shell" | "decal" | "stripe" | "face";
+  price: number;
+  minLevel: number;
+}
+
+/** The shop as one driver sees it. `owned` holds keys like `shell:aurora`. */
+export interface ShopState {
+  coins: number;
+  level: number;
+  owned: string[];
+  look: Look;
+  items: ShopItem[];
+}
+
+export interface ProfileBest extends Combo {
+  timeMs: number;
+  position: number;
+  of: number;
+}
+
+export interface Sticker {
+  id: string;
+  name: string;
+  hint: string;
+  earned: boolean;
+}
+
+/** Everything the You page shows. */
+export interface Profile {
+  driver: Driver;
+  level: number;
+  title: string;
+  nextTitle: string;
+  xp: number;
+  levelStartXp: number;
+  nextLevelXp: number;
+  coins: number;
+  attempts: number;
+  cleanLaps: number;
+  cleanPercent: number;
+  tracks: number;
+  streakDays: number;
+  bests: ProfileBest[];
+  stickers: Sticker[];
+  recent: PointEvent[];
 }
 
 export interface ServerInfo {
@@ -304,14 +396,65 @@ export function openDownload(what: "installer" | "portable" | "release") {
 // http://<pc>:1420 reaches the PC's server rather than itself.
 const BASE = isTauri ? "http://127.0.0.1:7878" : location.port === "1420" ? `http://${location.hostname}:7878` : "";
 
+/**
+ * Dev only: `?mock` on the page URL swaps the server for in-memory fixtures (src/mock), so the UI can be built and
+ * checked without the app or a game running. `?mock=0` turns it off again. Never true in a release build.
+ */
+export const mockEnabled = (() => {
+  if (!import.meta.env.DEV || isTauri) return false;
+  const flag = new URLSearchParams(location.search).get("mock");
+  try {
+    if (flag === "0") localStorage.removeItem("mock");
+    else if (flag !== null) localStorage.setItem("mock", "1");
+    else return localStorage.getItem("mock") === "1";
+  } catch {
+    return flag !== null && flag !== "0";
+  }
+  return flag !== null && flag !== "0";
+})();
+
+/**
+ * This phone's pairing token: it proves which driver the phone belongs to. Kept in this browser only; the
+ * server stores just a hash. Logging out (or the PC signing the phone out) makes it stop working.
+ */
+export const deviceToken = {
+  get(): string | null {
+    try {
+      return localStorage.getItem("deviceToken");
+    } catch {
+      return null;
+    }
+  },
+  set(token: string | null) {
+    try {
+      if (token) localStorage.setItem("deviceToken", token);
+      else localStorage.removeItem("deviceToken");
+    } catch {
+      /* private window: the phone just won't stay paired */
+    }
+  },
+};
+
+/** An error from the server; `code` says what to do about it ("codeNeeded" when a pairing code is wanted). */
+export class ApiError extends Error {
+  constructor(message: string, readonly code?: string, readonly status?: number) {
+    super(message);
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  if (import.meta.env.DEV && mockEnabled) return (await import("./mock/server")).mockRequest<T>(method, path, body, deviceToken.get());
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const token = deviceToken.get();
+  if (token) headers["X-Device-Token"] = token;
   const res = await fetch(`${BASE}/api${path}`, {
     method,
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.error ?? `Request failed (${res.status})`);
+  if (!res.ok) throw new ApiError(data?.error ?? `Request failed (${res.status})`, data?.code, res.status);
   return data as T;
 }
 
@@ -324,6 +467,18 @@ export const api = {
     request<Driver>("POST", "/drivers", { name, color, seat }),
   updateDriver: (id: DriverId, name: string, color: string) =>
     request<Driver>("PUT", `/drivers/${id}`, { name, color }),
+  profile: (id: DriverId) => request<Profile>("GET", `/drivers/${id}/profile`),
+  shop: (id: DriverId) => request<ShopState>("GET", `/drivers/${id}/shop`),
+  buy: (id: DriverId, slot: string, item: string) => request<ShopState>("POST", `/drivers/${id}/shop/buy`, { slot, id: item }),
+  setLook: (id: DriverId, look: Look) => request<Driver>("PUT", `/drivers/${id}/look`, look),
+  me: () => request<Me>("GET", "/me"),
+  /** Pairs this phone with a driver. A driver who already has a phone needs a `code` from the PC or that phone. */
+  pair: (driverId: DriverId, code?: string) => request<{ token: string; driver: Driver }>("POST", "/me/pair", { driverId, code }),
+  logout: () => request<boolean>("POST", "/me/logout"),
+  pairCode: (id: DriverId) => request<{ code: string; expiresAt: number }>("POST", `/drivers/${id}/pair-code`),
+  driverDevices: (id: DriverId) => request<Device[]>("GET", `/drivers/${id}/devices`),
+  signOutDriver: (id: DriverId) => request<number>("DELETE", `/drivers/${id}/devices`),
+  signOutDevice: (id: number) => request<boolean>("DELETE", `/devices/${id}`),
   setSeat: (driverId: DriverId | null) => request<DriverId | null>("PUT", "/seat", { driverId }),
   driverRatings: () => request<DriverRating[]>("GET", "/drivers/ratings"),
   /** Every lap a driver has recorded, oldest first. */
@@ -435,6 +590,13 @@ class Store {
   }
 
   private connect() {
+    if (import.meta.env.DEV && mockEnabled) {
+      this.set({ online: true });
+      this.refreshAll().catch(() => {});
+      api.update().then((update) => this.set({ update }), () => {});
+      import("./mock/server").then((m) => m.connectMock((e) => this.handle(e)));
+      return;
+    }
     const wsBase = BASE ? BASE.replace(/^http/, "ws") : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
     const ws = new WebSocket(`${wsBase}/api/events`);
     ws.onopen = () => {

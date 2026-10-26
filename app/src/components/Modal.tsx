@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, type ReactNode } from "react";
  * Native <dialog> shown modally: focus is trapped, Esc and a backdrop click close it.
  * Mount it to open, unmount to close (so any form inside starts fresh each time).
  */
-export function Modal({ title, onClose, children, centered = false, narrow = false }: { title: string; onClose: () => void; children: ReactNode; centered?: boolean; narrow?: boolean }) {
+export function Modal({ title, onClose, children, centered = false, narrow = false, className = "" }: { title: string; onClose: () => void; children: ReactNode; centered?: boolean; narrow?: boolean; className?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -37,7 +37,7 @@ export function Modal({ title, onClose, children, centered = false, narrow = fal
   return (
     <dialog
       ref={ref}
-      className={`modal${centered ? " center" : ""}${narrow ? " narrow" : ""}`}
+      className={`modal${centered ? " center" : ""}${narrow ? " narrow" : ""}${className ? ` ${className}` : ""}`}
       aria-labelledby={titleId}
       // Esc: let the parent unmount us instead of the browser closing the dialog. (Not
       // `onClose`: the unmount cleanup's close() fires that too, even in StrictMode remounts.)

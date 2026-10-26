@@ -10,12 +10,71 @@ pub type Timestamp = i64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Device {
+    pub id: i64,
+    pub driver_id: DriverId,
+    /// What the phone calls itself, e.g. "iPhone" or "Android phone".
+    pub label: String,
+    pub created_at: Timestamp,
+    pub last_seen: Timestamp,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Driver {
     pub id: DriverId,
     pub name: String,
     /// Helmet colour, `#RRGGBB`.
     pub color: String,
+    /// What the driver has equipped in the Garage (empty: the plain helmet in `color`).
+    #[serde(default)]
+    pub look: Look,
     pub created_at: Timestamp,
+}
+
+/// A helmet look: which shop items are equipped. Ids are those of `shop::CATALOGUE`; the app draws them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Look {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shell: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decal: Option<String>,
+    /// `side`, `top` or `chin`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decal_at: Option<String>,
+    /// One of `shop::DECAL_COLOURS`; white when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decal_color: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stripe: Option<String>,
+    /// Race number, 1 to 99.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number: Option<u8>,
+    /// The default eyes, shown when the driver is idle (`shop::FACE`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub face: Option<String>,
+}
+
+/// What the shop shows one driver: their balance, what they own and wear, and every item's price.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShopState {
+    pub coins: i64,
+    pub level: u32,
+    /// Keys (`shell:aurora`) of items bought; free items are not listed, everyone has them.
+    pub owned: Vec<String>,
+    pub look: Look,
+    pub items: Vec<ShopItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShopItem {
+    pub id: String,
+    pub slot: String,
+    pub price: i64,
+    pub min_level: u32,
 }
 
 /// Game, track, layout and car: what a lap time is comparable against.
@@ -156,6 +215,83 @@ pub struct LapResult {
     /// Purple / green / yellow for each of the lap's sectors (empty when untimed).
     pub sector_status: Vec<crate::live::SectorStatus>,
     pub challenges: Vec<ChallengeStanding>,
+    /// XP and coins this lap earned (nothing for guest laps and laps that did not count).
+    #[serde(default)]
+    pub awards: Awards,
+}
+
+/// What a lap earned the driver, and why, for the pop-up.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Awards {
+    pub xp: i64,
+    pub coins: i64,
+    /// The new level, when this lap crossed a level.
+    pub level_up: Option<u32>,
+    /// Short reasons in order, e.g. "Clean lap", "Personal best".
+    pub reasons: Vec<String>,
+}
+
+/// One row of the XP and coin ledger.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PointEvent {
+    pub id: i64,
+    pub driver_id: DriverId,
+    /// "lap", "first", "pb" or "record".
+    pub kind: String,
+    pub xp: i64,
+    pub coins: i64,
+    /// The lap that earned it.
+    pub lap_id: Option<LapId>,
+    pub at: Timestamp,
+}
+
+/// A driver's best on one track and car, and where it ranks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileBest {
+    #[serde(flatten)]
+    pub combo: Combo,
+    pub time_ms: u32,
+    pub position: u32,
+    /// How many drivers have a valid lap on it.
+    pub of: u32,
+}
+
+/// A badge worked out from the driver's laps (never stored).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Sticker {
+    pub id: String,
+    pub name: String,
+    pub hint: String,
+    pub earned: bool,
+}
+
+/// Everything the You page shows.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Profile {
+    pub driver: Driver,
+    pub level: u32,
+    pub title: String,
+    pub next_title: String,
+    pub xp: i64,
+    /// Total XP at which this level began, and the next one begins.
+    pub level_start_xp: i64,
+    pub next_level_xp: i64,
+    pub coins: i64,
+    /// Laps that counted or were cut (out and in laps are not attempts).
+    pub attempts: u32,
+    pub clean_laps: u32,
+    pub clean_percent: u32,
+    pub tracks: u32,
+    /// Days in a row, up to today, with at least one clean lap.
+    pub streak_days: u32,
+    pub bests: Vec<ProfileBest>,
+    pub stickers: Vec<Sticker>,
+    pub recent: Vec<PointEvent>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

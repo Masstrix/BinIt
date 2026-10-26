@@ -18,6 +18,10 @@ Tests: `cargo test --workspace` and, in `app/`, `npx tsc --noEmit`.
 Phone testing while developing: open `http://<this PC's address>:7878`. In a debug build that port
 forwards to the Vite dev server, so only 7878 needs to be reachable through the firewall.
 
+### UI work without the app or a game (mock data)
+
+With the Vite dev server running (`npm run dev` in `app/`), open `http://localhost:1420/?mock` in a browser. The page then talks to an in-memory fake server instead of Bin It: five drivers, a few hundred laps on three circuits and a rally stage, a running challenge, and a car going round Imola so the live widgets move. `?mock=0` switches it off again (the yellow "Mock data" badge in the title bar does the same). It only exists in dev builds and is left out of releases. The fixtures live in `app/src/mock/data.ts` and the routes in `app/src/mock/server.ts`.
+
 ## Making something to copy to another PC
 
 From the project root, either double-click **`build.cmd`** or run:
