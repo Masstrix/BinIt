@@ -150,6 +150,8 @@ function ManageDriver({ driver }: { driver: Driver }) {
 
 function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile; mine: boolean; manage: boolean; onSwitch: () => void }) {
   const { status } = useAppState();
+  // Customize and the Shop belong to the driver signed in on this device (or, on the PC, the one in the seat).
+  const canDress = mine || (manage && status?.seat === p.driver.id);
   const into = p.xp - p.levelStartXp;
   const span = Math.max(1, p.nextLevelXp - p.levelStartXp);
   const earned = p.stickers.filter((s) => s.earned).length;
@@ -172,10 +174,18 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
           <span>{p.xp.toLocaleString()} XP</span>
           <span>{(p.nextLevelXp - p.xp).toLocaleString()} to {p.nextTitle === p.title ? `level ${p.level + 1}` : p.nextTitle}</span>
         </div>
-        <span className="chip you-coins" title="Coins: earned with XP, spent in the Garage">
-          <Coin size={22} title="Coins" />
-          {p.coins.toLocaleString()}
-        </span>
+        <div className="you-wallet">
+          {canDress && (
+            <a className="you-shop" href="#/shop">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 6h15l-1.5 9h-12zM6 6L5 3H2M9 20.5h.01M18 20.5h.01" /></svg>
+              Shop
+            </a>
+          )}
+          <span className="you-wallet-coins" title="Coins: earned with XP, spent in the Shop">
+            <Coin size={22} title="Coins" />
+            {p.coins.toLocaleString()}
+          </span>
+        </div>
       </section>
 
       <div className="you-stats">
@@ -188,11 +198,9 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
         <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Progress over time" sub="Bests and speed score on every track" href={`#/you/${p.driver.id}/progress`} />
       </div>
 
-      {(mine || (manage && status?.seat === p.driver.id)) && (
+      {canDress && (
         <div className="you-switch">
           <a className="btn" href="#/customize">Customize</a>
-          <a className="btn ghost" href="#/shop">Shop</a>
-          <span className="grow muted" style={{ fontSize: 13 }}>Your name, colours, decals, eyes and number.</span>
         </div>
       )}
 
