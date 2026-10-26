@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAppState } from "../api";
+import { lapTime } from "../format";
 import { usePersistedState } from "../persist";
 import { Helmet } from "./Helmet";
 import { Modal } from "./Modal";
@@ -19,20 +20,36 @@ export function MeBar() {
   const me = drivers.find((d) => d.id === meId) ?? null;
   const inSeat = me != null && status?.seat === me.id;
 
+  const live = status?.live;
+  const driving = inSeat && !!live?.driving;
+  const delta = live?.timing?.deltaMs;
+  const state = driving ? "driving" : inSeat ? "seated" : "free";
+
   return (
-    <div className="me-bar">
+    <div className="me-bar" data-state={state}>
       <button type="button" className="me-who" onClick={() => setPicking(true)} title="Choose who you are on this phone">
-        <Helmet color={me?.color ?? "#5b6578"} size={34} seed={me?.id} mood={inSeat ? "happy" : "idle"} />
+        <span className="me-ring">
+          <Helmet color={me?.color ?? "#5B6578"} size={46} seed={me?.id} mood={inSeat ? "happy" : "idle"} />
+        </span>
         <span className="me-text">
-          <span className="me-name">{me ? me.name : "Who are you?"}</span>
-          <span className="me-sub">{me ? (inSeat ? "In the seat" : "Tap to change") : "Pick your driver"}</span>
+          {driving ? (
+            <>
+              <span className="mono me-time">{lapTime(live?.currentLapMs)}</span>
+              <span className="me-sub me-good">{delta != null ? `${delta <= 0 ? "−" : "+"}${(Math.abs(delta) / 1000).toFixed(3)} on your best` : "Driving"}</span>
+            </>
+          ) : (
+            <>
+              <span className="me-name">{me ? me.name : "Who are you?"}</span>
+              <span className="me-sub">{me ? (inSeat ? "In the seat" : "Seat free") : "Pick your driver"}</span>
+            </>
+          )}
         </span>
       </button>
       {me &&
         (inSeat ? (
-          <span className="me-driving"><span className="dot on" /> Driving</span>
+          <button type="button" className="me-leave" onClick={() => seat.choose(null, true)}>Leave</button>
         ) : (
-          <button type="button" className="btn me-go" onClick={() => seat.choose(me, true)}>Start driving</button>
+          <button type="button" className="btn me-go" onClick={() => seat.choose(me, true)}>Enter seat</button>
         ))}
       {seat.dialog}
       {picking && (

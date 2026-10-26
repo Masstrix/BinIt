@@ -33,6 +33,32 @@ const ROUTES = [
 
 const GROUPS = ["Play", "Compete", "Setup"] as const;
 
+/** Phones get four tabs, not six pages: what is shared sits in the tabs, what is personal behind the banner. */
+const TABS = [
+  { href: "#/", label: "Home", match: ["/"], exact: true, icon: ROUTES[0].icon },
+  { href: "#/leaderboard", label: "Tracks", match: ["/leaderboard", "/telemetry"], icon: "M5 21V4M5 4h11l-2 4 2 4H5" },
+  { href: "#/challenges", label: "Challenges", match: ["/challenges"], icon: ROUTES.find((r) => r.path === "/challenges")!.icon },
+  { href: "#/games", label: "Rig", match: ["/games", "/drivers", "/advanced"], icon: "M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM8 21h8M12 17v4" },
+];
+
+/** On a phone, the pages that share a tab are one tap apart. */
+const SWITCHES: { match: string[]; items: { href: string; label: string; path: string }[] }[] = [
+  { match: ["/leaderboard", "/telemetry"], items: [{ href: "#/leaderboard", label: "Boards", path: "/leaderboard" }, { href: "#/telemetry", label: "Telemetry", path: "/telemetry" }] },
+  { match: ["/games", "/drivers"], items: [{ href: "#/games", label: "Games & overlay", path: "/games" }, { href: "#/drivers", label: "Drivers", path: "/drivers" }] },
+];
+
+function PhoneSwitch({ path }: { path: string }) {
+  const sw = SWITCHES.find((x) => x.match.some((m) => path.startsWith(m)));
+  if (!sw) return null;
+  return (
+    <div className="phone-switch segmented" role="group" aria-label="Page">
+      {sw.items.map((i) => (
+        <a key={i.path} href={i.href} aria-pressed={path.startsWith(i.path)}>{i.label}</a>
+      ))}
+    </div>
+  );
+}
+
 function useHashPath() {
   const read = () => location.hash.replace(/^#/, "") || "/";
   const [path, setPath] = useState(read);
@@ -93,7 +119,11 @@ export function App() {
       <Sidebar path={path} collapsed={collapsed} onToggle={() => setUserCollapsed(!userCollapsed)} />
       <div className="main-col">
         <TitleBar title={titleFor(path)} />
-        <main className="content">{page}</main>
+        {!isTauri && <MeBar />}
+        <main className="content">
+          <PhoneSwitch path={path} />
+          {page}
+        </main>
       </div>
       <ConnectionGate />
     </div>
@@ -143,7 +173,6 @@ function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed: boole
           </svg>
         </button>
       </div>
-      {!isTauri && <MeBar />}
       <nav className="nav" aria-label="Main">
         {GROUPS.map((group) => (
           <div className="nav-group" key={group}>
@@ -163,6 +192,21 @@ function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed: boole
             })}
           </div>
         ))}
+      </nav>
+      <nav className="tabbar" aria-label="Main">
+        {TABS.map((t) => {
+          const current = t.match.some((m) => (t.exact ? path === m : path.startsWith(m)));
+          return (
+            <a key={t.href} href={t.href} aria-current={current ? "page" : undefined}>
+              <span className="tab-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d={t.icon} />
+                </svg>
+              </span>
+              {t.label}
+            </a>
+          );
+        })}
       </nav>
       <span className="sidebar-fill" />
       {lanUrl && (
