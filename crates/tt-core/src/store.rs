@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 10;
+const SCHEMA_VERSION: i32 = 11;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -237,6 +237,10 @@ impl Store {
                 ",
             )?;
         }
+        if version < 11 {
+            // How big a challenge's coin and XP rewards are: low, medium or high.
+            conn.execute_batch("ALTER TABLE challenges ADD COLUMN reward_size TEXT NOT NULL DEFAULT 'medium';")?;
+        }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         let store = Self { conn };
         store.backfill_points()?;
@@ -299,6 +303,26 @@ impl Store {
         Ok(())
     }
 
+    /// Pays a finished challenge's board and marks it settled in one go, so it can never be paid twice. An empty
+    /// `payouts` just marks it (a challenge too small to pay, or one that ended before challenge rewards existed).
+    pub fn settle_challenge(&self, flag_key: &str, payouts: &[(DriverId, String, i64, i64)], at: Timestamp) -> Result<()> {
+        self.conn.execute_batch("BEGIN")?;
+        let done = (|| -> Result<()> {
+            self.set_setting(flag_key, Some("1"))?;
+            for (driver, kind, xp, coins) in payouts {
+                self.insert_point_event(*driver, kind, *xp, *coins, None, at)?;
+            }
+            Ok(())
+        })();
+        match done {
+            Ok(()) => Ok(self.conn.execute_batch("COMMIT")?),
+            Err(e) => {
+                let _ = self.conn.execute_batch("ROLLBACK");
+                Err(e)
+            }
+        }
+    }
+
     // ---- Garage ----------------------------------------------------------------
 
     pub fn set_look(&self, id: DriverId, look: &Look) -> Result<()> {
@@ -340,7 +364,7 @@ impl Store {
             return Ok(());
         }
         if self.conn.query_row("SELECT COUNT(*) FROM point_events", [], |r| r.get::<_, i64>(0))? == 0 {
-            use crate::progress::{FIRST_COINS, FIRST_XP, LAP_COINS, LAP_XP, PB_COINS, PB_XP};
+            let rw = crate::progress::rewards();
             let mut stmt = self.conn.prepare(
                 "SELECT id, driver_id, game, track, layout, car, time_ms, recorded_at FROM laps
                  WHERE valid = 1 AND driver_id IS NOT NULL ORDER BY recorded_at, id",
@@ -354,11 +378,11 @@ impl Store {
             for (lap_id, driver, combo, time, at) in laps {
                 let previous = best.get(&(driver, combo.clone())).copied();
                 if previous.is_none() {
-                    self.insert_point_event(driver, "first", FIRST_XP, FIRST_COINS, Some(lap_id), at)?;
+                    self.insert_point_event(driver, "first", rw.first_lap.xp, rw.first_lap.coins, Some(lap_id), at)?;
                 }
-                self.insert_point_event(driver, "lap", LAP_XP, LAP_COINS, Some(lap_id), at)?;
+                self.insert_point_event(driver, "lap", rw.clean_lap.xp, rw.clean_lap.coins, Some(lap_id), at)?;
                 if previous.is_some_and(|p| time < p) {
-                    self.insert_point_event(driver, "pb", PB_XP, PB_COINS, Some(lap_id), at)?;
+                    self.insert_point_event(driver, "pb", rw.personal_best.xp, rw.personal_best.coins, Some(lap_id), at)?;
                 }
                 best.insert((driver, combo), time.min(previous.unwrap_or(u32::MAX)));
             }
@@ -892,8 +916,8 @@ impl Store {
 
     pub fn insert_challenge(&self, c: &NewChallenge, starts_at: Timestamp, now: Timestamp) -> Result<Challenge> {
         self.conn.execute(
-            "INSERT INTO challenges (name, game, track, layout, car, starts_at, ends_at, valid_only, max_laps, prizes, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT INTO challenges (name, game, track, layout, car, starts_at, ends_at, valid_only, max_laps, prizes, created_at, reward_size)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 c.name,
                 c.game,
@@ -905,7 +929,8 @@ impl Store {
                 c.valid_only,
                 c.max_laps,
                 serde_json::to_string(&c.prizes)?,
-                now
+                now,
+                c.reward_size.as_deref().unwrap_or("medium")
             ],
         )?;
         Ok(self.challenge(self.conn.last_insert_rowid())?.expect("just inserted"))
@@ -934,7 +959,7 @@ impl Store {
 }
 
 const LAP_SELECT: &str = "SELECT id, driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid, sectors_ms, recorded_at, untimed_reason FROM laps";
-const CHALLENGE_SELECT: &str = "SELECT id, name, game, track, layout, car, starts_at, ends_at, valid_only, max_laps, prizes, created_at FROM challenges";
+const CHALLENGE_SELECT: &str = "SELECT id, name, game, track, layout, car, starts_at, ends_at, valid_only, max_laps, prizes, created_at, reward_size FROM challenges";
 
 fn driver_from_row(r: &Row) -> rusqlite::Result<Driver> {
     let look: String = r.get(3)?;
@@ -976,6 +1001,7 @@ fn challenge_from_row(r: &Row) -> rusqlite::Result<Challenge> {
         max_laps: r.get(9)?,
         prizes: serde_json::from_str(&prizes).unwrap_or_default(),
         created_at: r.get(11)?,
+        reward_size: r.get(12)?,
     })
 }
 

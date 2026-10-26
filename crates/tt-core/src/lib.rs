@@ -11,7 +11,6 @@ mod store;
 pub mod trackmap;
 
 use std::path::{Path, PathBuf};
-use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -170,8 +169,6 @@ pub struct BinIt {
     store: Mutex<Store>,
     runtime: Mutex<Runtime>,
     events: broadcast::Sender<AppEvent>,
-    /// One-time codes for pairing another phone to a driver: driver -> (code, runs out at). Never stored.
-    pair_codes: Mutex<HashMap<DriverId, (String, Timestamp)>>,
 }
 
 pub fn now_ms() -> Timestamp {
@@ -209,7 +206,7 @@ impl BinIt {
 
     fn with_store(store: Store) -> Self {
         let (events, _) = broadcast::channel(256);
-        Self { previous_version: Mutex::default(), catalogue_paths: Mutex::default(), store: Mutex::new(store), runtime: Mutex::new(Runtime::default()), events, pair_codes: Mutex::default() }
+        Self { previous_version: Mutex::default(), catalogue_paths: Mutex::default(), store: Mutex::new(store), runtime: Mutex::new(Runtime::default()), events }
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<AppEvent> {
@@ -371,22 +368,14 @@ impl BinIt {
 
     /// Pairs a phone with a driver and returns its token (shown once; only a hash is kept).
     ///
-    /// A driver nobody has claimed can be claimed by anyone, like typing a name on the rig. Once a phone is
-    /// paired, another one needs the driver's one-time `code` (see `new_pair_code`).
-    pub fn pair_device(&self, driver_id: DriverId, code: Option<&str>, label: &str) -> Result<(String, Driver)> {
+    /// A driver nobody is signed in as can be taken by anyone, like typing a name on the rig. One who is already
+    /// signed in on another device needs `confirmed`: the phone asks "are you sure?" and asks again with it set.
+    /// Both devices then stay signed in.
+    pub fn pair_device(&self, driver_id: DriverId, confirmed: bool, label: &str) -> Result<(String, Driver)> {
         let store = self.store();
         let driver = store.driver(driver_id)?.ok_or_else(|| anyhow::anyhow!("no such driver"))?;
-        if store.device_count(driver_id)? > 0 {
-            let Some(code) = code.map(str::trim).filter(|c| !c.is_empty()) else {
-                return Err(pairing::PairError::CodeNeeded.into());
-            };
-            let mut codes = self.pair_codes.lock().expect("pair codes mutex poisoned");
-            match codes.get(&driver_id) {
-                Some((expected, until)) if *until > now_ms() && expected == code => {
-                    codes.remove(&driver_id);
-                }
-                _ => return Err(pairing::PairError::BadCode.into()),
-            }
+        if !confirmed && store.device_count(driver_id)? > 0 {
+            return Err(pairing::PairError::AlreadySignedIn.into());
         }
         let token = pairing::new_token()?;
         let label: String = label.trim().chars().take(40).collect();
@@ -394,17 +383,6 @@ impl BinIt {
         drop(store);
         self.emit(AppEvent::DriversChanged);
         Ok((token, driver))
-    }
-
-    /// A six digit code that lets one more phone pair with this driver, for the next few minutes.
-    pub fn new_pair_code(&self, driver_id: DriverId) -> Result<(String, Timestamp)> {
-        if self.store().driver(driver_id)?.is_none() {
-            bail!("no such driver");
-        }
-        let code = pairing::new_code()?;
-        let until = now_ms() + pairing::CODE_TTL_MS;
-        self.pair_codes.lock().expect("pair codes mutex poisoned").insert(driver_id, (code.clone(), until));
-        Ok((code, until))
     }
 
     /// Who a phone's token belongs to (and note that it was just used).
@@ -443,7 +421,6 @@ impl BinIt {
     /// Signs every phone out of a driver, e.g. after one was lost. The next phone to claim them wins.
     pub fn remove_driver_devices(&self, driver_id: DriverId) -> Result<usize> {
         let n = self.store().delete_driver_devices(driver_id)?;
-        self.pair_codes.lock().expect("pair codes mutex poisoned").remove(&driver_id);
         self.emit(AppEvent::DriversChanged);
         Ok(n)
     }
@@ -460,7 +437,7 @@ impl BinIt {
         let store = self.store();
         let driver = store.driver(driver_id)?.ok_or_else(|| anyhow::anyhow!("no such driver"))?;
         let (xp, coins) = store.point_totals(driver_id)?;
-        let items = shop::CATALOGUE
+        let items = shop::catalogue()
             .iter()
             .map(|i| ShopItem { id: i.id.to_string(), slot: i.slot.to_string(), price: i.price, min_level: i.min_level })
             .collect();
@@ -472,7 +449,8 @@ impl BinIt {
         {
             let store = self.store();
             let entry = shop::item(slot, id).ok_or_else(|| anyhow::anyhow!("no such item"))?;
-            if entry.price == 0 {
+            let (cost, needs) = (entry.price, entry.min_level);
+            if cost == 0 {
                 bail!("that one is free");
             }
             let key = shop::key(slot, id);
@@ -480,13 +458,13 @@ impl BinIt {
                 bail!("you already own that");
             }
             let (xp, coins) = store.point_totals(driver_id)?;
-            if progress::level_of(xp) < entry.min_level {
-                bail!("that needs level {}", entry.min_level);
+            if progress::level_of(xp) < needs {
+                bail!("that needs level {needs}");
             }
-            if coins < entry.price {
-                bail!("not enough coins: {} needed, you have {coins}", entry.price);
+            if coins < cost {
+                bail!("not enough coins: {cost} needed, you have {coins}");
             }
-            store.buy_item(driver_id, &key, entry.price, now_ms())?;
+            store.buy_item(driver_id, &key, cost, now_ms())?;
         }
         self.emit(AppEvent::DriversChanged);
         self.shop(driver_id)
@@ -900,6 +878,11 @@ impl BinIt {
         {
             bail!("the challenge must end after it starts");
         }
+        if let Some(size) = &c.reward_size
+            && !progress::REWARD_SIZES.contains(&size.as_str())
+        {
+            bail!("the reward size is low, medium or high");
+        }
         let challenge = self.store().insert_challenge(c, starts_at, now)?;
         self.emit(AppEvent::ChallengesChanged);
         Ok(challenge)
@@ -908,7 +891,42 @@ impl BinIt {
     pub fn end_challenge(&self, id: ChallengeId) -> Result<()> {
         self.store().set_challenge_end(id, Some(now_ms()))?;
         self.emit(AppEvent::ChallengesChanged);
+        self.settle_challenges()?;
         Ok(())
+    }
+
+    /// Pays every challenge that has ended and not been paid yet: see `progress::challenge_payouts`. Safe to call as
+    /// often as you like (each challenge is paid once). The first time it runs, challenges that had already ended are
+    /// marked settled without paying, so turning this on does not hand out coins for old contests.
+    pub fn settle_challenges(&self) -> Result<usize> {
+        const STARTED: &str = "challenge_rewards_started_v1";
+        let now = now_ms();
+        let mut paid = 0;
+        {
+            let store = self.store();
+            let first_run = store.setting(STARTED)?.is_none();
+            for c in store.challenges()?.iter().filter(|c| c.ends_at.is_some_and(|end| end <= now)) {
+                let flag = format!("challenge_settled_{}", c.id);
+                if store.setting(&flag)?.is_some() {
+                    continue;
+                }
+                let payouts = if first_run {
+                    Vec::new()
+                } else {
+                    let board = store.leaderboard(&challenge_query(c))?;
+                    progress::challenge_payouts(&progress::rewards().challenge, &c.name, &c.reward_size, &board)
+                };
+                store.settle_challenge(&flag, &payouts, c.ends_at.unwrap_or(now))?;
+                paid += payouts.len();
+            }
+            if first_run {
+                store.set_setting(STARTED, Some("1"))?;
+            }
+        }
+        if paid > 0 {
+            self.emit(AppEvent::ChallengesChanged);
+        }
+        Ok(paid)
     }
 
     pub fn delete_challenge(&self, id: ChallengeId) -> Result<()> {
@@ -1233,6 +1251,7 @@ fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal
     use progress::*;
     let first_here = store.best_valid_time(combo, Some(driver), lap.id)?.is_none();
     let xp_before = store.point_totals(driver)?.0;
+    let rw = progress::rewards();
     let mut awards = Awards::default();
     let mut give = |kind: &str, xp: i64, coins: i64, reason: &str| -> Result<()> {
         store.insert_point_event(driver, kind, xp, coins, Some(lap.id), now)?;
@@ -1242,16 +1261,16 @@ fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal
         Ok(())
     };
     if first_here {
-        give("first", FIRST_XP, FIRST_COINS, "First lap here")?;
+        give("first", rw.first_lap.xp, rw.first_lap.coins, "First lap here")?;
     }
-    if store.lap_awards_since(driver, combo, now - DAY_MS)? < LAP_CAP_PER_DAY {
-        give("lap", LAP_XP, LAP_COINS, "Clean lap")?;
+    if store.lap_awards_since(driver, combo, now - DAY_MS)? < rw.daily_lap_cap {
+        give("lap", rw.clean_lap.xp, rw.clean_lap.coins, "Clean lap")?;
     }
     if personal_best && !first_here {
-        give("pb", PB_XP, PB_COINS, "Personal best")?;
+        give("pb", rw.personal_best.xp, rw.personal_best.coins, "Personal best")?;
     }
     if combo_record && store.others_have_valid_lap(combo, driver, lap.id)? {
-        give("record", RECORD_XP, RECORD_COINS, "Track record")?;
+        give("record", rw.track_record.xp, rw.track_record.coins, "Track record")?;
     }
     let level_after = level_of(xp_before + awards.xp);
     if level_after > level_of(xp_before) {

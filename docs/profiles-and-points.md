@@ -156,3 +156,55 @@ like everything else here; that is acceptable for this product but worth knowing
   gives each mock driver spare coins.
 * **Not done:** visor and default face (designed, not in the catalogue), earned-only items (challenge winners, level
   milestones), the Paddock page, overlay pop-up when someone equips something, number style and colour extras.
+
+## Status: one file sets XP, coins and prices (2026-10-26)
+
+Every earning rate and shop price is in **`crates/tt-core/rewards.json`**. It is compiled into the app, so a balance
+change is: edit the numbers, rebuild, ship. Everyone who installs the update gets the new values; there is no copy in
+the user's data folder to go stale.
+
+* `cleanLap`, `firstLap`, `personalBest`, `trackRecord`: XP and coins each pays.
+* `dailyLapCap`: plain laps on one track and car stop paying after this many in 24 hours (bests and records are never capped).
+* `levelXpStep`: each level costs this much more than the one before (100 gives 100, 300, 600, 1000 XP in total).
+* `shop`: every item for sale, in order: `slot` (`shell`, `decal`, `stripe`, `face`), `id` (must match the drawing in
+  `app/src/looks.ts`), `price` and `minLevel`. A price of 0 makes an item free for everyone. An item is added to the
+  shop by adding it here and drawing it in `looks.ts` (and in `app/src/mock/data.ts` for `?mock`).
+* A negative number is raised to zero and a broken file stops the build's tests, not the app.
+* Changing a number does not rewrite the past: ledger rows already written keep what they paid, items already bought keep
+  the price paid (no refunds), and a smaller `levelXpStep` raises everyone's level at once while a larger one lowers it
+  (a driver can then own items above their level; they keep them).
+* The mock server (`?mock`) has its own copy of the prices in `app/src/mock/data.ts`; keep it in step when testing the UI.
+
+## Status: challenges pay out (2026-10-26)
+
+When a challenge ends (its end time passes, or it is ended by hand) the server pays its board once, from the `challenge`
+block of `crates/tt-core/rewards.json`:
+
+* `placings`: XP and coins for 1st, 2nd, 3rd... in order. `participation`: everyone else with a counted lap.
+* **Reward size:** whoever starts a challenge picks Low, Medium or High (on the new challenge page, stored on the
+  challenge, schema 11). `sizes` in the config are the multipliers: 0.5, 1 and 2 by default. It multiplies every
+  payout, after the field scaling below.
+* `minEntrants`: a challenge with fewer drivers than this pays nothing (nobody farms one alone). Guest laps never count.
+* **Scaling with the field:** every driver beyond `minEntrants` adds `scalePerEntrant` (0.1 is 10%) to every payout,
+  up to `maxScale` times the base. So with the defaults a six-driver challenge pays 1.4 times the base amounts.
+* Rows go in the ledger as `challenge:<place>:<name>` or `challenge:entry:<name>`, and show on the You page as "Won ...",
+  "2nd in ...", "Took part in ...". A settled flag per challenge (`challenge_settled_<id>`) stops a second payment, and
+  deleting a challenge later does not take the coins back.
+* `BinIt::settle_challenges` runs at start and every 30 seconds, and straight after a challenge is ended by hand. The very
+  first run marks challenges that had already ended as settled without paying, so old contests do not suddenly hand out coins.
+* Not built: a bigger or smaller reward for one particular challenge (a per-challenge multiplier), and an overlay
+  celebration when a payout lands.
+
+## Status: signing in on a second device asks "are you sure?" (2026-10-27)
+
+The one-time pairing code is gone. A phone or browser signs in by picking a driver on its own full-screen sign-in.
+
+* A driver nobody is signed in as is just taken. One who is already signed in on another device answers `alreadySignedIn`
+  (HTTP 409) until the request is repeated with `confirmed: true`; the sign-in screen shows "<name> is already signed in" with
+  "That's me, sign in" and Back. Then **both devices stay signed in**: a driver can have any number of devices.
+* Each browser keeps its own token (in its local storage), so a laptop's browser, a phone's browser and a private window are
+  each a device. Logging out only forgets that device. Clearing browser data or opening the page at a different address
+  (an IP versus a host name) starts as a new device, which signs in again the same way.
+* This trades safety for ease: anyone on the network can sign in as anyone after one tap, and then spend that driver's coins
+  or change their look. The desktop app's Connections list (on a driver's profile) shows every device and can sign one or
+  all of them out (a lost phone, or someone who took the wrong name).

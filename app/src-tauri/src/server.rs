@@ -53,10 +53,10 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/drivers/ratings", get(driver_ratings))
         .route("/drivers/{id}", put(update_driver))
         .route("/drivers/{id}/profile", get(driver_profile))
+        .route("/rewards", get(rewards))
         .route("/drivers/{id}/shop", get(driver_shop))
         .route("/drivers/{id}/shop/buy", post(buy_item))
         .route("/drivers/{id}/look", put(set_look))
-        .route("/drivers/{id}/pair-code", post(pair_code))
         .route("/drivers/{id}/devices", get(driver_devices).delete(sign_out_driver))
         .route("/devices/{id}", delete(sign_out_device))
         .route("/me", get(me))
@@ -300,6 +300,11 @@ async fn driver_profile(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiRe
     Ok(Json(c.tt.profile(id)?))
 }
 
+/// What things pay and cost (`crates/tt-core/rewards.json`): the new-challenge page shows what a challenge pays.
+async fn rewards() -> Json<tt_core::progress::Rewards> {
+    Json(tt_core::progress::rewards().clone())
+}
+
 /// The Garage and shop for one driver: balance, level, what they own and wear, every price.
 async fn driver_shop(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<tt_core::ShopState> {
     Ok(Json(c.tt.shop(id)?))
@@ -405,7 +410,9 @@ async fn me(ConnectInfo(addr): ConnectInfo<SocketAddr>, headers: HeaderMap, Stat
 #[serde(rename_all = "camelCase")]
 struct PairBody {
     driver_id: DriverId,
-    code: Option<String>,
+    /// Set once the person has been asked "are you sure?" about taking a driver who is signed in elsewhere.
+    #[serde(default)]
+    confirmed: bool,
 }
 
 #[derive(Serialize)]
@@ -415,13 +422,10 @@ struct Paired {
 }
 
 async fn pair_me(headers: HeaderMap, State(c): State<Ctx>, Json(body): Json<PairBody>) -> Result<Json<Paired>, Response> {
-    match c.tt.pair_device(body.driver_id, body.code.as_deref(), device_label(&headers)) {
+    match c.tt.pair_device(body.driver_id, body.confirmed, device_label(&headers)) {
         Ok((token, driver)) => Ok(Json(Paired { token, driver })),
         Err(e) => match e.downcast_ref::<tt_core::pairing::PairError>() {
-            Some(kind) => {
-                let code = if matches!(kind, tt_core::pairing::PairError::CodeNeeded) { "codeNeeded" } else { "badCode" };
-                Err((StatusCode::FORBIDDEN, Json(serde_json::json!({ "error": kind.to_string(), "code": code }))).into_response())
-            }
+            Some(kind) => Err((StatusCode::CONFLICT, Json(serde_json::json!({ "error": kind.to_string(), "code": "alreadySignedIn" }))).into_response()),
             None => Err(bad_request(e)),
         },
     }
@@ -432,27 +436,6 @@ async fn logout_me(headers: HeaderMap, State(c): State<Ctx>) -> ApiResult<bool> 
         Some(token) => c.tt.unpair_token(token)?,
         None => false,
     }))
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct PairCode {
-    code: String,
-    expires_at: tt_core::Timestamp,
-}
-
-/// A one-time code to pair one more phone with this driver. From the PC or from a phone already paired to them.
-async fn pair_code(
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    headers: HeaderMap,
-    State(c): State<Ctx>,
-    Path(id): Path<DriverId>,
-) -> Result<Json<PairCode>, Response> {
-    if c.tt.driver_is_claimed(id).map_err(bad_request)? {
-        may_manage(&c, &headers, addr, id)?;
-    }
-    let (code, expires_at) = c.tt.new_pair_code(id).map_err(bad_request)?;
-    Ok(Json(PairCode { code, expires_at }))
 }
 
 async fn driver_devices(

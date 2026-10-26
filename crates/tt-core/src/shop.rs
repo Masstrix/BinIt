@@ -4,6 +4,7 @@
 //! drawn (app/src/looks.ts); the ids must match. Free items (price 0) belong to everyone.
 
 use crate::model::Look;
+use crate::progress::ShopEntry;
 
 pub const SHELL: &str = "shell";
 pub const DECAL: &str = "decal";
@@ -13,60 +14,13 @@ pub const FACE: &str = "face";
 /// The preset colours a decal can be painted (free). Upper case `#RRGGBB`; white is the default.
 pub const DECAL_COLOURS: &[&str] = &["#FFFFFF", "#14162B", "#FF5D5D", "#FF9F6B", "#FFC93C", "#4FD39A", "#4FC3FF", "#B79BFF", "#FF7AC6"];
 
-pub struct Entry {
-    pub slot: &'static str,
-    pub id: &'static str,
-    pub price: i64,
-    pub min_level: u32,
+/// Every item for sale, from `rewards.json`.
+pub fn catalogue() -> &'static [ShopEntry] {
+    &crate::progress::rewards().shop
 }
 
-const fn e(slot: &'static str, id: &'static str, price: i64, min_level: u32) -> Entry {
-    Entry { slot, id, price, min_level }
-}
-
-pub const CATALOGUE: &[Entry] = &[
-    e(SHELL, "sunset", 150, 1),
-    e(SHELL, "ocean", 150, 1),
-    e(SHELL, "ember", 150, 1),
-    e(SHELL, "lagoon", 180, 1),
-    e(SHELL, "aurora", 320, 3),
-    e(SHELL, "rally", 420, 3),
-    e(SHELL, "holo", 1500, 5),
-    e(SHELL, "gold", 2000, 9),
-    e(SHELL, "nightsky", 1200, 5),
-    e(SHELL, "inferno", 1500, 5),
-    e(SHELL, "nebula", 1800, 7),
-    e(SHELL, "glacier", 1200, 5),
-    e(SHELL, "galaxy", 1600, 6),
-    e(DECAL, "flame", 0, 1),
-    e(DECAL, "bolt", 0, 1),
-    e(DECAL, "star", 40, 1),
-    e(DECAL, "chequer", 40, 1),
-    e(DECAL, "heart", 60, 1),
-    e(DECAL, "flag", 80, 1),
-    e(DECAL, "moon", 80, 1),
-    e(DECAL, "wing", 160, 2),
-    e(DECAL, "crown", 250, 6),
-    e(DECAL, "skull", 300, 3),
-    e(STRIPE, "centre", 0, 1),
-    e(STRIPE, "twin", 20, 1),
-    e(STRIPE, "band", 20, 1),
-    e(STRIPE, "chequer", 100, 2),
-    e(FACE, "chill", 0, 1),
-    e(FACE, "focus", 0, 1),
-    e(FACE, "happy", 0, 1),
-    e(FACE, "cheeky", 20, 1),
-    e(FACE, "sleepy", 40, 1),
-    e(FACE, "wide", 40, 1),
-    e(FACE, "angry", 60, 1),
-    e(FACE, "peaked", 60, 1),
-    e(FACE, "stars", 150, 2),
-    e(FACE, "hearts", 150, 2),
-    e(FACE, "cash", 300, 4),
-];
-
-pub fn item(slot: &str, id: &str) -> Option<&'static Entry> {
-    CATALOGUE.iter().find(|i| i.slot == slot && i.id == id)
+pub fn item(slot: &str, id: &str) -> Option<&'static ShopEntry> {
+    catalogue().iter().find(|i| i.slot == slot && i.id == id)
 }
 
 /// The id a bought item is stored under, e.g. `shell:aurora`.
@@ -74,7 +28,7 @@ pub fn key(slot: &str, id: &str) -> String {
     format!("{slot}:{id}")
 }
 
-pub fn parse_key(key: &str) -> Option<&'static Entry> {
+pub fn parse_key(key: &str) -> Option<&'static ShopEntry> {
     let (slot, id) = key.split_once(':')?;
     item(slot, id)
 }

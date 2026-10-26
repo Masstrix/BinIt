@@ -76,10 +76,14 @@ export interface Challenge {
   validOnly: boolean;
   maxLaps: number | null;
   prizes: Prize[];
+  /** How big the coins and XP it pays are. */
+  rewardSize: RewardSize;
   createdAt: number;
 }
 
-export type NewChallenge = Omit<Challenge, "id" | "createdAt" | "startsAt"> & { startsAt?: number | null };
+export type RewardSize = "low" | "medium" | "high";
+
+export type NewChallenge = Omit<Challenge, "id" | "createdAt" | "startsAt" | "rewardSize"> & { startsAt?: number | null; rewardSize?: RewardSize };
 
 export interface LeaderboardQuery {
   game: string;
@@ -313,6 +317,16 @@ export interface PointEvent {
   at: number;
 }
 
+export interface Pay {
+  xp: number;
+  coins: number;
+}
+
+/** What things pay (the part of `rewards.json` the app shows). */
+export interface Rewards {
+  challenge: { sizes: Record<RewardSize, number>; placings: Pay[]; participation: Pay; minEntrants: number; scalePerEntrant: number; maxScale: number };
+}
+
 /** One thing the shop sells. Free items (price 0) belong to everyone. */
 export interface ShopItem {
   id: string;
@@ -435,7 +449,7 @@ export const deviceToken = {
   },
 };
 
-/** An error from the server; `code` says what to do about it ("codeNeeded" when a pairing code is wanted). */
+/** An error from the server; `code` says what to do about it ("alreadySignedIn" when the driver is signed in on another device and the person should be asked first). */
 export class ApiError extends Error {
   constructor(message: string, readonly code?: string, readonly status?: number) {
     super(message);
@@ -468,14 +482,15 @@ export const api = {
   updateDriver: (id: DriverId, name: string, color: string) =>
     request<Driver>("PUT", `/drivers/${id}`, { name, color }),
   profile: (id: DriverId) => request<Profile>("GET", `/drivers/${id}/profile`),
+  rewards: () => request<Rewards>("GET", "/rewards"),
   shop: (id: DriverId) => request<ShopState>("GET", `/drivers/${id}/shop`),
   buy: (id: DriverId, slot: string, item: string) => request<ShopState>("POST", `/drivers/${id}/shop/buy`, { slot, id: item }),
   setLook: (id: DriverId, look: Look) => request<Driver>("PUT", `/drivers/${id}/look`, look),
   me: () => request<Me>("GET", "/me"),
   /** Pairs this phone with a driver. A driver who already has a phone needs a `code` from the PC or that phone. */
-  pair: (driverId: DriverId, code?: string) => request<{ token: string; driver: Driver }>("POST", "/me/pair", { driverId, code }),
+  /** Signs this device in as a driver. A driver already signed in elsewhere answers "alreadySignedIn" until `confirmed` is set. */
+  pair: (driverId: DriverId, confirmed = false) => request<{ token: string; driver: Driver }>("POST", "/me/pair", { driverId, confirmed }),
   logout: () => request<boolean>("POST", "/me/logout"),
-  pairCode: (id: DriverId) => request<{ code: string; expiresAt: number }>("POST", `/drivers/${id}/pair-code`),
   driverDevices: (id: DriverId) => request<Device[]>("GET", `/drivers/${id}/devices`),
   signOutDriver: (id: DriverId) => request<number>("DELETE", `/drivers/${id}/devices`),
   signOutDevice: (id: number) => request<boolean>("DELETE", `/devices/${id}`),

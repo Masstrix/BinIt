@@ -105,6 +105,7 @@ Data folder: {}", data_dir.display()));
             app.manage(tt.clone());
 
             spawn_game_watcher(tt.clone());
+            spawn_challenge_settler(tt.clone());
 
             let overlay_on = tt.overlay_enabled()?;
             let overlay_focus_only = tt.overlay_focus_only()?;
@@ -138,6 +139,19 @@ Data folder: {}", data_dir.display()));
 const SLOW_POLL: Duration = Duration::from_millis(100);
 
 /// Polls the game adapters on one low-priority background thread.
+/// Challenges that have run out are paid (see `BinIt::settle_challenges`): once at start, then every half minute.
+fn spawn_challenge_settler(tt: Arc<BinIt>) {
+    std::thread::Builder::new()
+        .name("challenge-settler".into())
+        .spawn(move || loop {
+            if let Err(e) = tt.settle_challenges() {
+                eprintln!("challenge rewards: {e:#}");
+            }
+            std::thread::sleep(Duration::from_secs(30));
+        })
+        .expect("spawn challenge settler");
+}
+
 fn spawn_game_watcher(tt: Arc<BinIt>) {
     std::thread::Builder::new()
         .name("game-watcher".into())

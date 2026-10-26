@@ -119,27 +119,24 @@ export function MeBar() {
   );
 }
 
-/** Pick who you are, ask for a pairing code when that driver already has a phone, pair another phone, or log out. */
+/** Pick who you are (asking "are you sure?" when they are signed in on another device), or log out. */
 export function WhoAreYou({ drivers, me, onClose, onChanged }: { drivers: Driver[]; me: Driver | null; onClose: () => void; onChanged: () => void }) {
   const [asking, setAsking] = useState<Driver | null>(null);
-  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [share, setShare] = useState<{ code: string; expiresAt: number } | null>(null);
 
-  const pair = async (d: Driver, withCode?: string) => {
+  const pair = async (d: Driver, confirmed = false) => {
     setBusy(true);
     setError(null);
     try {
       // Moving to someone else: log this phone out of the old driver first.
       if (me && me.id !== d.id) await api.logout().catch(() => {});
-      const r = await api.pair(d.id, withCode);
+      const r = await api.pair(d.id, confirmed);
       deviceToken.set(r.token);
       onChanged();
     } catch (e) {
-      if (e instanceof ApiError && e.code === "codeNeeded") {
+      if (e instanceof ApiError && e.code === "alreadySignedIn") {
         setAsking(d);
-        setCode("");
       } else {
         setError((e as Error).message);
       }
@@ -158,27 +155,16 @@ export function WhoAreYou({ drivers, me, onClose, onChanged }: { drivers: Driver
 
   if (asking) {
     return (
-      <Modal title={`${asking.name} already has a phone`} onClose={onClose} narrow>
+      <Modal title={`${asking.name} is already signed in`} onClose={onClose} narrow>
         <div className="modal-body">
           <p className="muted" style={{ marginTop: 0 }}>
-            To use {asking.name} on this phone, enter the 6 digit code. Get it on the PC (Drivers, then Phones) or on {asking.name}'s own phone (tap the banner, then Pair another phone).
+            {asking.name} is already signed in on another device. If that is you, carry on and both devices stay signed in. If it is not you, go back and pick yourself.
           </p>
-          <input
-            className="input code-input mono"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            placeholder="000000"
-            maxLength={6}
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-            aria-label="Pairing code"
-            autoFocus
-          />
           {error && <span className="error">{error}</span>}
         </div>
         <div className="modal-foot">
           <button type="button" className="btn ghost" onClick={() => { setAsking(null); setError(null); }}>Back</button>
-          <button type="button" className="btn" disabled={code.length !== 6 || busy} onClick={() => pair(asking, code)}>Pair this phone</button>
+          <button type="button" className="btn" disabled={busy} onClick={() => pair(asking, true)}>That's me, sign in</button>
         </div>
       </Modal>
     );
@@ -188,7 +174,7 @@ export function WhoAreYou({ drivers, me, onClose, onChanged }: { drivers: Driver
     <Modal title="Who are you?" onClose={onClose} narrow>
       <div className="modal-body">
         <p className="muted" style={{ marginTop: 0 }}>
-          {me ? `This phone is ${me.name}'s. Pick someone else to switch.` : "Pick yourself once and this phone remembers you."}
+          {me ? `This device is signed in as ${me.name}. Pick someone else to switch.` : "Pick yourself once and this device remembers you."}
         </p>
         {drivers.length === 0 ? (
           <div className="empty">No drivers yet. Add yourself on the Home page first.</div>
@@ -211,30 +197,9 @@ export function WhoAreYou({ drivers, me, onClose, onChanged }: { drivers: Driver
           </div>
         )}
         {error && <span className="error">{error}</span>}
-        {share && (
-          <div className="pair-code" role="status">
-            <span className="muted">On the other phone, pick {me?.name} and enter</span>
-            <span className="mono pair-code-digits">{share.code.slice(0, 3)} {share.code.slice(3)}</span>
-            <span className="muted">It works once, for 5 minutes.</span>
-          </div>
-        )}
       </div>
       {me && (
         <div className="modal-foot">
-          <button
-            type="button"
-            className="btn ghost"
-            disabled={busy}
-            onClick={async () => {
-              try {
-                setShare(await api.pairCode(me.id));
-              } catch (e) {
-                setError((e as Error).message);
-              }
-            }}
-          >
-            Pair another phone
-          </button>
           <button type="button" className="btn ghost" disabled={busy} onClick={logout}>Log out</button>
         </div>
       )}

@@ -4,7 +4,6 @@ import { ago } from "../format";
 import { TIER_ORDER, tierByKey, tierOf } from "../driverStats";
 import { Helmet } from "../components/Helmet";
 import { Modal } from "../components/Modal";
-import { DriverProgress } from "./DriverProgress";
 
 export const PALETTE = [
   ["#FF9F6B", "Peach"],
@@ -17,15 +16,12 @@ export const PALETTE = [
   ["#e8ebf4", "White"],
 ] as const;
 
-export function DriversPage({ path = "/drivers" }: { path?: string }) {
+export function DriversPage() {
   const { drivers, status } = useAppState();
   const [adding, setAdding] = useState(false);
   // Speed scores change whenever laps do (useFetch refetches then).
   const ratings = useFetch(() => api.driverRatings(), []) ?? [];
   const ratingOf = new Map(ratings.map((r) => [r.driverId, r]));
-  // #/drivers/<id>: one driver's progress over time.
-  const open = path.match(/^\/drivers\/(\d+)/);
-  if (open) return <DriverProgress id={Number(open[1])} />;
   return (
     <>
       <div className="page-head" style={{ alignItems: "center" }}>
@@ -173,11 +169,10 @@ function DriverCard({ driver, seated, rating }: { driver: Driver; seated: boolea
   );
 }
 
-/** The phones paired to a driver: pair one more, sign one out, or sign them all out (a lost phone). */
+/** The phones and browsers signed in as a driver: pair one more, sign one out, or sign them all out (a lost phone). */
 export function PhonesDialog({ driver }: { driver: Driver }) {
   const [tick, setTick] = useState(0);
   const list = useFetch<Device[]>(() => api.driverDevices(driver.id), [driver.id, tick]);
-  const [share, setShare] = useState<{ code: string; expiresAt: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const run = async (f: () => Promise<unknown>) => {
     setError(null);
@@ -195,7 +190,7 @@ export function PhonesDialog({ driver }: { driver: Driver }) {
           <span className="muted">Loading…</span>
         ) : list.length === 0 ? (
           <p className="muted" style={{ margin: 0 }}>
-            No phone is paired. The first phone to pick {driver.name} claims them; after that, another phone needs a code.
+            Nothing is signed in as {driver.name}. A phone or browser signs in by picking them on its own sign-in screen.
           </p>
         ) : (
           <div className="list">
@@ -210,20 +205,12 @@ export function PhonesDialog({ driver }: { driver: Driver }) {
             ))}
           </div>
         )}
-        {share && (
-          <div className="pair-code" role="status">
-            <span className="muted">On the phone, pick {driver.name} and enter</span>
-            <span className="mono pair-code-digits">{share.code.slice(0, 3)} {share.code.slice(3)}</span>
-            <span className="muted">It works once, for 5 minutes.</span>
-          </div>
-        )}
         {error && <span className="error">{error}</span>}
       </div>
       <div className="modal-foot">
         {list != null && list.length > 0 && (
           <button className="btn ghost" onClick={() => confirm(`Sign every phone out of ${driver.name}?`) && run(() => api.signOutDriver(driver.id))}>Sign all out</button>
         )}
-        <button className="btn" onClick={() => run(async () => setShare(await api.pairCode(driver.id)))}>Pair a phone</button>
       </div>
     </>
   );

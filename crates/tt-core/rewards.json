@@ -1,0 +1,264 @@
+{
+  "_about": "XP, coin and shop numbers. Edit, rebuild, ship: an update changes them for everyone. See docs/profiles-and-points.md.",
+  "cleanLap": {
+    "xp": 10,
+    "coins": 2
+  },
+  "firstLap": {
+    "xp": 30,
+    "coins": 10
+  },
+  "personalBest": {
+    "xp": 50,
+    "coins": 10
+  },
+  "trackRecord": {
+    "xp": 150,
+    "coins": 50
+  },
+  "dailyLapCap": 50,
+  "levelXpStep": 100,
+  "challenge": {
+    "_about": "Paid when a challenge ends. See docs/profiles-and-points.md.",
+    "placings": [
+      { "xp": 300, "coins": 100 },
+      { "xp": 200, "coins": 60 },
+      { "xp": 100, "coins": 30 }
+    ],
+    "sizes": { "low": 0.5, "medium": 1.0, "high": 2.0 },
+    "participation": { "xp": 25, "coins": 5 },
+    "minEntrants": 2,
+    "scalePerEntrant": 0.1,
+    "maxScale": 2.0
+  },
+  "shop": [
+    {
+      "slot": "shell",
+      "id": "sunset",
+      "price": 150,
+      "minLevel": 1
+    },
+    {
+      "slot": "shell",
+      "id": "ocean",
+      "price": 150,
+      "minLevel": 1
+    },
+    {
+      "slot": "shell",
+      "id": "ember",
+      "price": 150,
+      "minLevel": 1
+    },
+    {
+      "slot": "shell",
+      "id": "lagoon",
+      "price": 180,
+      "minLevel": 1
+    },
+    {
+      "slot": "shell",
+      "id": "aurora",
+      "price": 320,
+      "minLevel": 3
+    },
+    {
+      "slot": "shell",
+      "id": "rally",
+      "price": 420,
+      "minLevel": 3
+    },
+    {
+      "slot": "shell",
+      "id": "holo",
+      "price": 1500,
+      "minLevel": 5
+    },
+    {
+      "slot": "shell",
+      "id": "gold",
+      "price": 2000,
+      "minLevel": 9
+    },
+    {
+      "slot": "shell",
+      "id": "nightsky",
+      "price": 1200,
+      "minLevel": 5
+    },
+    {
+      "slot": "shell",
+      "id": "inferno",
+      "price": 1500,
+      "minLevel": 5
+    },
+    {
+      "slot": "shell",
+      "id": "nebula",
+      "price": 1800,
+      "minLevel": 7
+    },
+    {
+      "slot": "shell",
+      "id": "glacier",
+      "price": 1200,
+      "minLevel": 5
+    },
+    {
+      "slot": "shell",
+      "id": "galaxy",
+      "price": 1600,
+      "minLevel": 6
+    },
+    {
+      "slot": "decal",
+      "id": "flame",
+      "price": 0,
+      "minLevel": 1
+    },
+    {
+      "slot": "decal",
+      "id": "bolt",
+      "price": 0,
+      "minLevel": 1
+    },
+    {
+      "slot": "decal",
+      "id": "star",
+      "price": 40,
+      "minLevel": 1
+    },
+    {
+      "slot": "decal",
+      "id": "chequer",
+      "price": 40,
+      "minLevel": 1
+    },
+    {
+      "slot": "decal",
+      "id": "heart",
+      "price": 60,
+      "minLevel": 1
+    },
+    {
+      "slot": "decal",
+      "id": "flag",
+      "price": 80,
+      "minLevel": 1
+    },
+    {
+      "slot": "decal",
+      "id": "moon",
+      "price": 80,
+      "minLevel": 1
+    },
+    {
+      "slot": "decal",
+      "id": "wing",
+      "price": 160,
+      "minLevel": 2
+    },
+    {
+      "slot": "decal",
+      "id": "crown",
+      "price": 250,
+      "minLevel": 6
+    },
+    {
+      "slot": "decal",
+      "id": "skull",
+      "price": 300,
+      "minLevel": 3
+    },
+    {
+      "slot": "stripe",
+      "id": "centre",
+      "price": 0,
+      "minLevel": 1
+    },
+    {
+      "slot": "stripe",
+      "id": "twin",
+      "price": 20,
+      "minLevel": 1
+    },
+    {
+      "slot": "stripe",
+      "id": "band",
+      "price": 20,
+      "minLevel": 1
+    },
+    {
+      "slot": "stripe",
+      "id": "chequer",
+      "price": 100,
+      "minLevel": 2
+    },
+    {
+      "slot": "face",
+      "id": "chill",
+      "price": 0,
+      "minLevel": 1
+    },
+    {
+      "slot": "face",
+      "id": "focus",
+      "price": 0,
+      "minLevel": 1
+    },
+    {
+      "slot": "face",
+      "id": "happy",
+      "price": 0,
+      "minLevel": 1
+    },
+    {
+      "slot": "face",
+      "id": "cheeky",
+      "price": 20,
+      "minLevel": 1
+    },
+    {
+      "slot": "face",
+      "id": "sleepy",
+      "price": 40,
+      "minLevel": 1
+    },
+    {
+      "slot": "face",
+      "id": "wide",
+      "price": 40,
+      "minLevel": 1
+    },
+    {
+      "slot": "face",
+      "id": "angry",
+      "price": 60,
+      "minLevel": 1
+    },
+    {
+      "slot": "face",
+      "id": "peaked",
+      "price": 60,
+      "minLevel": 1
+    },
+    {
+      "slot": "face",
+      "id": "stars",
+      "price": 150,
+      "minLevel": 2
+    },
+    {
+      "slot": "face",
+      "id": "hearts",
+      "price": 150,
+      "minLevel": 2
+    },
+    {
+      "slot": "face",
+      "id": "cash",
+      "price": 300,
+      "minLevel": 4
+    }
+  ]
+}

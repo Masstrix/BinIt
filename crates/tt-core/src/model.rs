@@ -131,6 +131,8 @@ pub struct Challenge {
     /// Only a driver's first N laps count.
     pub max_laps: Option<u32>,
     pub prizes: Vec<Prize>,
+    /// `low`, `medium` or `high`: how big the coins and XP it pays are (see `rewards.json`).
+    pub reward_size: String,
     pub created_at: Timestamp,
 }
 
@@ -150,6 +152,9 @@ pub struct NewChallenge {
     pub max_laps: Option<u32>,
     #[serde(default)]
     pub prizes: Vec<Prize>,
+    /// `low`, `medium` (the default) or `high`.
+    #[serde(default)]
+    pub reward_size: Option<String>,
 }
 
 fn default_true() -> bool {

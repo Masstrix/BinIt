@@ -10,17 +10,20 @@ import { Helmet, Logo } from "./components/Helmet";
 import { Home } from "./pages/Home";
 import { ConnectionGate } from "./components/ConnectionGate";
 import { LeaderboardPage } from "./pages/Leaderboard";
-import { ChallengesPage } from "./pages/Challenges";
+import { ChallengesPage, NewChallengePage } from "./pages/Challenges";
 import { DriversPage } from "./pages/Drivers";
 import { GamesPage } from "./pages/Games";
 import { AdvancedPage } from "./pages/Advanced";
 import { TelemetryPage } from "./pages/Telemetry";
 import { Overlay } from "./pages/Overlay";
+import { DriverProgress } from "./pages/DriverProgress";
 import { YouPage } from "./pages/You";
 import { CustomizePage } from "./pages/Customize";
 import { ShopPage } from "./pages/Shop";
 import { Updater } from "./pages/Updater";
 import { openPickDriver, PickDriverHost } from "./components/PickDriver";
+import { QrCode } from "./components/QrCode";
+import { SignIn } from "./components/SignIn";
 
 const ROUTES = [
   { path: "/", group: "Play", label: "Home", icon: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" },
@@ -78,6 +81,18 @@ function useHashPath() {
 /** The last page visited inside each section (`/challenges/3`, `/drivers/2`), so its nav link returns there. */
 const lastPathKey = (section: string) => `lastPath.${section}`;
 
+/**
+ * Only these sections bring you back to the page you were on (the challenge or the telemetry lap you were looking at).
+ * Everywhere else, and for a "new" form, the nav link opens the section's own front page: a profile or a driver's
+ * progress that was open once must not be what "Profile" or "Drivers" opens next time.
+ */
+const REMEMBERS = ["/challenges", "/telemetry"];
+const remembersPath = (section: string, path: string) => REMEMBERS.includes(section) && !path.endsWith("/new");
+
+/** Pages that belong to a nav section without sharing its first path segment. */
+const ALSO_IN: Record<string, string[]> = { "/you": ["/customize", "/shop"] };
+const inSection = (section: string, path: string) => (section === "/" ? path === "/" : path.startsWith(section) || (ALSO_IN[section] ?? []).some((p) => path.startsWith(p)));
+
 function titleFor(path: string) {
   if (path.startsWith("/customize")) return "Customize";
   if (path.startsWith("/shop")) return "Shop";
@@ -100,25 +115,32 @@ function useCollapsed() {
 
 export function App() {
   const path = useHashPath();
+  const { drivers } = useAppState();
+  // A phone or browser that is not the PC and not signed in yet sees the sign-in and nothing else.
+  const [signedInTick, setSignedInTick] = useState(0);
+  const me = useFetch(() => (isTauri ? Promise.resolve(null) : api.me()), [drivers, signedInTick]);
   const [collapsed, userCollapsed, setUserCollapsed] = useCollapsed();
   useEffect(() => {
     const section = ROUTES.find((r) => r.path !== "/" && path.startsWith(r.path));
-    if (section) writeStored(lastPathKey(section.path), path === section.path ? null : path);
+    if (section && remembersPath(section.path, path)) writeStored(lastPathKey(section.path), path === section.path ? null : path);
   }, [path]);
   // Each page starts at the top (the content column keeps its own scroll position).
   useEffect(() => {
     document.querySelector(".content")?.scrollTo(0, 0);
   }, [path]);
   if (path.startsWith("/overlay")) return <Overlay />;
+  if (!isTauri && me && !me.local && !me.driver) return <SignIn onSignedIn={() => setSignedInTick((t) => t + 1)} />;
   if (path.startsWith("/updater")) return <Updater />;
 
   let page;
   if (path.startsWith("/leaderboard")) page = <LeaderboardPage />;
+  else if (path.startsWith("/challenges/new")) page = <NewChallengePage />;
   else if (path.startsWith("/challenges")) page = <ChallengesPage path={path} />;
-  else if (path.startsWith("/drivers")) page = <DriversPage path={path} />;
+  else if (path.startsWith("/drivers")) page = <DriversPage />;
   else if (path.startsWith("/games")) page = <GamesPage />;
   else if (path.startsWith("/telemetry")) page = <TelemetryPage path={path} />;
   else if (path.startsWith("/advanced")) page = <AdvancedPage />;
+  else if (/^\/you\/\d+\/progress/.test(path)) page = <DriverProgress id={Number(path.split("/")[2])} />;
   else if (path.startsWith("/you")) page = <YouPage path={path} />;
   else if (path.startsWith("/customize")) page = <CustomizePage />;
   else if (path.startsWith("/shop")) page = <ShopPage />;
@@ -185,9 +207,9 @@ function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed: boole
           <div className="nav-group" key={group}>
             <div className="nav-group-label">{group}</div>
             {ROUTES.filter((r) => r.group === group).map((r) => {
-              const current = r.path === "/" ? path === "/" : path.startsWith(r.path);
+              const current = inSection(r.path, path);
               // Another section: go back to where you were in it. The one you're in: its main page.
-              const remembered = current ? null : readStored<string | null>(lastPathKey(r.path), null, (v) => typeof v === "string" && v.startsWith(r.path));
+              const remembered = current || !REMEMBERS.includes(r.path) ? null : readStored<string | null>(lastPathKey(r.path), null, (v) => typeof v === "string" && v.startsWith(r.path) && !v.endsWith("/new"));
               return (
                 <a key={r.path} href={`#${remembered ?? r.path}`} aria-current={current ? "page" : undefined} title={r.label}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -218,8 +240,11 @@ function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed: boole
       <span className="sidebar-fill" />
       {lanUrl && (
         <div className="lan-box">
-          <span className="muted">Open on any office device</span>
-          <span className="mono">{lanUrl}</span>
+          <QrCode url={lanUrl} size={84} />
+          <span className="lan-text">
+            <span className="muted">Scan or open on any office device</span>
+            <span className="mono">{lanUrl}</span>
+          </span>
         </div>
       )}
       <UpdateButton />

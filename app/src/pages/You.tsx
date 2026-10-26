@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, useAppState, useFetch, type Driver, type Profile } from "../api";
+import { api, isTauri, useAppState, useFetch, type Driver, type Profile } from "../api";
 import { WhoAreYou } from "../components/MeBar";
 import { Coin } from "../components/Coin";
 import { Helmet } from "../components/Helmet";
@@ -7,7 +7,7 @@ import { carName, lapTime, trackName, ago } from "../format";
 import { GameIcon } from "../components/GameIcon";
 import { Modal } from "../components/Modal";
 import { useSeatSwitcher } from "../components/SeatSwitcher";
-import { ColorPicker, PhonesDialog } from "./Drivers";
+import { PhonesDialog } from "./Drivers";
 
 /** Why a ledger row paid out, in words. */
 const KIND: Record<string, string> = { lap: "Clean lap", first: "First lap here", pb: "Personal best", record: "Track record" };
@@ -15,6 +15,12 @@ const KIND: Record<string, string> = { lap: "Clean lap", first: "First lap here"
 /** Ledger rows for a purchase carry the item: `buy:shell:aurora`. */
 function kindLabel(kind: string) {
   if (kind.startsWith("buy:")) return `Bought ${kind.split(":")[2] ?? "an item"}`;
+  if (kind.startsWith("challenge:")) {
+    // challenge:<place>:<name> or challenge:entry:<name>
+    const [, place, ...name] = kind.split(":");
+    const ordinal = ({ "1": "Won", "2": "2nd in", "3": "3rd in" } as Record<string, string>)[place] ?? (place === "entry" ? "Took part in" : `${place}th in`);
+    return `${ordinal} ${name.join(":")}`;
+  }
   return KIND[kind] ?? kind;
 }
 
@@ -95,74 +101,57 @@ export function YouPage({ path = "/you" }: { path?: string }) {
   );
 }
 
-/** From the PC: put them in the seat, change their name and colour, see how they have improved, manage their phones. */
-function ManageDriver({ driver }: { driver: Driver }) {
-  const { status } = useAppState();
-  const seat = useSeatSwitcher();
-  const [editing, setEditing] = useState(false);
-  const [phones, setPhones] = useState(false);
-  const seated = status?.seat === driver.id;
-  return (
-    <div className="you-manage" role="group" aria-label={`Manage ${driver.name}`}>
-      {seated ? (
-        <span className="chip plain" style={{ color: "var(--peach)" }}>In the seat</span>
-      ) : (
-        <button className="btn" onClick={() => seat.choose(driver)}>Put in seat</button>
-      )}
-      <button className="btn ghost" onClick={() => setEditing(true)}>Edit name and colour</button>
-      <a className="btn ghost" href={`#/drivers/${driver.id}`}>Progress</a>
-      <button className="btn ghost" onClick={() => setPhones(true)}>Phones</button>
-      {seat.dialog}
-      {editing && (
-        <Modal title={`Edit ${driver.name}`} narrow onClose={() => setEditing(false)}>
-          <EditDriverForm driver={driver} onDone={() => setEditing(false)} />
-        </Modal>
-      )}
-      {phones && (
-        <Modal title={`${driver.name}'s phones`} narrow onClose={() => setPhones(false)}>
-          <PhonesDialog driver={driver} />
-        </Modal>
-      )}
-    </div>
+function ManageRow({ icon, title, sub, onClick, href, trailing }: { icon: string; title: string; sub?: string; onClick?: () => void; href?: string; trailing?: string }) {
+  const body = (
+    <>
+      <span className="manage-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icon} /></svg>
+      </span>
+      <span className="grow">
+        <span className="manage-title">{title}</span>
+        {sub && <span className="muted manage-sub">{sub}</span>}
+      </span>
+      {trailing && <span className="chip plain">{trailing}</span>}
+      <svg className="manage-go" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+    </>
+  );
+  return href ? (
+    <a className="manage-row" href={href}>{body}</a>
+  ) : (
+    <button type="button" className="manage-row" onClick={onClick}>{body}</button>
   );
 }
 
-function EditDriverForm({ driver, onDone }: { driver: Driver; onDone: () => void }) {
-  const [name, setName] = useState(driver.name);
-  const [color, setColor] = useState(driver.color);
-  const [error, setError] = useState<string | null>(null);
-  const save = async () => {
-    try {
-      await api.updateDriver(driver.id, name, color);
-      onDone();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
+/** From the PC: who is in the seat, how they look, how they have improved and (desktop app only) which devices are signed in as them. */
+function ManageDriver({ driver }: { driver: Driver }) {
+  const { status } = useAppState();
+  const seat = useSeatSwitcher();
+  const [connections, setConnections] = useState(false);
+  const devices = useFetch(isTauri ? () => api.driverDevices(driver.id) : null, [driver.id, connections]);
+  const seated = status?.seat === driver.id;
   return (
-    <form
-      className="modal-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        save();
-      }}
-    >
-      <div className="modal-body" style={{ alignItems: "center", textAlign: "center", gap: 18 }}>
-        <Helmet color={color} look={driver.look} size={84} seed={driver.id} />
-        <input className="input" data-autofocus aria-label="Name" value={name} maxLength={32} onChange={(e) => setName(e.target.value)} style={{ minHeight: 56, fontSize: 20, fontWeight: 700, textAlign: "center", width: "100%" }} />
-        <ColorPicker value={color} onChange={setColor} />
-        {error && <span className="error">{error}</span>}
+    <section className="card manage" aria-label={`Manage ${driver.name}`}>
+      <h2>Manage {driver.name}</h2>
+      <div className="manage-list">
+        <ManageRow icon="M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4 21a8 8 0 0 1 16 0" title={seated ? "In the seat" : "Put in seat"} sub={seated ? "Laps are going to them now" : "Laps will go to them"} onClick={seated ? undefined : () => seat.choose(driver)} trailing={seated ? "Now" : undefined} />
+        {isTauri && (
+          <ManageRow icon="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM11 18h2" title="Connections" sub="Phones and browsers signed in as them" trailing={devices ? String(devices.length) : undefined} onClick={() => setConnections(true)} />
+        )}
       </div>
-      <div className="modal-foot">
-        <button className="btn ghost" type="button" onClick={onDone}>Cancel</button>
-        <button className="btn big" type="submit" disabled={!name.trim()}>Save</button>
-      </div>
-    </form>
+      {seat.dialog}
+      {connections && (
+        <Modal title={`${driver.name}'s connections`} narrow onClose={() => setConnections(false)}>
+          <PhonesDialog driver={driver} />
+        </Modal>
+      )}
+    </section>
   );
 }
 
 function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile; mine: boolean; manage: boolean; onSwitch: () => void }) {
   const { status } = useAppState();
+  // Customize and the Shop belong to the driver signed in on this device (or, on the PC, the one in the seat).
+  const canDress = mine || (manage && status?.seat === p.driver.id);
   const into = p.xp - p.levelStartXp;
   const span = Math.max(1, p.nextLevelXp - p.levelStartXp);
   const earned = p.stickers.filter((s) => s.earned).length;
@@ -185,10 +174,24 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
           <span>{p.xp.toLocaleString()} XP</span>
           <span>{(p.nextLevelXp - p.xp).toLocaleString()} to {p.nextTitle === p.title ? `level ${p.level + 1}` : p.nextTitle}</span>
         </div>
-        <span className="chip you-coins" title="Coins: earned with XP, spent in the Garage">
-          <Coin size={22} title="Coins" />
-          {p.coins.toLocaleString()}
-        </span>
+        <div className="you-wallet">
+          {canDress && (
+            <a className="you-shop" href="#/shop">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 6h15l-1.5 9h-12zM6 6L5 3H2M9 20.5h.01M18 20.5h.01" /></svg>
+              Shop
+            </a>
+          )}
+          <span className="you-wallet-coins" title="Coins: earned with XP, spent in the Shop">
+            <Coin size={26} spin title="Coins" />
+            {p.coins.toLocaleString()}
+          </span>
+        </div>
+        {canDress && (
+          <a className="you-customize" href="#/customize">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" /></svg>
+            Customize
+          </a>
+        )}
       </section>
 
       <div className="you-stats">
@@ -197,13 +200,9 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
         <div className="stat-tile"><span className="mono">{p.tracks}</span><span className="label">Tracks</span></div>
       </div>
 
-      {(mine || (manage && status?.seat === p.driver.id)) && (
-        <div className="you-switch">
-          <a className="btn" href="#/customize">Customize</a>
-          <a className="btn ghost" href="#/shop">Shop</a>
-          <span className="grow muted" style={{ fontSize: 13 }}>Spend coins on shells, decals, stripes and eyes.</span>
-        </div>
-      )}
+      <div className="manage-list">
+        <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Progress over time" sub="Bests and speed score on every track" href={`#/you/${p.driver.id}/progress`} />
+      </div>
 
       {manage && <ManageDriver driver={p.driver} />}
 

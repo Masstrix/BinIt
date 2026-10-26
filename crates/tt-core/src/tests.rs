@@ -99,7 +99,7 @@ fn leaderboard_ranks_best_valid_lap_per_driver() {
 fn challenge_tracks_position_changes_and_attempt_limit() {
     let tt = BinIt::in_memory().unwrap();
     let challenge = tt
-        .create_challenge(&NewChallenge {
+        .create_challenge(&NewChallenge { reward_size: None,
             name: "Imola Hot Lap Week".into(),
             game: "acevo".into(),
             track: "Imola".into(),
@@ -140,7 +140,7 @@ fn challenge_tracks_position_changes_and_attempt_limit() {
 fn a_challenge_position_counts_a_lap_from_the_same_millisecond() {
     // A fast PC can record two laps in one millisecond: the earlier one still counts as "before".
     let tt = BinIt::in_memory().unwrap();
-    tt.create_challenge(&NewChallenge {
+    tt.create_challenge(&NewChallenge { reward_size: None,
         name: "Imola".into(),
         game: "acevo".into(),
         track: "Imola".into(),
@@ -208,7 +208,7 @@ fn another_database_merges_in_by_driver_name_and_only_once() {
         old.record_lap(&lap(101_500, true)).unwrap();
         old.set_seat(None).unwrap();
         old.record_lap(&lap(104_000, true)).unwrap(); // a guest lap
-        old.create_challenge(&NewChallenge {
+        old.create_challenge(&NewChallenge { reward_size: None,
             name: "Imola Week".into(),
             game: "acevo".into(),
             track: "Imola".into(),
@@ -456,7 +456,7 @@ fn spellings_converge_and_old_data_is_migrated_to_catalogue_names() {
 
     // The game's own spelling now lands on the same entry as a challenge made from the catalogue.
     let challenge = tt
-        .create_challenge(&NewChallenge {
+        .create_challenge(&NewChallenge { reward_size: None,
             name: "Cup".into(),
             game: "acevo".into(),
             track: "Mount Panorama".into(),
@@ -555,7 +555,7 @@ fn a_laps_input_trace_is_stored_with_it() {
 fn challenge_replay_gives_each_drivers_best_lap_with_its_profile() {
     let tt = BinIt::in_memory().unwrap();
     let c = tt
-        .create_challenge(&NewChallenge {
+        .create_challenge(&NewChallenge { reward_size: None,
             name: "Hot lap".into(),
             game: "acevo".into(),
             track: "Imola".into(),
@@ -987,7 +987,7 @@ fn the_first_phone_claims_a_driver_and_is_recognised_afterwards() {
     let sam = tt.add_driver("Sam", None).unwrap();
     assert!(!tt.driver_is_claimed(sam.id).unwrap());
 
-    let (token, driver) = tt.pair_device(sam.id, None, "iPhone").unwrap();
+    let (token, driver) = tt.pair_device(sam.id, false, "iPhone").unwrap();
     assert_eq!(driver.id, sam.id);
     assert!(tt.driver_is_claimed(sam.id).unwrap());
 
@@ -997,45 +997,41 @@ fn the_first_phone_claims_a_driver_and_is_recognised_afterwards() {
 }
 
 #[test]
-fn a_second_phone_needs_a_one_time_code_and_the_code_works_once() {
+fn a_driver_signed_in_elsewhere_asks_are_you_sure_and_then_both_devices_stay_in() {
     let tt = BinIt::in_memory().unwrap();
     let sam = tt.add_driver("Sam", None).unwrap();
-    tt.pair_device(sam.id, None, "iPhone").unwrap();
+    let (first, _) = tt.pair_device(sam.id, false, "iPhone").unwrap();
 
-    let err = tt.pair_device(sam.id, None, "Android").unwrap_err();
-    assert_eq!(err.downcast_ref::<pairing::PairError>(), Some(&pairing::PairError::CodeNeeded));
-    let err = tt.pair_device(sam.id, Some("000000"), "Android").unwrap_err();
-    assert_eq!(err.downcast_ref::<pairing::PairError>(), Some(&pairing::PairError::BadCode));
+    let err = tt.pair_device(sam.id, false, "Laptop").unwrap_err();
+    assert_eq!(err.downcast_ref::<pairing::PairError>(), Some(&pairing::PairError::AlreadySignedIn));
+    assert_eq!(tt.devices().unwrap().iter().filter(|d| d.driver_id == sam.id).count(), 1, "asking changes nothing");
 
-    let (code, _) = tt.new_pair_code(sam.id).unwrap();
-    // A code for one driver is no good for another.
-    let jess = tt.add_driver("Jess", None).unwrap();
-    tt.pair_device(jess.id, None, "Pixel").unwrap();
-    assert!(tt.pair_device(jess.id, Some(&code), "Android").is_err());
-
-    assert!(tt.pair_device(sam.id, Some(&code), "Android").is_ok());
+    let (second, _) = tt.pair_device(sam.id, true, "Laptop").unwrap();
     assert_eq!(tt.devices().unwrap().iter().filter(|d| d.driver_id == sam.id).count(), 2);
-    assert!(tt.pair_device(sam.id, Some(&code), "Another").is_err(), "a code is used up");
+    assert!(tt.device_for_token(&first).unwrap().is_some(), "the first device is still signed in");
+    assert!(tt.device_for_token(&second).unwrap().is_some());
+    // Confirming for a driver nobody is signed in as is fine too.
+    let jess = tt.add_driver("Jess", None).unwrap();
+    assert!(tt.pair_device(jess.id, true, "Pixel").is_ok());
 }
 
 #[test]
 fn logging_out_forgets_the_phone_and_signing_everyone_out_frees_the_driver() {
     let tt = BinIt::in_memory().unwrap();
     let sam = tt.add_driver("Sam", None).unwrap();
-    let (token, _) = tt.pair_device(sam.id, None, "iPhone").unwrap();
+    let (token, _) = tt.pair_device(sam.id, false, "iPhone").unwrap();
 
     assert!(tt.unpair_token(&token).unwrap());
     assert!(tt.device_for_token(&token).unwrap().is_none());
     assert!(!tt.unpair_token(&token).unwrap(), "already logged out");
     assert!(!tt.driver_is_claimed(sam.id).unwrap());
 
-    let (a, _) = tt.pair_device(sam.id, None, "iPhone").unwrap();
-    let (code, _) = tt.new_pair_code(sam.id).unwrap();
-    tt.pair_device(sam.id, Some(&code), "Android").unwrap();
+    let (a, _) = tt.pair_device(sam.id, false, "iPhone").unwrap();
+    tt.pair_device(sam.id, true, "Android").unwrap();
     assert_eq!(tt.remove_driver_devices(sam.id).unwrap(), 2);
     assert!(tt.device_for_token(&a).unwrap().is_none());
-    // Free again: the next phone to ask claims the driver without a code.
-    assert!(tt.pair_device(sam.id, None, "New phone").is_ok());
+    // Free again: the next phone to ask claims the driver without being asked.
+    assert!(tt.pair_device(sam.id, false, "New phone").is_ok());
 }
 
 // ---- XP, coins and the profile ----------------------------------------------------------------
@@ -1047,13 +1043,13 @@ fn laps_earn_xp_and_coins_for_what_they_are() {
 
     // First lap on a new track and car: the welcome bonus plus the lap itself.
     let first = tt.record_lap(&lap(103_000, true)).unwrap().awards;
-    assert_eq!((first.xp, first.coins), (progress::FIRST_XP + progress::LAP_XP, progress::FIRST_COINS + progress::LAP_COINS));
+    assert_eq!((first.xp, first.coins), (progress::rewards().first_lap.xp + progress::rewards().clean_lap.xp, progress::rewards().first_lap.coins + progress::rewards().clean_lap.coins));
     // A slower lap is just a lap.
     let slower = tt.record_lap(&lap(104_000, true)).unwrap().awards;
-    assert_eq!((slower.xp, slower.reasons.clone()), (progress::LAP_XP, vec!["Clean lap".to_string()]));
+    assert_eq!((slower.xp, slower.reasons.clone()), (progress::rewards().clean_lap.xp, vec!["Clean lap".to_string()]));
     // A personal best pays extra. Nobody else has driven here, so it is not a track record.
     let pb = tt.record_lap(&lap(102_000, true)).unwrap().awards;
-    assert_eq!(pb.xp, progress::LAP_XP + progress::PB_XP);
+    assert_eq!(pb.xp, progress::rewards().clean_lap.xp + progress::rewards().personal_best.xp);
     assert!(!pb.reasons.contains(&"Track record".to_string()));
     // Cut laps and out laps earn nothing.
     assert_eq!(tt.record_lap(&lap(101_000, false)).unwrap().awards, Awards::default());
@@ -1072,7 +1068,7 @@ fn a_track_record_needs_someone_else_to_beat_and_guests_earn_nothing() {
     let jess = tt.add_and_seat("Jess", None).unwrap();
     let beat = tt.record_lap(&lap(102_000, true)).unwrap().awards;
     assert!(beat.reasons.contains(&"Track record".to_string()), "{:?}", beat.reasons);
-    assert_eq!(beat.xp, progress::FIRST_XP + progress::LAP_XP + progress::RECORD_XP);
+    assert_eq!(beat.xp, progress::rewards().first_lap.xp + progress::rewards().clean_lap.xp + progress::rewards().track_record.xp);
 
     tt.set_seat(None).unwrap();
     assert_eq!(tt.record_lap(&lap(99_000, true)).unwrap().awards, Awards::default());
@@ -1086,7 +1082,7 @@ fn crossing_a_level_is_reported_once_and_the_daily_cap_stops_lap_farming() {
     let sam = tt.add_and_seat("Sam", None).unwrap();
     let mut level_ups = Vec::new();
     let mut paid = 0;
-    for i in 0..40 {
+    for i in 0..(progress::rewards().daily_lap_cap as u32 + 10) {
         let a = tt.record_lap(&lap(110_000 - i, true)).unwrap().awards;
         if let Some(l) = a.level_up {
             level_ups.push(l);
@@ -1094,7 +1090,7 @@ fn crossing_a_level_is_reported_once_and_the_daily_cap_stops_lap_farming() {
         paid += a.reasons.iter().filter(|r| *r == "Clean lap").count();
     }
     assert!(level_ups.windows(2).all(|w| w[0] < w[1]) && level_ups.first() == Some(&2), "{level_ups:?}");
-    assert_eq!(paid as i64, progress::LAP_CAP_PER_DAY, "plain laps stop paying after the cap");
+    assert_eq!(paid as i64, progress::rewards().daily_lap_cap, "plain laps stop paying after the cap");
     assert_eq!(tt.profile(sam.id).unwrap().level, *level_ups.last().unwrap());
 }
 
@@ -1142,11 +1138,13 @@ fn laps_from_before_points_existed_are_paid_once() {
     }
     tt.store().set_setting("points_backfilled_v1", None).unwrap();
     tt.store().backfill_points().unwrap();
-    // First lap (25 + 10), a personal best (10 + 50), then a plain lap (10).
-    assert_eq!(tt.profile(sam.id).unwrap().xp, 25 + 10 + 10 + 50 + 10);
+    // First lap, a personal best, then a plain lap: three clean laps plus the first-lap and best bonuses.
+    let rw = progress::rewards();
+    let expected = rw.first_lap.xp + 3 * rw.clean_lap.xp + rw.personal_best.xp;
+    assert_eq!(tt.profile(sam.id).unwrap().xp, expected);
     // Running it again changes nothing.
     tt.store().backfill_points().unwrap();
-    assert_eq!(tt.profile(sam.id).unwrap().xp, 105);
+    assert_eq!(tt.profile(sam.id).unwrap().xp, expected);
 }
 
 // ---- Garage shop ---------------------------------------------------------------------------------
@@ -1225,7 +1223,7 @@ fn a_database_from_before_the_garage_gains_looks_and_keeps_its_drivers() {
     // Pretend it was saved before schema 10: no look column, no items table.
     {
         let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch("ALTER TABLE drivers DROP COLUMN look; DROP TABLE driver_items; PRAGMA user_version = 9;").unwrap();
+        conn.execute_batch("ALTER TABLE drivers DROP COLUMN look; DROP TABLE driver_items; ALTER TABLE challenges DROP COLUMN reward_size; PRAGMA user_version = 9;").unwrap();
     }
     let tt = BinIt::open(&path).unwrap();
     let sam = tt.drivers().unwrap().remove(0);
@@ -1256,4 +1254,88 @@ fn a_decal_can_be_painted_one_of_the_preset_colours() {
     // No decal, no colour.
     let bare = tt.set_look(id, &Look { decal_color: Some("#FF5D5D".into()), ..Look::default() }).unwrap();
     assert_eq!(bare.look.decal_color, None);
+}
+
+// ---- Challenge rewards ----------------------------------------------------------------------------
+
+fn entry(position: u32, driver: Option<DriverId>) -> LeaderboardEntry {
+    LeaderboardEntry { position, driver_id: driver, lap_id: 0, time_ms: 100_000 + position * 1000, gap_ms: 0, car: String::new(), lap_count: 1, set_at: 0, sectors_ms: vec![], best_sectors_ms: vec![] }
+}
+
+#[test]
+fn challenge_payouts_follow_placings_and_grow_with_the_field() {
+    use crate::progress::{ChallengePay, Pay, challenge_payouts};
+    let rules = ChallengePay {
+        sizes: crate::progress::RewardSizes { low: 0.5, medium: 1.0, high: 2.0 },
+        placings: vec![Pay { xp: 300, coins: 100 }, Pay { xp: 200, coins: 60 }],
+        participation: Pay { xp: 20, coins: 5 },
+        min_entrants: 2,
+        scale_per_entrant: 0.5,
+        max_scale: 2.0,
+    };
+    // Two drivers: base amounts. A guest lap is never paid and does not count as an entrant.
+    let two = challenge_payouts(&rules, "Hot Lap", "medium", &[entry(1, Some(1)), entry(2, Some(2)), entry(3, None)]);
+    assert_eq!(two, vec![(1, "challenge:1:Hot Lap".to_string(), 300, 100), (2, "challenge:2:Hot Lap".to_string(), 200, 60)]);
+    // Three drivers: +50%, and the third just takes part.
+    let three = challenge_payouts(&rules, "Hot Lap", "medium", &[entry(1, Some(1)), entry(2, Some(2)), entry(3, Some(3))]);
+    assert_eq!((three[0].2, three[0].3), (450, 150));
+    assert_eq!(three[2], (3, "challenge:entry:Hot Lap".to_string(), 30, 8));
+    // A big field stops at the cap.
+    let many: Vec<_> = (1..=9).map(|i| entry(i, Some(i64::from(i)))).collect();
+    assert_eq!(challenge_payouts(&rules, "x", "medium", &many)[0].2, 600);
+    // The size picked for the challenge multiplies the lot: low halves it, high doubles it (and the field's own cap still applies first).
+    let board = [entry(1, Some(1)), entry(2, Some(2))];
+    assert_eq!(challenge_payouts(&rules, "Hot Lap", "low", &board)[0].3, 50);
+    assert_eq!(challenge_payouts(&rules, "Hot Lap", "high", &board)[0].3, 200);
+    assert_eq!(challenge_payouts(&rules, "Hot Lap", "nonsense", &board)[0].3, 100, "an unknown size counts as medium");
+    // Alone: nothing.
+    assert!(challenge_payouts(&rules, "Hot Lap", "medium", &[entry(1, Some(1))]).is_empty());
+}
+
+#[test]
+fn a_finished_challenge_pays_once_and_old_ones_are_left_alone() {
+    let tt = BinIt::in_memory().unwrap();
+    let ids: Vec<DriverId> = ["Sam", "Jess", "Kim"].iter().map(|n| tt.add_driver(n, None).unwrap().id).collect();
+    let now = now_ms();
+    let combo = combo_of(&session("Porsche 992 GT3 R"));
+    let new = |name: &str, starts: Timestamp, ends: Timestamp| NewChallenge { reward_size: None,
+        name: name.into(), game: combo.game.clone(), track: combo.track.clone(), layout: combo.layout.clone(), car: None,
+        starts_at: Some(starts), ends_at: Some(ends), valid_only: true, max_laps: None, prizes: vec![],
+    };
+    // A contest that ended before rewards existed: marked, never paid.
+    let old = tt.create_challenge(&new("Old", now - 9000, now - 8000)).unwrap();
+    for (i, id) in ids.iter().enumerate() {
+        tt.record_lap_for(&lap(100_000 + i as u32 * 1000, true), now - 8500, Some(Some(*id))).unwrap();
+    }
+    assert_eq!(tt.settle_challenges().unwrap(), 0, "the first run only marks what had already ended");
+    assert_eq!(tt.profile(ids[0]).unwrap().recent.iter().filter(|e| e.kind.starts_with("challenge:")).count(), 0);
+    let _ = old;
+
+    // One that ends later is paid, once.
+    tt.create_challenge(&new("Hot Lap", now - 5000, now - 1000)).unwrap();
+    for (i, id) in ids.iter().enumerate() {
+        tt.record_lap_for(&lap(100_000 + i as u32 * 1000, true), now - 3000, Some(Some(*id))).unwrap();
+    }
+    let before: Vec<i64> = ids.iter().map(|id| tt.profile(*id).unwrap().coins).collect();
+    assert_eq!(tt.settle_challenges().unwrap(), 3);
+    assert_eq!(tt.settle_challenges().unwrap(), 0, "never paid twice");
+    let after: Vec<i64> = ids.iter().map(|id| tt.profile(*id).unwrap().coins).collect();
+    let rules = &progress::rewards().challenge;
+    let scale = rules.scale(3);
+    assert_eq!(after[0] - before[0], (rules.placings[0].coins as f64 * scale).round() as i64);
+    assert_eq!(after[2] - before[2], (rules.placings[2].coins as f64 * scale).round() as i64);
+    assert!(tt.profile(ids[0]).unwrap().recent.iter().any(|e| e.kind == "challenge:1:Hot Lap"));
+}
+
+#[test]
+fn a_challenge_remembers_its_reward_size_and_refuses_a_made_up_one() {
+    let tt = BinIt::in_memory().unwrap();
+    let combo = combo_of(&session("Porsche 992 GT3 R"));
+    let new = |size: Option<&str>| NewChallenge {
+        name: "Sized".into(), game: combo.game.clone(), track: combo.track.clone(), layout: combo.layout.clone(), car: None,
+        starts_at: None, ends_at: None, valid_only: true, max_laps: None, prizes: vec![], reward_size: size.map(String::from),
+    };
+    assert_eq!(tt.create_challenge(&new(None)).unwrap().reward_size, "medium");
+    assert_eq!(tt.create_challenge(&new(Some("high"))).unwrap().reward_size, "high");
+    assert!(tt.create_challenge(&new(Some("enormous"))).is_err());
 }
