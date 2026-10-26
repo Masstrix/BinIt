@@ -170,7 +170,7 @@ export function LeaderboardPage() {
                         <span className="mono r lb-time">{lapTime(e.timeMs)}</span>
                         <span className="lb-break" />
                         <span className="lb-c-stat lb-driver-cell" data-label="DRIVER">
-                          <Helmet color={d?.color ?? "#5b6578"} size={28} seed={d?.id} />
+                          <Helmet color={d?.color ?? "#5b6578"} look={d?.look} size={28} seed={d?.id} />
                           <span className="lb-name" style={{ fontSize: 14 }}>{d?.name ?? "Guest"}</span>
                         </span>
                         <span className="r lb-small lb-c-stat" data-label="SET" style={{ color: "var(--muted)" }}>{ago(e.setAt)}</span>
@@ -218,7 +218,7 @@ export function LeaderboardPage() {
                           <span className="lb-pos">{e.position}</span>
                           <span className="lb-c-driver" style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
                             <span data-flip={`h:${rankKey(e)}`} style={{ display: "flex" }}>
-                              <Helmet color={color} size={top ? 60 : podium ? 52 : 44} seed={d?.id} mood={e.position === 1 ? "happy" : "idle"} />
+                              <Helmet color={color} look={d?.look} size={top ? 60 : podium ? 52 : 44} seed={d?.id} mood={e.position === 1 ? "happy" : "idle"} />
                             </span>
                             <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
                               <span className="lb-name">

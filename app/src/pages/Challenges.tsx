@@ -180,7 +180,7 @@ function GapsCard({ board, drivers, seat }: { board: LeaderboardEntry[]; drivers
             return (
               <div key={keyOf(e)} className="ch-gap-row" style={{ top: `${8 + y[i] * 80}%` }}>
                 <span className="ch-gap-tile" style={{ background: `${color}2E` }}>
-                  <Helmet color={color} size={36} tile={false} seed={d?.id} mood={i === 0 ? "happy" : "idle"} />
+                  <Helmet color={color} look={d?.look} size={36} tile={false} seed={d?.id} mood={i === 0 ? "happy" : "idle"} />
                 </span>
                 <span className="ch-gap-name" style={e.driverId != null && e.driverId === seat ? { color } : undefined}>{d?.name ?? "Guest"}</span>
                 <span className="mono muted ch-gap-val">{i === 0 ? "leader" : <Signed text={gap(e.gapMs)} />}</span>
@@ -288,7 +288,7 @@ function ChallengeView({ challenge: c, onNew }: { challenge: Challenge; onNew: (
                 <span className="lb-pos">{e.position}</span>
                 <span className="lb-c-driver" style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
                   <span data-flip={`h:${keyOf(e)}`} style={{ display: "flex" }}>
-                    <Helmet color={color} size={podium ? 52 : 44} seed={d?.id} mood={e.position === 1 ? "happy" : "idle"} />
+                    <Helmet color={color} look={d?.look} size={podium ? 52 : 44} seed={d?.id} mood={e.position === 1 ? "happy" : "idle"} />
                   </span>
                   <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
                     <span className="lb-name">{d?.name ?? "Guest"}</span>

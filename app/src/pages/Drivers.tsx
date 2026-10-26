@@ -152,7 +152,7 @@ function DriverCard({ driver, seated, rating }: { driver: Driver; seated: boolea
   return (
     <a className="driver-card" href={`#/you/${driver.id}`} data-seated={seated || undefined} title={`Open ${driver.name}'s profile`}>
       <span className="dc-tile" style={{ background: `${driver.color}2E` }}>
-        <Helmet color={driver.color} size={60} tile={false} seed={driver.id} mood={seated ? "happy" : "idle"} />
+        <Helmet color={driver.color} look={driver.look} size={60} tile={false} seed={driver.id} mood={seated ? "happy" : "idle"} />
       </span>
       <span className="dc-title">{driver.name}</span>
       {seated && (

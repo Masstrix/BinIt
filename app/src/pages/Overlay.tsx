@@ -256,7 +256,7 @@ function Switcher({ onClose, keyHandler }: { onClose: () => void; keyHandler: Re
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Helmet color={seated?.color ?? "#8f99b3"} size={56} seed={seated?.id} mood="happy" round />
+          <Helmet color={seated?.color ?? "#8f99b3"} look={seated?.look} size={56} seed={seated?.id} mood="happy" round />
           <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
             <span style={{ font: "800 30px/1.1 var(--font-display)", letterSpacing: "-0.03em" }}>Who's driving?</span>
             <span className="muted" style={{ fontSize: 14 }}>{seated ? `${seated.name} has the seat right now` : "Nobody has the seat"}</span>
@@ -293,7 +293,7 @@ function Switcher({ onClose, keyHandler }: { onClose: () => void; keyHandler: Re
                     <span style={{ position: "absolute", right: 10, top: 10, font: "800 9px var(--font-mono)", letterSpacing: "0.08em", padding: "3px 7px", borderRadius: 999, background: d.color, color: "#10121a" }}>DRIVING</span>
                   )}
                   <span style={{ marginTop: 14 }}>
-                    <Helmet color={d.color} size={68} seed={d.id} mood={active ? "happy" : lit ? "focus" : "idle"} round />
+                    <Helmet color={d.color} look={d.look} size={68} seed={d.id} mood={active ? "happy" : lit ? "focus" : "idle"} round />
                   </span>
                   <span className="name" style={{ fontSize: 15 }}>{d.name}</span>
                 </button>

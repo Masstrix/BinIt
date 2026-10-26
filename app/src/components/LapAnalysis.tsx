@@ -271,7 +271,7 @@ export function LapAnalysis({ lapId }: { lapId: number | null }) {
       value: p.key,
       label: `${name(p.driverId)} · ${carName(p.car)}`,
       hint: `Fastest ${lapTime(p.laps[0].timeMs)} · ${p.laps.length} ${p.laps.length === 1 ? w.lap : w.laps}`,
-      icon: <Helmet color={d?.color ?? "#5b6578"} size={30} seed={d?.id} />,
+      icon: <Helmet color={d?.color ?? "#5b6578"} look={d?.look} size={30} seed={d?.id} />,
     };
   });
   // A pairing's laps for the dropdown: fastest first, each with when it was set.
@@ -389,7 +389,7 @@ function LapCard({
       <Dropdown label={title} value={pairValue} options={anyLabel ? [{ value: "", label: anyLabel }, ...pairItems] : pairItems} onChange={onPair} className="la-lap-who">
         {info ? (
           <>
-            <Helmet color={driver?.color ?? "#5b6578"} size={40} seed={driver?.id} />
+            <Helmet color={driver?.color ?? "#5b6578"} look={driver?.look} size={40} seed={driver?.id} />
             <span className="la-lap-text">
               <span className="la-lap-name"><i style={{ background: color }} />{driver?.name ?? "Guest"}{chevron}</span>
               <span className="muted" style={{ fontSize: 12 }}>{carName(info.car)} · {ago(info.at)}</span>

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useId, useMemo, useState, type CSSProperties } from "react";
+import { DECAL_AT, decalById, shellById, stripeById, type Look } from "../looks";
 
 /**
  * How the driver looks through the visor: `happy` for a win, `binned` for a lap the game threw out,
@@ -93,16 +94,41 @@ function useAmbientMood(base: HelmetMood, seed: string): HelmetMood {
  * The eyes are alive: they blink, glance about and pull faces, on a rhythm unique to `seed`
  * (pass the driver's id; it defaults to the colour).
  */
-export function Helmet({ color, size = 48, tile = true, mood = "idle", seed, round = false }: { color: string; size?: number; tile?: boolean; mood?: HelmetMood; seed?: string | number; /** The tile is a circle instead of a rounded square. */ round?: boolean }) {
+export function Helmet({ color, size = 48, tile = true, mood = "idle", seed, round = false, look }: { color: string; /** What is equipped (gradient shell, decal, stripe, number); without it the helmet is plain `color`. */ look?: Look; size?: number; tile?: boolean; mood?: HelmetMood; seed?: string | number; /** The tile is a circle instead of a rounded square. */ round?: boolean }) {
   const key = String(seed ?? color);
   const { vars } = useMemo(() => personality(key), [key]);
   const face = useAmbientMood(mood, key);
   const blinks = face === "idle" || face === "focus";
+  const gradId = `helmet-shell-${useId().replace(/:/g, "")}`;
+  const shell = shellById(look?.shell);
+  const decal = decalById(look?.decal);
+  const stripe = stripeById(look?.stripe);
+  const at = DECAL_AT[look?.decalAt ?? "side"];
   const svg = (
     <svg className={face === "binned" ? "helmet-shake" : undefined} width={tile ? size * 0.76 : size} height={tile ? size * 0.76 : size} viewBox="0 0 48 48" aria-hidden="true">
       {/* Full-face shell: the straight underside rises from the chin to the nape, as on a race helmet. */}
-      <path d="M11.2 34C7.4 26.4 8 15.6 15.6 10.2C21.6 6 31.6 5.6 38 9C43 11.8 46.2 17 46.6 23L46.6 31.4C46.6 36.4 44.6 39.6 40.8 40L13.4 35.6C12.4 35.4 11.6 34.8 11.2 34Z" fill={color} />
+      {shell && (
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
+            {shell.stops.map((c, i) => (
+              <stop key={i} offset={shell.stops.length === 1 ? 0 : i / (shell.stops.length - 1)} stopColor={c} />
+            ))}
+          </linearGradient>
+        </defs>
+      )}
+      <path d="M11.2 34C7.4 26.4 8 15.6 15.6 10.2C21.6 6 31.6 5.6 38 9C43 11.8 46.2 17 46.6 23L46.6 31.4C46.6 36.4 44.6 39.6 40.8 40L13.4 35.6C12.4 35.4 11.6 34.8 11.2 34Z" fill={shell ? `url(#${gradId})` : color} />
       <path d="M11.2 34L13.4 35.6L40.8 40C43 39.8 44.6 38.6 45.6 36.8L11.6 31.4Z" fill="#0e1117" opacity="0.25" />
+      {stripe && stripe.paths.map((d, i) => <path key={i} d={d} fill="none" stroke="#fff" strokeWidth={stripe.width} strokeLinecap="round" strokeDasharray={stripe.dash} />)}
+      {decal && (
+        <g transform={`translate(${at.x} ${at.y}) scale(${at.s})`}>
+          <path d={decal.path} fill="#fff" />
+        </g>
+      )}
+      {look?.number != null && (
+        <text x="19.4" y="33" textAnchor="middle" fontFamily="Archivo, sans-serif" fontStyle="italic" fontWeight={800} fontSize="8.6" fill="#fff">
+          {look.number}
+        </text>
+      )}
       <path d="M24.2 14.8H44.4C45.6 17 46.3 19.6 46.6 22.6V26.2H25.4C22.8 26.2 21.4 24.4 21.8 22L22.6 17C22.8 15.6 23.4 14.8 24.2 14.8Z" fill="#0e1117" />
       <circle cx="18" cy="20.6" r="1.6" fill="#0e1117" opacity="0.5" />
       <path d="M13 28C12.4 19.6 17 12.6 25.4 10.4" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" opacity="0.55" />

@@ -85,7 +85,7 @@ export function LiveMap({ placeholder = false }: { placeholder?: boolean }) {
     <section className="card livemap" aria-label="Live map">
       <div className="head" style={{ alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-          <Helmet color={driver?.color ?? "#8f99b3"} size={40} seed={driver?.id} />
+          <Helmet color={driver?.color ?? "#8f99b3"} look={driver?.look} size={40} seed={driver?.id} />
           <div style={{ minWidth: 0 }}>
             <div className="label" style={{ color: "var(--peach)" }}>{w.rally ? "Live on the stage" : "Live on track"}</div>
             <h2 style={{ marginTop: 2, overflowWrap: "anywhere" }}>{driver?.name ?? "Guest"}</h2>

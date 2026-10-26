@@ -1,3 +1,4 @@
+import type { Look } from "../looks";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { api, useAppEvent, useAppState, useDriverMap, type AppEvent } from "../api";
 import { lapKind, lapTime } from "../format";
@@ -13,7 +14,7 @@ export type Celebration =
   | { id: number; kind: "moved"; from: number; to: number; context: string; gap: string | null }
   | { id: number; kind: "level"; level: number; xp: number }
   | { id: number; kind: "sticker"; name: string; hint: string }
-  | { id: number; kind: "switch"; from: { name: string; color: string } | null; to: { name: string; color: string }; moving: boolean };
+  | { id: number; kind: "switch"; from: { name: string; color: string; look?: Look } | null; to: { name: string; color: string; look?: Look }; moving: boolean };
 
 type Draft = Celebration extends infer C ? (C extends { id: number } ? Omit<C, "id"> : never) : never;
 
@@ -97,8 +98,8 @@ export function useCelebrations(): Celebration | null {
         const moving = statusRef.current?.live?.phase === "driving";
         push({
           kind: "switch",
-          from: from ? { name: from.name, color: from.color } : null,
-          to: { name: to?.name ?? "Guest", color: to?.color ?? "#8f99b3" },
+          from: from ? { name: from.name, color: from.color, look: from.look } : null,
+          to: { name: to?.name ?? "Guest", color: to?.color ?? "#8f99b3", look: to?.look },
           moving,
         });
         return;
@@ -138,8 +139,8 @@ export function useCelebrations(): Celebration | null {
           moved: { kind: "moved", from: 4, to: 3, context: "Summer Sprint", gap: "0.312 off the lead" },
           level: { kind: "level", level: 7, xp: 150 },
           sticker: { kind: "sticker", name: "10 clean laps", hint: "Ten laps with no cuts" },
-          switch: { kind: "switch", from: a ? { name: a.name, color: a.color } : { name: "Sam", color: "#FF8A4C" }, to: b ? { name: b.name, color: b.color } : { name: "Jess", color: "#2FA8FF" }, moving: false },
-          switchMoving: { kind: "switch", from: a ? { name: a.name, color: a.color } : { name: "Sam", color: "#FF8A4C" }, to: b ? { name: b.name, color: b.color } : { name: "Jess", color: "#2FA8FF" }, moving: true },
+          switch: { kind: "switch", from: a ? { name: a.name, color: a.color, look: a.look } : { name: "Sam", color: "#FF8A4C" }, to: b ? { name: b.name, color: b.color, look: b.look } : { name: "Jess", color: "#2FA8FF" }, moving: false },
+          switchMoving: { kind: "switch", from: a ? { name: a.name, color: a.color, look: a.look } : { name: "Sam", color: "#FF8A4C" }, to: b ? { name: b.name, color: b.color, look: b.look } : { name: "Jess", color: "#2FA8FF" }, moving: true },
         };
         if (mk[kind]) push(mk[kind]);
       },
@@ -387,8 +388,8 @@ export function CelebrationView({ c, layout, ahead = null }: { c: Celebration; l
           <span className="cel-av">
             <span className="bg" style={{ background: `${c.from?.color ?? "#8f99b3"}38` }} />
             <span className="bg b" style={{ background: `${c.to.color}3d` }} />
-            <span className="h old"><Helmet color={c.from?.color ?? "#8f99b3"} size={56} seed={c.from?.name} tile={false} /></span>
-            <span className="h new"><Helmet color={c.to.color} size={56} seed={c.to.name} mood="happy" tile={false} /></span>
+            <span className="h old"><Helmet color={c.from?.color ?? "#8f99b3"} look={c.from?.look} size={56} seed={c.from?.name} tile={false} /></span>
+            <span className="h new"><Helmet color={c.to.color} look={c.to.look} size={56} seed={c.to.name} mood="happy" tile={false} /></span>
             <span className="cel-swapbadge"><Swap /></span>
           </span>
           <span className="cel-txt">
@@ -413,17 +414,17 @@ export function CentreSwitch({ c }: { c: Extract<Celebration, { kind: "switch" }
     fx.twinkles({ x: cx - 200, y: cy - 150, width: 400, height: 300 }, ["#FFFFFF", c.to.color], 1500, 1400, 220, 20);
     return () => fx.clear();
   }, [c]);
-  const old = c.from ?? { name: "Guest", color: "#8f99b3" };
+  const old: { name: string; color: string; look?: Look } = c.from ?? { name: "Guest", color: "#8f99b3" };
   return (
     <div className="cel-centre" style={{ ["--glow" as string]: `${c.to.color}8c` } as CSSProperties}>
       <div className="cel-cwrap">
         <span className="cel-ck">DRIVER SWITCH</span>
         <div className="cel-cstage">
           <span className="cel-disc old" style={{ background: `${old.color}33` }}>
-            <Helmet color={old.color} size={170} seed={old.name} tile={false} />
+            <Helmet color={old.color} look={old.look} size={170} seed={old.name} tile={false} />
           </span>
           <span className="cel-disc new" style={{ background: `${c.to.color}3d` }}>
-            <Helmet color={c.to.color} size={170} seed={c.to.name} mood="happy" tile={false} />
+            <Helmet color={c.to.color} look={c.to.look} size={170} seed={c.to.name} mood="happy" tile={false} />
           </span>
           <span className="cel-cswap"><Swap s={22} /></span>
         </div>

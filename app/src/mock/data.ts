@@ -22,11 +22,11 @@ function rng(seed: number) {
 }
 
 export const DRIVERS: Driver[] = [
-  { id: 1, name: "Sam", color: "#FF8A4C", createdAt: NOW - 30 * DAY },
-  { id: 2, name: "Jess", color: "#2FA8FF", createdAt: NOW - 29 * DAY },
-  { id: 3, name: "Priya", color: "#FF5FA2", createdAt: NOW - 20 * DAY },
-  { id: 4, name: "Tom", color: "#23C98A", createdAt: NOW - 12 * DAY },
-  { id: 5, name: "Alex", color: "#9B7BFF", createdAt: NOW - 3 * DAY },
+  { id: 1, name: "Sam", color: "#FF8A4C", look: { shell: "aurora", decal: "flame", stripe: "centre", number: 7 }, createdAt: NOW - 30 * DAY },
+  { id: 2, name: "Jess", color: "#2FA8FF", look: { shell: "holo", decal: "star", decalAt: "top", number: 12 }, createdAt: NOW - 29 * DAY },
+  { id: 3, name: "Priya", color: "#FF5FA2", look: { shell: "nightsky", decal: "moon", stripe: "twin", number: 5 }, createdAt: NOW - 20 * DAY },
+  { id: 4, name: "Tom", color: "#23C98A", look: { shell: "inferno", decal: "flame", number: 33 }, createdAt: NOW - 12 * DAY },
+  { id: 5, name: "Alex", color: "#9B7BFF", look: { decal: "bolt", stripe: "band", number: 88 }, createdAt: NOW - 3 * DAY },
 ];
 
 export const CARS = ["Porsche 911 GT3 R (992)", "Ferrari 296 GT3", "BMW M4 GT3"];

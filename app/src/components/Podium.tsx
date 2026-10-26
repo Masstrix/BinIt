@@ -126,7 +126,7 @@ export function Podium({
                 <g data-flip={`p:${keyOf(e)}`} data-flip-from={`h:${keyOf(e)}`}>
                   <g transform={`translate(${s.helmetAt[0]},${s.helmetAt[1]})`}>
                     <g className={`pod-bob${s.place === 1 ? " lead" : ""}`} style={{ animationDelay: delay(s.place) }}>
-                      <Helmet color={d?.color ?? "#5b6578"} size={s.helmet} tile={false} seed={d?.id} mood={s.place === 1 ? "happy" : "idle"} />
+                      <Helmet color={d?.color ?? "#5b6578"} look={d?.look} size={s.helmet} tile={false} seed={d?.id} mood={s.place === 1 ? "happy" : "idle"} />
                     </g>
                   </g>
                 </g>

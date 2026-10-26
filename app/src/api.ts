@@ -2,6 +2,7 @@
 // office browsers all use this; only the base URL differs.
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import type { Look } from "./looks";
 
 export type DriverId = number;
 
@@ -9,6 +10,8 @@ export interface Driver {
   id: DriverId;
   name: string;
   color: string;
+  /** What the driver has equipped in the Garage (not stored by the server yet). */
+  look?: Look;
   createdAt: number;
 }
 

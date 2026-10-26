@@ -1,3 +1,4 @@
+import type { Look } from "../looks";
 import { useState, type ReactNode } from "react";
 import { api, isTauri, useAppState, type Driver } from "../api";
 import { Helmet } from "./Helmet";
@@ -40,11 +41,11 @@ export function useSeatSwitcher(): { choose: (driver: Driver | null, quick?: boo
     <Modal title={target ? `Switch to ${target.name}?` : "Switch to a guest?"} onClose={() => !busy && setPending(null)} centered>
       <div className="modal-body switch-body">
         <div className="switch-people" aria-hidden="true">
-          <Person name={current?.name ?? "Guest"} color={current?.color} faded />
+          <Person name={current?.name ?? "Guest"} color={current?.color} look={current?.look} faded />
           <svg className="switch-arrow" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
             <path d="M5 12h14M13 6l6 6-6 6" />
           </svg>
-          <Person name={target?.name ?? "Guest"} color={target?.color} />
+          <Person name={target?.name ?? "Guest"} color={target?.color} look={target?.look} />
         </div>
         <p style={{ margin: 0, textAlign: "center" }}>
           {target ? (
@@ -74,10 +75,10 @@ export function useSeatSwitcher(): { choose: (driver: Driver | null, quick?: boo
 }
 
 /** A helmet over a name. The one being left is dimmed. */
-function Person({ name, color, faded = false }: { name: string; color?: string; faded?: boolean }) {
+function Person({ name, color, look, faded = false }: { name: string; color?: string; look?: Look; faded?: boolean }) {
   return (
     <div className={`switch-person${faded ? " faded" : ""}`}>
-      <Helmet color={color ?? "#8f99b3"} size={faded ? 72 : 96} seed={name} mood={faded ? "idle" : "happy"} />
+      <Helmet color={color ?? "#8f99b3"} look={look} size={faded ? 72 : 96} seed={name} mood={faded ? "idle" : "happy"} />
       <span className="switch-name">{name}</span>
     </div>
   );

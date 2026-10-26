@@ -56,7 +56,7 @@ function PickDriver({ choose, onClose }: { choose: (d: Driver | null) => void; o
       <Modal title="Who's driving?" onClose={onClose} className="pick">
         <div className="modal-body">
           <div className="pick-hero">
-            <Helmet color={seated?.color ?? "#8f99b3"} size={52} seed={seated?.id} mood="happy" round />
+            <Helmet color={seated?.color ?? "#8f99b3"} look={seated?.look} size={52} seed={seated?.id} mood="happy" round />
             <span>
               <strong>{seated ? `${seated.name} has the seat` : "Nobody has the seat"}</strong>
               <span className="muted">Times go to whoever is picked. No passwords, play fair.</span>
@@ -79,7 +79,7 @@ function PickDriver({ choose, onClose }: { choose: (d: Driver | null) => void; o
                     }}
                   >
                     {active && <span className="pick-tag">DRIVING</span>}
-                    <Helmet color={d.color} size={68} seed={d.id} mood={active ? "happy" : "idle"} round />
+                    <Helmet color={d.color} look={d.look} size={68} seed={d.id} mood={active ? "happy" : "idle"} round />
                     <span className="name">{d.name}</span>
                     <span className="muted" style={{ fontSize: 12 }}>{active ? "tap to leave the seat" : "tap to drive"}</span>
                   </button>

@@ -73,7 +73,7 @@ export function MeBar() {
             />
           </svg>
           <span className="me-face" style={{ background: `${me?.color ?? "#5B6578"}2E` }}>
-            <Helmet color={me?.color ?? "#5B6578"} size={34} tile={false} seed={me?.id} mood={inSeat ? "happy" : "idle"} />
+            <Helmet color={me?.color ?? "#5B6578"} look={me?.look} size={34} tile={false} seed={me?.id} mood={inSeat ? "happy" : "idle"} />
           </span>
           {profile && <span className="me-level" aria-label={`Level ${profile.level}`}>{profile.level}</span>}
         </span>
@@ -204,7 +204,7 @@ export function WhoAreYou({ drivers, me, onClose, onChanged }: { drivers: Driver
                 style={{ borderColor: d.id === me?.id ? d.color : "transparent" }}
                 onClick={() => (d.id === me?.id ? onClose() : pair(d))}
               >
-                <Helmet color={d.color} size={52} seed={d.id} />
+                <Helmet color={d.color} look={d.look} size={52} seed={d.id} />
                 <span className="name">{d.name}</span>
               </button>
             ))}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, useAppState, useFetch, type Driver, type Profile } from "../api";
 import { WhoAreYou } from "../components/MeBar";
+import { Coin } from "../components/Coin";
 import { Helmet } from "../components/Helmet";
 import { carName, lapTime, trackName, ago } from "../format";
 import { GameIcon } from "../components/GameIcon";
@@ -66,7 +67,7 @@ export function YouPage({ path = "/you" }: { path?: string }) {
         <nav className="you-drivers" aria-label="Whose profile">
           {drivers.map((d) => (
             <a key={d.id} href={`#/you/${d.id}`} aria-current={d.id === viewId ? "page" : undefined}>
-              <Helmet color={d.color} size={36} seed={d.id} />
+              <Helmet color={d.color} look={d.look} size={36} seed={d.id} />
               {d.name}
             </a>
           ))}
@@ -141,7 +142,7 @@ function EditDriverForm({ driver, onDone }: { driver: Driver; onDone: () => void
       }}
     >
       <div className="modal-body" style={{ alignItems: "center", textAlign: "center", gap: 18 }}>
-        <Helmet color={color} size={84} seed={driver.id} />
+        <Helmet color={color} look={driver.look} size={84} seed={driver.id} />
         <input className="input" data-autofocus aria-label="Name" value={name} maxLength={32} onChange={(e) => setName(e.target.value)} style={{ minHeight: 56, fontSize: 20, fontWeight: 700, textAlign: "center", width: "100%" }} />
         <ColorPicker value={color} onChange={setColor} />
         {error && <span className="error">{error}</span>}
@@ -163,7 +164,7 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
       <div className="you-main">
       <section className="card you-hero" aria-label="Level">
         <span className="you-tile" style={{ background: `${p.driver.color}2E` }}>
-          <Helmet color={p.driver.color} size={92} tile={false} seed={p.driver.id} mood="happy" />
+          <Helmet color={p.driver.color} look={p.driver.look} size={92} tile={false} seed={p.driver.id} mood="happy" />
         </span>
         <h2 className="you-name">{p.driver.name}</h2>
         <div className="muted">
@@ -177,9 +178,9 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
           <span>{p.xp.toLocaleString()} XP</span>
           <span>{(p.nextLevelXp - p.xp).toLocaleString()} to {p.nextTitle === p.title ? `level ${p.level + 1}` : p.nextTitle}</span>
         </div>
-        <span className="chip you-coins" title="Coins: earned with XP, for the Garage when it opens">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v10M9 10c0-1 1-1.7 3-1.7s3 .7 3 1.7-1 1.5-3 2-3 1-3 2 1 1.7 3 1.7 3-.7 3-1.7" /></svg>
-          {p.coins.toLocaleString()} coins
+        <span className="chip you-coins" title="Coins: earned with XP, spent in the Garage">
+          <Coin size={22} title="Coins" />
+          {p.coins.toLocaleString()}
         </span>
       </section>
 
@@ -244,7 +245,7 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
                 <span className="muted" style={{ fontSize: 13 }}>{ago(e.at)}</span>
               </span>
               <span className="mono" style={{ color: "var(--peri-1)" }}>+{e.xp} XP</span>
-              <span className="mono muted">+{e.coins}</span>
+              <span className="mono you-coin-gain"><Coin size={16} />+{e.coins}</span>
             </div>
           ))}
         </div>

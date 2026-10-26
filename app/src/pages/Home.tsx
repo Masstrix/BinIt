@@ -41,7 +41,7 @@ export function Home() {
       <section className="hero" aria-label="Current driver">
         <div className="hero-top">
           <span className="hero-tile">
-            <Helmet color={seat?.color ?? "#8f99b3"} size={84} tile={false} seed={seat?.id} mood={seat ? "focus" : "idle"} />
+            <Helmet color={seat?.color ?? "#8f99b3"} look={seat?.look} size={84} tile={false} seed={seat?.id} mood={seat ? "focus" : "idle"} />
           </span>
           <div className="hero-who">
             <div className="hero-kicker">{seat ? "Driving now" : "Nobody picked"}</div>
@@ -121,7 +121,7 @@ export function Home() {
                   return (
                     <li key={e.lapId} className={`rank-row${seat && e.driverId === seat.id ? " me" : ""}`}>
                       <span className="rank-pos">{e.position}</span>
-                      <Helmet color={d?.color ?? "#5b6578"} size={36} seed={d?.id} />
+                      <Helmet color={d?.color ?? "#5b6578"} look={d?.look} size={36} seed={d?.id} />
                       <span className="rank-name">{d?.name ?? "Guest"}</span>
                       <span className="mono">{lapTime(e.timeMs)}</span>
                     </li>
@@ -160,7 +160,7 @@ function DriversLink() {
       </span>
       <span className="hd-faces" aria-hidden="true">
         {drivers.slice(0, 5).map((d) => (
-          <Helmet key={d.id} color={d.color} size={36} seed={d.id} />
+          <Helmet key={d.id} color={d.color} look={d.look} size={36} seed={d.id} />
         ))}
       </span>
       <svg className="hd-go" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>

@@ -11,6 +11,7 @@ import { BASE, gapText as ladderGap, place, room } from "./GapLadder";
 import { CelebrationView, type Celebration } from "./Celebrations";
 import { useDevCelebrate } from "../devOverlay";
 import { Helmet } from "./Helmet";
+import type { Look } from "../looks";
 import { QrCode } from "./QrCode";
 import { Signed } from "./Signed";
 
@@ -26,13 +27,14 @@ const card = {
 export interface OverlayData {
   driverName: string;
   driverColor: string;
+  driverLook?: Look;
   pbMs: number | null;
   challengeName: string | null;
   position: number | null;
   gapMs: number | null;
-  top3: { name: string; color: string; timeMs: number }[];
+  top3: { name: string; color: string; look?: Look; timeMs: number }[];
   /** The running challenge's top five (and the driver's own row when outside them), for the podium + list style. */
-  challengeTop: { position: number; name: string; color: string; timeMs: number; gapMs: number; isSeat: boolean; driverId?: number | null }[];
+  challengeTop: { position: number; name: string; color: string; look?: Look; timeMs: number; gapMs: number; isSeat: boolean; driverId?: number | null }[];
   /** When the running challenge ends (null = no end). */
   challengeEndsAt: number | null;
   /** "Mount Panorama · GP" style label for the track leaderboard. */
@@ -40,10 +42,10 @@ export interface OverlayData {
   /** The game being played, so the wording can follow it (laps or stages). */
   game: string | null;
   /** Top 5 on the current track + car, plus the seated driver's row if outside it. */
-  comboTop: { position: number; name: string; color: string; timeMs: number; gapMs: number; isSeat: boolean; driverId?: number | null }[];
+  comboTop: { position: number; name: string; color: string; look?: Look; timeMs: number; gapMs: number; isSeat: boolean; driverId?: number | null }[];
   timing: LiveTiming | null;
   /** Each other driver's best lap at this point of the lap (the gap tower's live mode); empty off the track. */
-  field: { name: string; color: string; ghostMs: number; driverId?: number }[];
+  field: { name: string; color: string; look?: Look; ghostMs: number; driverId?: number }[];
   /** The running lap clock, for when there's no reference lap to show a delta against. */
   lapMs: number;
   /** The game has invalidated the lap in progress (a cut): it won't be timed. */
@@ -75,7 +77,7 @@ export function useOverlayData(): OverlayData {
   const standing = seat ? board.find((e) => e.driverId === seat.id) : undefined;
   const named = (e: LeaderboardEntry) => {
     const d = e.driverId != null ? drivers.get(e.driverId) : undefined;
-    return { name: d?.name ?? "Guest", color: d?.color ?? "#8F99B3", timeMs: e.timeMs, driverId: e.driverId };
+    return { name: d?.name ?? "Guest", color: d?.color ?? "#8F99B3", look: d?.look, timeMs: e.timeMs, driverId: e.driverId };
   };
   const ranked = (e: LeaderboardEntry) => ({
     ...named(e),
@@ -90,6 +92,7 @@ export function useOverlayData(): OverlayData {
   return {
     driverName: seat?.name ?? "Guest",
     driverColor: seat?.color ?? "#8F99B3",
+    driverLook: seat?.look,
     pbMs: pb?.timeMs ?? null,
     challengeName: challenge?.name ?? null,
     position: standing?.position ?? null,
@@ -105,7 +108,7 @@ export function useOverlayData(): OverlayData {
       status?.live?.driving && !status.live.outLap
         ? (status.live.timing?.field ?? []).map((g) => {
             const d = drivers.get(g.driverId);
-            return { name: d?.name ?? "Guest", color: d?.color ?? "#8F99B3", ghostMs: g.ghostMs, driverId: g.driverId };
+            return { name: d?.name ?? "Guest", color: d?.color ?? "#8F99B3", look: d?.look, ghostMs: g.ghostMs, driverId: g.driverId };
           })
         : [],
     lapMs: status?.live?.currentLapMs ?? 0,
@@ -161,8 +164,8 @@ function useTowerRows(data: OverlayData, live: boolean): { rows: OverlayData["co
   const racing = live && data.timing != null && !data.outLap && data.field.length > 0;
   if (!racing) return { rows: data.comboTop, racing: false };
   const all = [
-    { name: data.driverName, color: data.driverColor, timeMs: data.lapMs, isSeat: true, driverId: undefined as number | undefined },
-    ...data.field.map((f) => ({ name: f.name, color: f.color, timeMs: f.ghostMs, isSeat: false, driverId: f.driverId })),
+    { name: data.driverName, color: data.driverColor, look: data.driverLook, timeMs: data.lapMs, isSeat: true, driverId: undefined as number | undefined },
+    ...data.field.map((f) => ({ name: f.name, color: f.color, look: f.look, timeMs: f.ghostMs, isSeat: false, driverId: f.driverId })),
   ].sort((a, b) => a.timeMs - b.timeMs || (a.isSeat ? -1 : b.isSeat ? 1 : 0));
   const lead = all[0].timeMs;
   const ranked = all.map((r, i) => ({ ...r, position: i + 1, gapMs: r.timeMs - lead }));
@@ -285,7 +288,7 @@ export function StripCard({ items, data, itemProps, onDriverClick }: { items: Wi
             {w === "driver" && (() => {
               const who = (
                 <>
-                  <Helmet color={data.driverColor} size={40} seed={data.driverName} mood={data.lapInvalid ? "binned" : "focus"} round />
+                  <Helmet color={data.driverColor} look={data.driverLook} size={40} seed={data.driverName} mood={data.lapInvalid ? "binned" : "focus"} round />
                   <span style={{ font: "700 20px var(--font-display)", letterSpacing: "-0.02em" }}>{data.driverName}</span>
                   <span className="kbd" style={{ background: "var(--line)", color: "var(--text-2)" }}>F8</span>
                 </>
@@ -323,7 +326,7 @@ export function StripCard({ items, data, itemProps, onDriverClick }: { items: Wi
 }
 
 /** One place in a ranking: used by the track leaderboard and the challenge list so they look alike. */
-function RankRow({ position, name, color, seed, right, isSeat, rightColor, flip, mv }: { position: number; name: string; color: string; seed?: string | number; right: string; isSeat: boolean; rightColor?: string; flip?: string; mv?: Flash }) {
+function RankRow({ position, name, color, look, seed, right, isSeat, rightColor, flip, mv }: { position: number; name: string; color: string; look?: Look; seed?: string | number; right: string; isSeat: boolean; rightColor?: string; flip?: string; mv?: Flash }) {
   const placeColour = position === 1 ? "#FFE14D" : position === 3 ? "#FF8A4C" : "var(--muted)";
   return (
     <span
@@ -344,7 +347,7 @@ function RankRow({ position, name, color, seed, right, isSeat, rightColor, flip,
     >
       <span style={{ font: "600 12px var(--font-mono)", width: 14, color: isSeat ? "var(--peri-1)" : placeColour }}>{position}</span>
       <span data-flip={flip ? `h:${flip}` : undefined} style={{ display: "flex" }}>
-        <Helmet color={color} size={26} seed={seed ?? name} />
+        <Helmet color={color} look={look} size={26} seed={seed ?? name} />
       </span>
       <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: isSeat ? 700 : 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
       <span className="mono" style={{ fontSize: 13, color: rightColor }}><Signed text={right} /></span>
@@ -411,7 +414,7 @@ export function StandingsCard({ data, mode }: { data: OverlayData; mode?: string
                 {r ? (
                   <>
                     <span data-flip={`h:${r.name}`} style={{ position: "relative", display: "flex" }}>
-                      <Helmet color={r.color} size={38} seed={r.name} />
+                      <Helmet color={r.color} look={r.look} size={38} seed={r.name} />
                       {!!flash(r.name).gain && <span className="mv-badge" style={{ top: -8, right: -14 }}>▲ {flash(r.name).gain}</span>}
                     </span>
                     <span style={{ fontSize: 12, fontWeight: 600, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
@@ -433,7 +436,7 @@ export function StandingsCard({ data, mode }: { data: OverlayData; mode?: string
           {below.map((r, i) => (
             <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
               {i > 0 && r.position - below[i - 1].position > 1 && <span style={{ height: 1, background: "var(--line)", margin: "4px 0" }} />}
-              <RankRow position={r.position} name={r.name} color={r.color} seed={r.driverId ?? r.name} right={`+${(r.gapMs / 1000).toFixed(3)}`} rightColor="var(--muted)" isSeat={r.isSeat} flip={r.name} mv={flash(r.name)} />
+              <RankRow position={r.position} name={r.name} color={r.color} look={r.look} seed={r.driverId ?? r.name} right={`+${(r.gapMs / 1000).toFixed(3)}`} rightColor="var(--muted)" isSeat={r.isSeat} flip={r.name} mv={flash(r.name)} />
             </span>
           ))}
         </span>
@@ -863,7 +866,7 @@ export function GapMonitorCard({ data, orientation = "vertical", live = false }:
                           : "0 0 0 2px #161B24",
                 }}
               >
-                <Helmet color={c.color} size={s} seed={c.driverId ?? c.name} />
+                <Helmet color={c.color} look={c.look} size={s} seed={c.driverId ?? c.name} />
               </span>
               <span
                 className="mono"
@@ -919,7 +922,7 @@ export function LeaderboardCard({ data }: { data: OverlayData }) {
         {data.comboTop.map((r, i) => (
           <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
             {i === 5 && <span style={{ height: 1, background: "var(--line)", margin: "4px 0" }} />}
-            <RankRow position={r.position} name={r.name} color={r.color} seed={r.driverId ?? r.name} right={lapTime(r.timeMs)} rightColor={r.position === 1 && !r.isSeat ? "var(--mint)" : undefined} isSeat={r.isSeat} flip={r.name} mv={flash(r.name)} />
+            <RankRow position={r.position} name={r.name} color={r.color} look={r.look} seed={r.driverId ?? r.name} right={lapTime(r.timeMs)} rightColor={r.position === 1 && !r.isSeat ? "var(--mint)" : undefined} isSeat={r.isSeat} flip={r.name} mv={flash(r.name)} />
           </span>
         ))}
       </span>

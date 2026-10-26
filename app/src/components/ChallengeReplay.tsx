@@ -149,7 +149,7 @@ export function ChallengeReplay({ challenge }: { challenge: Challenge }) {
           <div className={`livemap-frame${racers.length > 1 ? " with-ladder" : ""}`}>
             {racers.length > 1 && (
               <GapLadder
-                cars={state.map(({ r, finished }, i) => ({ key: r.lapId, color: colorOf(r), name: nameOf(r), short: initials(nameOf(r)), icon: <Helmet color={colorOf(r)} size={26} tile={false} seed={r.driverId ?? undefined} />, gapMs: ladder[i], faded: finished }))}
+                cars={state.map(({ r, finished }, i) => ({ key: r.lapId, color: colorOf(r), name: nameOf(r), short: initials(nameOf(r)), icon: <Helmet color={colorOf(r)} look={r.driverId != null ? drivers.get(r.driverId)?.look : undefined} size={26} tile={false} seed={r.driverId ?? undefined} />, gapMs: ladder[i], faded: finished }))}
               />
             )}
             <div className="ladder-map">
