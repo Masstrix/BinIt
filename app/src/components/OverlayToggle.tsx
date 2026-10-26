@@ -11,7 +11,7 @@ export function OverlayToggle({ compact = false }: { compact?: boolean }) {
       className={compact ? "overlay-toggle compact" : "overlay-toggle"}
       title={`In-game overlay ${enabled ? "on" : "off"} (Ctrl+Shift+H)`}
     >
-      <span className="overlay-toggle-label">In-game overlay</span>
+      <span className="overlay-toggle-label">{compact ? "Overlay" : "In-game overlay"}</span>
       <button className="toggle" role="switch" aria-checked={enabled} aria-label="In-game overlay" onClick={flip} disabled={!status} />
     </label>
   );

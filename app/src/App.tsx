@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { api, isTauri, useAppState, useFetch } from "./api";
 import { GameIcon } from "./components/GameIcon";
-import { Logo } from "./components/Helmet";
-import { readStored, writeStored } from "./persist";
+import { readStored, usePersistedState, writeStored } from "./persist";
 import { OverlayToggle } from "./components/OverlayToggle";
 import { UpdateButton } from "./components/Update";
 import { MeBar } from "./components/MeBar";
+import { TitleBar } from "./components/TitleBar";
+import { Helmet, Logo } from "./components/Helmet";
 import { Home } from "./pages/Home";
 import { ConnectionGate } from "./components/ConnectionGate";
 import { LeaderboardPage } from "./pages/Leaderboard";
@@ -46,8 +47,27 @@ function useHashPath() {
 /** The last page visited inside each section (`/challenges/3`, `/drivers/2`), so its nav link returns there. */
 const lastPathKey = (section: string) => `lastPath.${section}`;
 
+function titleFor(path: string) {
+  return ROUTES.find((r) => (r.path === "/" ? path === "/" : path.startsWith(r.path)))?.label ?? "Bin It";
+}
+
+/** Small windows always get the icon rail; otherwise it is the person's choice. */
+function useCollapsed() {
+  const [user, setUser] = usePersistedState<boolean>("sidebarCollapsed", false, (v) => typeof v === "boolean");
+  const query = "(max-width: 1100px)";
+  const [narrow, setNarrow] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return [user || narrow, user, setUser] as const;
+}
+
 export function App() {
   const path = useHashPath();
+  const [collapsed, userCollapsed, setUserCollapsed] = useCollapsed();
   useEffect(() => {
     const section = ROUTES.find((r) => r.path !== "/" && path.startsWith(r.path));
     if (section) writeStored(lastPathKey(section.path), path === section.path ? null : path);
@@ -69,16 +89,19 @@ export function App() {
   else page = <Home />;
 
   return (
-    <div className="shell">
-      <Sidebar path={path} />
-      <main className="content">{page}</main>
+    <div className={`shell${collapsed ? " collapsed" : ""}`}>
+      <Sidebar path={path} collapsed={collapsed} onToggle={() => setUserCollapsed(!userCollapsed)} />
+      <div className="main-col">
+        <TitleBar title={titleFor(path)} />
+        <main className="content">{page}</main>
+      </div>
       <ConnectionGate />
     </div>
   );
 }
 
-function Sidebar({ path }: { path: string }) {
-  const { status, online } = useAppState();
+function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed: boolean; onToggle: () => void }) {
+  const { status, online, drivers } = useAppState();
   const server = useFetch(() => api.server(), [online]);
   const lanUrl = server?.urls[0];
   // On phones the menu is a bar fixed to the bottom; its height (--dock-h) lets sticky things sit above it.
@@ -97,20 +120,29 @@ function Sidebar({ path }: { path: string }) {
     };
   }, []);
 
+  const driver = status?.seat != null ? drivers.find((d) => d.id === status.seat) : undefined;
+  const driving = !!driver && status?.live?.phase === "driving";
+  // The picker lives on Home: go there and bring it into view.
+  const switchDriver = () => {
+    if (location.hash.replace(/^#/, "") !== "/") location.hash = "/";
+    setTimeout(() => document.getElementById("pick")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  };
+  const gameLabel = !online ? "Offline" : status?.connected ? status.gameName : "No game running";
+
   return (
     <aside className="sidebar" ref={aside}>
-      <a className="brand" href="#/">
-        <Logo />
-        <span>bin it</span>
-      </a>
-      <div className="game-pill" title={!online ? "Can't reach the Bin It service" : status?.connected ? `${status.gameName} is running` : "No game running"}>
-        <span className={`dot${status?.connected ? " on" : ""}`} />
-        {online && status?.connected && status.game && <GameIcon game={status.game} size={22} />}
-        <span className="game-name" style={{ flex: 1 }}>{!online ? "Offline" : status?.connected ? status.gameName : "No game running"}</span>
-        {status?.connected && <span className="live" style={{ fontSize: 12, color: "var(--mint)" }}>live</span>}
+      <div className="sidebar-head" data-tauri-drag-region>
+        <a className="brand" href="#/" title="Bin It">
+          <Logo />
+          <span>bin it</span>
+        </a>
+        <button type="button" className="icon-btn sidebar-toggle" onClick={onToggle} aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"} title={collapsed ? "Expand the sidebar" : "Collapse the sidebar"}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="3" />
+            <path d="M9 4v16" />
+          </svg>
+        </button>
       </div>
-      <OverlayToggle compact />
-      <UpdateButton />
       {!isTauri && <MeBar />}
       <nav className="nav" aria-label="Main">
         {GROUPS.map((group) => (
@@ -132,12 +164,35 @@ function Sidebar({ path }: { path: string }) {
           </div>
         ))}
       </nav>
+      <span className="sidebar-fill" />
       {lanUrl && (
         <div className="lan-box">
           <span className="muted">Open on any office device</span>
           <span className="mono">{lanUrl}</span>
         </div>
       )}
+      <UpdateButton />
+      <div className="seat-card">
+        <button type="button" className="seat-who" data-driving={driving || undefined} onClick={switchDriver} title={driver ? `${driver.name} is in the seat. Switch driver (F8)` : "Nobody in the seat. Pick a driver"}>
+          <Helmet color={driver?.color ?? "#5B6488"} size={44} seed={driver?.id} mood={driving ? "happy" : "idle"} />
+          <span className="seat-text">
+            <span className="seat-name">{driver ? driver.name : "Guest"}</span>
+            <span className="seat-sub" data-driving={driving || undefined}>{driving ? "Driving" : driver ? "In the seat" : "Pick a driver"}</span>
+          </span>
+        </button>
+        <button type="button" className="seat-switch" onClick={switchDriver}>
+          Switch driver <span className="kbd-key">F8</span>
+        </button>
+        <div className="seat-row">
+          <div className="game-pill" title={!online ? "Can't reach the Bin It service" : status?.connected ? `${status.gameName} is running` : "No game running"}>
+            <span className={`dot${status?.connected ? " on" : ""}`} />
+            {online && status?.connected && status.game && <GameIcon game={status.game} size={20} />}
+            <span className="game-name">{gameLabel}</span>
+            {status?.connected && <span className="live">live</span>}
+          </div>
+          <OverlayToggle compact />
+        </div>
+      </div>
     </aside>
   );
 }
