@@ -21,6 +21,21 @@ export interface DriverRating {
   fastestOn: number;
 }
 
+/** A phone paired to a driver (the server keeps only a hash of its token). */
+export interface Device {
+  id: number;
+  driverId: DriverId;
+  label: string;
+  createdAt: number;
+  lastSeen: number;
+}
+
+/** Who this phone is. `local` is the PC itself, which can manage every driver. */
+export interface Me {
+  driver: Driver | null;
+  local: boolean;
+}
+
 export interface Combo {
   game: string;
   track: string;
@@ -321,15 +336,48 @@ export const mockEnabled = (() => {
   return flag !== null && flag !== "0";
 })();
 
+/**
+ * This phone's pairing token: it proves which driver the phone belongs to. Kept in this browser only; the
+ * server stores just a hash. Logging out (or the PC signing the phone out) makes it stop working.
+ */
+export const deviceToken = {
+  get(): string | null {
+    try {
+      return localStorage.getItem("deviceToken");
+    } catch {
+      return null;
+    }
+  },
+  set(token: string | null) {
+    try {
+      if (token) localStorage.setItem("deviceToken", token);
+      else localStorage.removeItem("deviceToken");
+    } catch {
+      /* private window: the phone just won't stay paired */
+    }
+  },
+};
+
+/** An error from the server; `code` says what to do about it ("codeNeeded" when a pairing code is wanted). */
+export class ApiError extends Error {
+  constructor(message: string, readonly code?: string, readonly status?: number) {
+    super(message);
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  if (import.meta.env.DEV && mockEnabled) return (await import("./mock/server")).mockRequest<T>(method, path, body);
+  if (import.meta.env.DEV && mockEnabled) return (await import("./mock/server")).mockRequest<T>(method, path, body, deviceToken.get());
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const token = deviceToken.get();
+  if (token) headers["X-Device-Token"] = token;
   const res = await fetch(`${BASE}/api${path}`, {
     method,
-    headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.error ?? `Request failed (${res.status})`);
+  if (!res.ok) throw new ApiError(data?.error ?? `Request failed (${res.status})`, data?.code, res.status);
   return data as T;
 }
 
@@ -342,6 +390,14 @@ export const api = {
     request<Driver>("POST", "/drivers", { name, color, seat }),
   updateDriver: (id: DriverId, name: string, color: string) =>
     request<Driver>("PUT", `/drivers/${id}`, { name, color }),
+  me: () => request<Me>("GET", "/me"),
+  /** Pairs this phone with a driver. A driver who already has a phone needs a `code` from the PC or that phone. */
+  pair: (driverId: DriverId, code?: string) => request<{ token: string; driver: Driver }>("POST", "/me/pair", { driverId, code }),
+  logout: () => request<boolean>("POST", "/me/logout"),
+  pairCode: (id: DriverId) => request<{ code: string; expiresAt: number }>("POST", `/drivers/${id}/pair-code`),
+  driverDevices: (id: DriverId) => request<Device[]>("GET", `/drivers/${id}/devices`),
+  signOutDriver: (id: DriverId) => request<number>("DELETE", `/drivers/${id}/devices`),
+  signOutDevice: (id: number) => request<boolean>("DELETE", `/devices/${id}`),
   setSeat: (driverId: DriverId | null) => request<DriverId | null>("PUT", "/seat", { driverId }),
   driverRatings: () => request<DriverRating[]>("GET", "/drivers/ratings"),
   /** Every lap a driver has recorded, oldest first. */

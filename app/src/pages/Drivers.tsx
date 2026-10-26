@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { api, useAppState, useFetch, type Driver, type DriverRating } from "../api";
+import { api, useAppState, useFetch, type Device, type Driver, type DriverRating } from "../api";
+import { ago } from "../format";
 import { TIER_ORDER, tierByKey, tierOf } from "../driverStats";
 import { Helmet } from "../components/Helmet";
 import { Modal } from "../components/Modal";
@@ -149,6 +150,7 @@ function NewDriverForm({ onDone }: { onDone: () => void }) {
 function DriverCard({ driver, seated, rating }: { driver: Driver; seated: boolean; rating?: DriverRating }) {
   const seat = useSeatSwitcher();
   const [editing, setEditing] = useState(false);
+  const [phones, setPhones] = useState(false);
   const [name, setName] = useState(driver.name);
   const [color, setColor] = useState(driver.color);
   const [error, setError] = useState<string | null>(null);
@@ -203,8 +205,70 @@ function DriverCard({ driver, seated, rating }: { driver: Driver; seated: boolea
         <a className="chip plain" href={`#/drivers/${driver.id}`}>Progress</a>
         {!seated && <button className="chip plain" onClick={() => seat.choose(driver)}>Drive</button>}
         <button className="chip plain" onClick={() => setEditing(true)}>Edit</button>
+        <button className="chip plain" onClick={() => setPhones(true)}>Phones</button>
       </span>
       {seat.dialog}
+      {phones && (
+        <Modal title={`${driver.name}'s phones`} narrow onClose={() => setPhones(false)}>
+          <PhonesDialog driver={driver} />
+        </Modal>
+      )}
     </div>
+  );
+}
+
+/** The phones paired to a driver: pair one more, sign one out, or sign them all out (a lost phone). */
+function PhonesDialog({ driver }: { driver: Driver }) {
+  const [tick, setTick] = useState(0);
+  const list = useFetch<Device[]>(() => api.driverDevices(driver.id), [driver.id, tick]);
+  const [share, setShare] = useState<{ code: string; expiresAt: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (f: () => Promise<unknown>) => {
+    setError(null);
+    try {
+      await f();
+      setTick((t) => t + 1);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <>
+      <div className="modal-body">
+        {list == null ? (
+          <span className="muted">Loading…</span>
+        ) : list.length === 0 ? (
+          <p className="muted" style={{ margin: 0 }}>
+            No phone is paired. The first phone to pick {driver.name} claims them; after that, another phone needs a code.
+          </p>
+        ) : (
+          <div className="list">
+            {list.map((d) => (
+              <div className="list-row" key={d.id}>
+                <span className="grow">
+                  <span>{d.label}</span>
+                  <span className="muted" style={{ fontSize: 13 }}>paired {ago(d.createdAt)} · last used {ago(d.lastSeen)}</span>
+                </span>
+                <button className="chip plain" onClick={() => run(() => api.signOutDevice(d.id))}>Sign out</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {share && (
+          <div className="pair-code" role="status">
+            <span className="muted">On the phone, pick {driver.name} and enter</span>
+            <span className="mono pair-code-digits">{share.code.slice(0, 3)} {share.code.slice(3)}</span>
+            <span className="muted">It works once, for 5 minutes.</span>
+          </div>
+        )}
+        {error && <span className="error">{error}</span>}
+      </div>
+      <div className="modal-foot">
+        {list != null && list.length > 0 && (
+          <button className="btn ghost" onClick={() => confirm(`Sign every phone out of ${driver.name}?`) && run(() => api.signOutDriver(driver.id))}>Sign all out</button>
+        )}
+        <button className="btn" onClick={() => run(async () => setShare(await api.pairCode(driver.id)))}>Pair a phone</button>
+      </div>
+    </>
   );
 }

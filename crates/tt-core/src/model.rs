@@ -10,6 +10,17 @@ pub type Timestamp = i64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct Device {
+    pub id: i64,
+    pub driver_id: DriverId,
+    /// What the phone calls itself, e.g. "iPhone" or "Android phone".
+    pub label: String,
+    pub created_at: Timestamp,
+    pub last_seen: Timestamp,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Driver {
     pub id: DriverId,
     pub name: String,

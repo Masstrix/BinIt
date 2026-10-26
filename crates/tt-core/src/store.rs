@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 7;
+const SCHEMA_VERSION: i32 = 8;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -189,6 +189,22 @@ impl Store {
                 eprintln!("data: {repaired} laps had the lap before's time; they're now \"no time\" laps");
             }
         }
+        if version < 8 {
+            // Phones paired to drivers (see pairing.rs). Only a hash of each phone's token is kept.
+            conn.execute_batch(
+                "
+                CREATE TABLE IF NOT EXISTS devices (
+                    id          INTEGER PRIMARY KEY,
+                    driver_id   INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+                    token_hash  TEXT NOT NULL UNIQUE,
+                    label       TEXT NOT NULL,
+                    created_at  INTEGER NOT NULL,
+                    last_seen   INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS devices_driver ON devices (driver_id);
+                ",
+            )?;
+        }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         Ok(Self { conn })
     }
@@ -247,6 +263,50 @@ impl Store {
     pub fn update_driver(&self, id: DriverId, name: &str, color: &str) -> Result<()> {
         self.conn.execute("UPDATE drivers SET name = ?2, color = ?3 WHERE id = ?1", params![id, name, color])?;
         Ok(())
+    }
+
+    // ---- paired phones -------------------------------------------------------
+
+    pub fn insert_device(&self, driver_id: DriverId, token_hash: &str, label: &str, now: Timestamp) -> Result<Device> {
+        self.conn.execute(
+            "INSERT INTO devices (driver_id, token_hash, label, created_at, last_seen) VALUES (?1, ?2, ?3, ?4, ?4)",
+            params![driver_id, token_hash, label, now],
+        )?;
+        Ok(Device { id: self.conn.last_insert_rowid(), driver_id, label: label.to_string(), created_at: now, last_seen: now })
+    }
+
+    pub fn device_by_hash(&self, token_hash: &str) -> Result<Option<Device>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT id, driver_id, label, created_at, last_seen FROM devices WHERE token_hash = ?1",
+                [token_hash],
+                device_from_row,
+            )
+            .optional()?)
+    }
+
+    pub fn touch_device(&self, id: i64, now: Timestamp) -> Result<()> {
+        self.conn.execute("UPDATE devices SET last_seen = ?2 WHERE id = ?1", params![id, now])?;
+        Ok(())
+    }
+
+    pub fn devices(&self) -> Result<Vec<Device>> {
+        let mut stmt = self.conn.prepare("SELECT id, driver_id, label, created_at, last_seen FROM devices ORDER BY driver_id, created_at")?;
+        let rows = stmt.query_map([], device_from_row)?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn device_count(&self, driver_id: DriverId) -> Result<i64> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM devices WHERE driver_id = ?1", [driver_id], |r| r.get(0))?)
+    }
+
+    pub fn delete_device(&self, id: i64) -> Result<usize> {
+        Ok(self.conn.execute("DELETE FROM devices WHERE id = ?1", [id])?)
+    }
+
+    pub fn delete_driver_devices(&self, driver_id: DriverId) -> Result<usize> {
+        Ok(self.conn.execute("DELETE FROM devices WHERE driver_id = ?1", [driver_id])?)
     }
 
     pub fn driver_count(&self) -> Result<i64> {
@@ -715,6 +775,10 @@ const CHALLENGE_SELECT: &str = "SELECT id, name, game, track, layout, car, start
 
 fn driver_from_row(r: &Row) -> rusqlite::Result<Driver> {
     Ok(Driver { id: r.get(0)?, name: r.get(1)?, color: r.get(2)?, created_at: r.get(3)? })
+}
+
+fn device_from_row(r: &Row) -> rusqlite::Result<Device> {
+    Ok(Device { id: r.get(0)?, driver_id: r.get(1)?, label: r.get(2)?, created_at: r.get(3)?, last_seen: r.get(4)? })
 }
 
 fn lap_from_row(r: &Row) -> rusqlite::Result<Lap> {

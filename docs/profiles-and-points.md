@@ -93,6 +93,27 @@ the stated direction. Worth confirming.
 4. Add coins and buying.
 5. Device pairing and the You page, if option 2 is chosen.
 
+## Status: device pairing is built (2026-10-26)
+
+Option 2 above is in. How it works:
+
+* A phone picks a driver in the banner's "Who are you?". The first phone to pick a driver **claims** them: the
+  server makes a random token, keeps only its SHA-256 hash (`devices` table, schema 8) and sends the token to
+  the phone, which keeps it in its own storage and sends it as `X-Device-Token`. `GET /api/me` says who a phone is.
+* A driver who already has a phone needs a **one-time 6 digit code** (valid 5 minutes) to pair another phone.
+  The code comes from the PC (Drivers, then Phones, then Pair a phone) or from a phone already paired to that driver
+  (banner, then Pair another phone). Codes live in memory only.
+* **Log out** (banner, then Log out) deletes that phone's token on the server and in the browser. The PC can also
+  sign a single phone, or every phone, out of a driver (lost phone); the next phone to ask then claims them again.
+* A driver with a paired phone can only be edited from the PC (the desktop app, i.e. loopback) or from that phone.
+  An unclaimed driver stays editable by anyone, so nothing changes for people who never pair. Seat switching is still open.
+* A phone that remembered a driver the old way (`me` in local storage) is paired quietly the first time if that
+  driver is still unclaimed.
+
+Not done: nothing is *spent* yet, so the only guarded action is editing a driver. Points, coins and the Garage
+(below) would use the same "is this phone that driver" check. Tokens go over plain HTTP on the office network,
+like everything else here; that is acceptable for this product but worth knowing.
+
 ## Questions for the owner
 
 * Trust model or device pairing? Is a PIN wanted?

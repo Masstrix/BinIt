@@ -1,8 +1,9 @@
 // A tiny in-memory stand-in for the Bin It server, for UI work without the app or a game running.
 // Turn it on in dev with `?mock` on the page URL (`?mock=0` turns it off). See src/api.ts.
 
+import { ApiError } from "../api";
 import type {
-  About, AppEvent, Challenge, Combo, Driver, Lap, LapResult, LeaderboardEntry, LeaderboardQuery, LiveView, OverlayShow,
+  About, AppEvent, Challenge, Combo, Device, Driver, Lap, LapResult, LeaderboardEntry, LeaderboardQuery, LiveView, OverlayShow,
   ReplayEntry, ServerInfo, SessionView, Status, UpdateStatus,
 } from "../api";
 import { CHALLENGES, DRIVERS, LAPS, MAPS, NOW, TRACKS, catalogue, key } from "./data";
@@ -18,6 +19,26 @@ const session: SessionView = {
   sectorCount: 3, boundaries: [0, 0.31, 0.7, 1],
 };
 const settings = { seat: 1 as number | null, overlayEnabled: true, overlayFocusOnly: true, overlayShow: "drivingPaused" as OverlayShow, lan: true };
+
+// ---- paired phones ----------------------------------------------------------------------
+// Jess already has a phone, so picking Jess on another one asks for a code: try that flow, and the
+// "Phones" dialog on the Drivers page. Everyone else is free to claim.
+
+interface MockDevice extends Device {
+  token: string;
+}
+const devices: MockDevice[] = [{ id: 1, driverId: 2, token: "mock-jess-phone", label: "Pixel (Android phone)", createdAt: NOW - 6 * 86_400_000, lastSeen: NOW - 3_600_000 }];
+let nextDevice = 2;
+const pairCodes = new Map<number, { code: string; until: number }>();
+
+/** In the mock, a wide window is "the PC" (can manage everyone) and a phone-sized one is a phone. */
+const isLocal = () => !window.matchMedia("(max-width: 640px)").matches;
+const callerDriver = (token?: string | null) => devices.find((d) => d.token === token)?.driverId ?? null;
+const claimed = (id: number) => devices.some((d) => d.driverId === id);
+function mayManage(id: number, token?: string | null) {
+  if (!isLocal() && callerDriver(token) !== id) throw new ApiError("this driver belongs to another phone: do it on the PC or on their phone", undefined, 403);
+}
+const publicDevice = ({ token: _t, ...d }: MockDevice): Device => d;
 
 // ---- events -----------------------------------------------------------------------
 
@@ -191,7 +212,7 @@ const server: ServerInfo = { port: 7878, lanEnabled: true, urls: ["http://192.16
 // ---- the router ----------------------------------------------------------------------
 
 /** Answers a request the way the real server does (see the `api` object in src/api.ts for the shapes). */
-export async function mockRequest<T>(method: string, path: string, body?: any): Promise<T> {
+export async function mockRequest<T>(method: string, path: string, body?: any, token?: string | null): Promise<T> {
   await new Promise((r) => setTimeout(r, 30)); // so loading states are seen
   const url = new URL(path, "http://mock");
   const p = url.pathname;
@@ -201,6 +222,53 @@ export async function mockRequest<T>(method: string, path: string, body?: any): 
   let r: RegExpMatchArray | null;
 
   if (p === "/status") return ok(status());
+  if (p === "/me") return ok({ driver: drivers.find((d) => d.id === callerDriver(token)) ?? null, local: isLocal() });
+  if (p === "/me/pair") {
+    const d = drivers.find((x) => x.id === body.driverId);
+    if (!d) throw new ApiError("no such driver", undefined, 400);
+    if (claimed(d.id)) {
+      const entry = pairCodes.get(d.id);
+      if (!body.code) throw new ApiError("this driver already has a phone: ask for a pairing code", "codeNeeded", 403);
+      if (!entry || entry.until < Date.now() || entry.code !== String(body.code).trim()) throw new ApiError("that code is wrong or has run out", "badCode", 403);
+      pairCodes.delete(d.id);
+    }
+    const t = `mock-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    devices.push({ id: nextDevice++, driverId: d.id, token: t, label: isLocal() ? "Browser" : "Phone", createdAt: Date.now(), lastSeen: Date.now() });
+    emit({ type: "driversChanged" });
+    return ok({ token: t, driver: d });
+  }
+  if (p === "/me/logout") {
+    const i = devices.findIndex((x) => x.token === token);
+    if (i >= 0) devices.splice(i, 1);
+    emit({ type: "driversChanged" });
+    return ok(i >= 0);
+  }
+  if ((r = m(/^\/drivers\/(\d+)\/pair-code$/))) {
+    if (claimed(+r[1])) mayManage(+r[1], token);
+    const code = String(Math.floor(Math.random() * 1_000_000)).padStart(6, "0");
+    const until = Date.now() + 5 * 60_000;
+    pairCodes.set(+r[1], { code, until });
+    return ok({ code, expiresAt: until });
+  }
+  if ((r = m(/^\/drivers\/(\d+)\/devices$/))) {
+    mayManage(+r[1], token);
+    if (method === "DELETE") {
+      const before = devices.length;
+      for (let i = devices.length - 1; i >= 0; i--) if (devices[i].driverId === +r[1]) devices.splice(i, 1);
+      pairCodes.delete(+r[1]);
+      emit({ type: "driversChanged" });
+      return ok(before - devices.length);
+    }
+    return ok(devices.filter((d) => d.driverId === +r![1]).map(publicDevice));
+  }
+  if ((r = m(/^\/devices\/(\d+)$/)) && method === "DELETE") {
+    const i = devices.findIndex((d) => d.id === +r![1]);
+    if (i < 0) return ok(false);
+    mayManage(devices[i].driverId, token);
+    devices.splice(i, 1);
+    emit({ type: "driversChanged" });
+    return ok(true);
+  }
   if (p === "/server") return ok(server);
   if (p === "/settings/lan") { settings.lan = !!body?.enabled; return ok(settings.lan); }
   if (p === "/drivers/ratings") return ok(ratings());
@@ -215,6 +283,7 @@ export async function mockRequest<T>(method: string, path: string, body?: any): 
   }
   if ((r = m(/^\/drivers\/(\d+)\/laps$/))) return ok(laps.filter((l) => l.driverId === +r![1]));
   if ((r = m(/^\/drivers\/(\d+)$/)) && method === "PUT") {
+    if (claimed(+r[1])) mayManage(+r[1], token);
     const d = drivers.find((x) => x.id === +r![1])!;
     d.name = body.name; d.color = body.color;
     emit({ type: "driversChanged" });
