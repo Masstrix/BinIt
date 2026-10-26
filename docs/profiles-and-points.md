@@ -156,3 +156,21 @@ like everything else here; that is acceptable for this product but worth knowing
   gives each mock driver spare coins.
 * **Not done:** visor and default face (designed, not in the catalogue), earned-only items (challenge winners, level
   milestones), the Paddock page, overlay pop-up when someone equips something, number style and colour extras.
+
+## Status: one file sets XP, coins and prices (2026-10-26)
+
+Every earning rate and shop price is in **`crates/tt-core/rewards.json`**. It is compiled into the app, so a balance
+change is: edit the numbers, rebuild, ship. Everyone who installs the update gets the new values; there is no copy in
+the user's data folder to go stale.
+
+* `cleanLap`, `firstLap`, `personalBest`, `trackRecord`: XP and coins each pays.
+* `dailyLapCap`: plain laps on one track and car stop paying after this many in 24 hours (bests and records are never capped).
+* `levelXpStep`: each level costs this much more than the one before (100 gives 100, 300, 600, 1000 XP in total).
+* `shop`: every item for sale, in order: `slot` (`shell`, `decal`, `stripe`, `face`), `id` (must match the drawing in
+  `app/src/looks.ts`), `price` and `minLevel`. A price of 0 makes an item free for everyone. An item is added to the
+  shop by adding it here and drawing it in `looks.ts` (and in `app/src/mock/data.ts` for `?mock`).
+* A negative number is raised to zero and a broken file stops the build's tests, not the app.
+* Changing a number does not rewrite the past: ledger rows already written keep what they paid, items already bought keep
+  the price paid (no refunds), and a smaller `levelXpStep` raises everyone's level at once while a larger one lowers it
+  (a driver can then own items above their level; they keep them).
+* The mock server (`?mock`) has its own copy of the prices in `app/src/mock/data.ts`; keep it in step when testing the UI.

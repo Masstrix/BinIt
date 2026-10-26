@@ -1047,13 +1047,13 @@ fn laps_earn_xp_and_coins_for_what_they_are() {
 
     // First lap on a new track and car: the welcome bonus plus the lap itself.
     let first = tt.record_lap(&lap(103_000, true)).unwrap().awards;
-    assert_eq!((first.xp, first.coins), (progress::FIRST_XP + progress::LAP_XP, progress::FIRST_COINS + progress::LAP_COINS));
+    assert_eq!((first.xp, first.coins), (progress::rewards().first_lap.xp + progress::rewards().clean_lap.xp, progress::rewards().first_lap.coins + progress::rewards().clean_lap.coins));
     // A slower lap is just a lap.
     let slower = tt.record_lap(&lap(104_000, true)).unwrap().awards;
-    assert_eq!((slower.xp, slower.reasons.clone()), (progress::LAP_XP, vec!["Clean lap".to_string()]));
+    assert_eq!((slower.xp, slower.reasons.clone()), (progress::rewards().clean_lap.xp, vec!["Clean lap".to_string()]));
     // A personal best pays extra. Nobody else has driven here, so it is not a track record.
     let pb = tt.record_lap(&lap(102_000, true)).unwrap().awards;
-    assert_eq!(pb.xp, progress::LAP_XP + progress::PB_XP);
+    assert_eq!(pb.xp, progress::rewards().clean_lap.xp + progress::rewards().personal_best.xp);
     assert!(!pb.reasons.contains(&"Track record".to_string()));
     // Cut laps and out laps earn nothing.
     assert_eq!(tt.record_lap(&lap(101_000, false)).unwrap().awards, Awards::default());
@@ -1072,7 +1072,7 @@ fn a_track_record_needs_someone_else_to_beat_and_guests_earn_nothing() {
     let jess = tt.add_and_seat("Jess", None).unwrap();
     let beat = tt.record_lap(&lap(102_000, true)).unwrap().awards;
     assert!(beat.reasons.contains(&"Track record".to_string()), "{:?}", beat.reasons);
-    assert_eq!(beat.xp, progress::FIRST_XP + progress::LAP_XP + progress::RECORD_XP);
+    assert_eq!(beat.xp, progress::rewards().first_lap.xp + progress::rewards().clean_lap.xp + progress::rewards().track_record.xp);
 
     tt.set_seat(None).unwrap();
     assert_eq!(tt.record_lap(&lap(99_000, true)).unwrap().awards, Awards::default());
@@ -1094,7 +1094,7 @@ fn crossing_a_level_is_reported_once_and_the_daily_cap_stops_lap_farming() {
         paid += a.reasons.iter().filter(|r| *r == "Clean lap").count();
     }
     assert!(level_ups.windows(2).all(|w| w[0] < w[1]) && level_ups.first() == Some(&2), "{level_ups:?}");
-    assert_eq!(paid as i64, progress::LAP_CAP_PER_DAY, "plain laps stop paying after the cap");
+    assert_eq!(paid as i64, progress::rewards().daily_lap_cap, "plain laps stop paying after the cap");
     assert_eq!(tt.profile(sam.id).unwrap().level, *level_ups.last().unwrap());
 }
 

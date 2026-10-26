@@ -460,7 +460,7 @@ impl BinIt {
         let store = self.store();
         let driver = store.driver(driver_id)?.ok_or_else(|| anyhow::anyhow!("no such driver"))?;
         let (xp, coins) = store.point_totals(driver_id)?;
-        let items = shop::CATALOGUE
+        let items = shop::catalogue()
             .iter()
             .map(|i| ShopItem { id: i.id.to_string(), slot: i.slot.to_string(), price: i.price, min_level: i.min_level })
             .collect();
@@ -472,7 +472,8 @@ impl BinIt {
         {
             let store = self.store();
             let entry = shop::item(slot, id).ok_or_else(|| anyhow::anyhow!("no such item"))?;
-            if entry.price == 0 {
+            let (cost, needs) = (entry.price, entry.min_level);
+            if cost == 0 {
                 bail!("that one is free");
             }
             let key = shop::key(slot, id);
@@ -480,13 +481,13 @@ impl BinIt {
                 bail!("you already own that");
             }
             let (xp, coins) = store.point_totals(driver_id)?;
-            if progress::level_of(xp) < entry.min_level {
-                bail!("that needs level {}", entry.min_level);
+            if progress::level_of(xp) < needs {
+                bail!("that needs level {needs}");
             }
-            if coins < entry.price {
-                bail!("not enough coins: {} needed, you have {coins}", entry.price);
+            if coins < cost {
+                bail!("not enough coins: {cost} needed, you have {coins}");
             }
-            store.buy_item(driver_id, &key, entry.price, now_ms())?;
+            store.buy_item(driver_id, &key, cost, now_ms())?;
         }
         self.emit(AppEvent::DriversChanged);
         self.shop(driver_id)
@@ -1233,6 +1234,7 @@ fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal
     use progress::*;
     let first_here = store.best_valid_time(combo, Some(driver), lap.id)?.is_none();
     let xp_before = store.point_totals(driver)?.0;
+    let rw = progress::rewards();
     let mut awards = Awards::default();
     let mut give = |kind: &str, xp: i64, coins: i64, reason: &str| -> Result<()> {
         store.insert_point_event(driver, kind, xp, coins, Some(lap.id), now)?;
@@ -1242,16 +1244,16 @@ fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal
         Ok(())
     };
     if first_here {
-        give("first", FIRST_XP, FIRST_COINS, "First lap here")?;
+        give("first", rw.first_lap.xp, rw.first_lap.coins, "First lap here")?;
     }
-    if store.lap_awards_since(driver, combo, now - DAY_MS)? < LAP_CAP_PER_DAY {
-        give("lap", LAP_XP, LAP_COINS, "Clean lap")?;
+    if store.lap_awards_since(driver, combo, now - DAY_MS)? < rw.daily_lap_cap {
+        give("lap", rw.clean_lap.xp, rw.clean_lap.coins, "Clean lap")?;
     }
     if personal_best && !first_here {
-        give("pb", PB_XP, PB_COINS, "Personal best")?;
+        give("pb", rw.personal_best.xp, rw.personal_best.coins, "Personal best")?;
     }
     if combo_record && store.others_have_valid_lap(combo, driver, lap.id)? {
-        give("record", RECORD_XP, RECORD_COINS, "Track record")?;
+        give("record", rw.track_record.xp, rw.track_record.coins, "Track record")?;
     }
     let level_after = level_of(xp_before + awards.xp);
     if level_after > level_of(xp_before) {

@@ -340,7 +340,7 @@ impl Store {
             return Ok(());
         }
         if self.conn.query_row("SELECT COUNT(*) FROM point_events", [], |r| r.get::<_, i64>(0))? == 0 {
-            use crate::progress::{FIRST_COINS, FIRST_XP, LAP_COINS, LAP_XP, PB_COINS, PB_XP};
+            let rw = crate::progress::rewards();
             let mut stmt = self.conn.prepare(
                 "SELECT id, driver_id, game, track, layout, car, time_ms, recorded_at FROM laps
                  WHERE valid = 1 AND driver_id IS NOT NULL ORDER BY recorded_at, id",
@@ -354,11 +354,11 @@ impl Store {
             for (lap_id, driver, combo, time, at) in laps {
                 let previous = best.get(&(driver, combo.clone())).copied();
                 if previous.is_none() {
-                    self.insert_point_event(driver, "first", FIRST_XP, FIRST_COINS, Some(lap_id), at)?;
+                    self.insert_point_event(driver, "first", rw.first_lap.xp, rw.first_lap.coins, Some(lap_id), at)?;
                 }
-                self.insert_point_event(driver, "lap", LAP_XP, LAP_COINS, Some(lap_id), at)?;
+                self.insert_point_event(driver, "lap", rw.clean_lap.xp, rw.clean_lap.coins, Some(lap_id), at)?;
                 if previous.is_some_and(|p| time < p) {
-                    self.insert_point_event(driver, "pb", PB_XP, PB_COINS, Some(lap_id), at)?;
+                    self.insert_point_event(driver, "pb", rw.personal_best.xp, rw.personal_best.coins, Some(lap_id), at)?;
                 }
                 best.insert((driver, combo), time.min(previous.unwrap_or(u32::MAX)));
             }
