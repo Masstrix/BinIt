@@ -49,30 +49,39 @@ function PickDriver({ choose, onClose }: { choose: (d: Driver | null) => void; o
     }
   };
 
+  const seated = drivers.find((d) => d.id === seatId);
+
   return (
     <>
-      <Modal title="Who's driving?" onClose={onClose}>
+      <Modal title="Who's driving?" onClose={onClose} className="pick">
         <div className="modal-body">
-          <span className="muted" style={{ fontSize: 14 }}>Times go to whoever is picked. No passwords, play fair.</span>
+          <div className="pick-hero">
+            <Helmet color={seated?.color ?? "#8f99b3"} size={52} seed={seated?.id} mood="happy" round />
+            <span>
+              <strong>{seated ? `${seated.name} has the seat` : "Nobody has the seat"}</strong>
+              <span className="muted">Times go to whoever is picked. No passwords, play fair.</span>
+            </span>
+          </div>
           {drivers.length > 0 && (
-            <div className="driver-grid">
-              {drivers.map((d) => {
+            <div className="driver-grid pick-grid">
+              {drivers.map((d, i) => {
                 const active = d.id === seatId;
                 return (
                   <button
                     key={d.id}
                     type="button"
-                    className="driver-btn"
+                    className="driver-btn pick-card"
                     aria-pressed={active}
-                    style={{ borderColor: active ? d.color : "transparent" }}
+                    style={{ ["--c" as string]: d.color, animationDelay: `${i * 28}ms` }}
                     onClick={() => {
                       choose(active ? null : d);
                       onClose();
                     }}
                   >
-                    <Helmet color={d.color} size={64} seed={d.id} mood={active ? "happy" : "idle"} round />
+                    {active && <span className="pick-tag">DRIVING</span>}
+                    <Helmet color={d.color} size={68} seed={d.id} mood={active ? "happy" : "idle"} round />
                     <span className="name">{d.name}</span>
-                    <span className="muted" style={{ fontSize: 12 }}>{active ? "in the seat" : "tap to drive"}</span>
+                    <span className="muted" style={{ fontSize: 12 }}>{active ? "tap to leave the seat" : "tap to drive"}</span>
                   </button>
                 );
               })}
@@ -89,7 +98,9 @@ function PickDriver({ choose, onClose }: { choose: (d: Driver | null) => void; o
             <input id="newname" className="input" value={name} maxLength={32} onChange={(e) => { setName(e.target.value); setAdded(null); }} placeholder="Type your name and press Enter" autoComplete="off" />
             <button className="btn" type="submit" disabled={!name.trim()}>Add driver</button>
           </form>
-          {added && <span className="muted" style={{ fontSize: 14 }}>Added {added}. Tap their helmet when it is their turn to drive.</span>}
+          <span className="muted" style={{ fontSize: 13, marginTop: -10 }}>
+            {added ? `Added ${added}. Tap their helmet when it is their turn to drive.` : "Adding someone doesn't take the seat."}
+          </span>
           {error && <span className="error">{error}</span>}
         </div>
       </Modal>
