@@ -173,6 +173,22 @@ const BigCrown = () => (
     <rect x="12" y="112" width="146" height="14" rx="7" fill="#E0A100" />
   </svg>
 );
+const Trophy = () => (
+  <svg width="56" height="56" viewBox="0 0 100 110" aria-hidden="true">
+    <defs>
+      <linearGradient id="celTrophy" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stopColor="#D9A000" />
+        <stop offset=".45" stopColor="#FFE08A" />
+        <stop offset="1" stopColor="#E2A800" />
+      </linearGradient>
+    </defs>
+    <path d="M22 24 C2 22 2 62 30 68" fill="none" stroke="#E0A100" strokeWidth="7" strokeLinecap="round" />
+    <path d="M78 24 C98 22 98 62 70 68" fill="none" stroke="#E0A100" strokeWidth="7" strokeLinecap="round" />
+    <path d="M16 12 H84 V40 C84 66 66 80 50 82 C34 80 16 66 16 40 Z" fill="url(#celTrophy)" />
+    <rect x="44" y="82" width="12" height="16" fill="url(#celTrophy)" />
+    <rect x="28" y="98" width="44" height="12" rx="4" fill="#E0A100" />
+  </svg>
+);
 const Star = () => (
   <svg width="44" height="44" viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
     <path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.3 5.9 20.6l1.4-6.8L2.2 9.1l6.9-.8z" />
@@ -217,8 +233,10 @@ function runFx(c: Celebration, box: Rect) {
       fx.twinkles(box, ["#FFE08A", "#FFFFFF"], 400, 2000, 240);
       break;
     case "lead":
-      fx.sparks(cx, cy, 14, ["#FFE08A", "#FFFFFF", "#FFC93C"], 650);
-      fx.twinkles(box, ["#FFE08A", "#FFFFFF"], 700, 2400, 240);
+      fx.ring(cx, cy, Math.max(box.width, 360) * 0.6, "#FFC93C", 650);
+      fx.sparks(cx, cy, 36, ["#FFE08A", "#FFC93C", "#FFFFFF"], 700);
+      fx.embers(box, ["#FFC93C", "#FFE08A", "#FFFFFF"], 900, 2600);
+      fx.twinkles(box, ["#FFE08A", "#FFFFFF"], 900, 2400, 240);
       break;
     case "moved":
       fx.arrows({ x: box.x + 10, y: box.y + 20, width: 40, height: 20 }, ["#8B8BF5"], 300, 900);
@@ -234,7 +252,7 @@ function runFx(c: Celebration, box: Rect) {
   }
 }
 
-export function CelebrationView({ c, layout }: { c: Celebration; layout: "pill" | "card" }) {
+export function CelebrationView({ c, layout, ahead = null }: { c: Celebration; layout: "pill" | "card"; ahead?: { name: string; gapMs: number } | null }) {
   const ref = useRef<HTMLDivElement>(null);
   // The particle layer waits for the card to land, then works around where it ended up.
   useEffect(() => {
@@ -279,6 +297,7 @@ export function CelebrationView({ c, layout }: { c: Celebration; layout: "pill" 
     case "lead":
       return (
         <div className="cel-wrap has-crown" style={style}>
+          <span className="cel-cone" aria-hidden="true" />
           <div ref={ref} className={cls("lead")}>
             <span className="cel-rank sq">
               <span className="cel-r old">P{c.from ?? 2}</span>
@@ -292,6 +311,8 @@ export function CelebrationView({ c, layout }: { c: Celebration; layout: "pill" 
               </span>
               <span className="cel-sub">{c.time}</span>
             </span>
+            {ahead && ahead.gapMs > 0 && <span className="cel-gap">{(ahead.gapMs / 1000).toFixed(3)} clear of {ahead.name}</span>}
+            <span className="cel-trophy"><Trophy /></span>
             <span className="cel-sheen" />
           </div>
           <span className="cel-crown"><BigCrown /></span>

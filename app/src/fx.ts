@@ -2,7 +2,7 @@
  * A very small particle layer for the overlay's celebrations: arrows drifting up, twinkling stars, a ring and a
  * few sparks. Drawn on one transparent canvas under the widgets, only while something is alive.
  */
-type Kind = "arrow" | "star" | "ring" | "spark";
+type Kind = "arrow" | "star" | "ring" | "spark" | "ember";
 
 interface Particle {
   kind: Kind;
@@ -109,6 +109,25 @@ class Fx {
     }
   }
 
+  /** Small glowing dots that rise from along the bottom of `box`, like sparks drifting up from a fire. */
+  embers(box: Rect, colors: string[], from: number, ms: number) {
+    if (reduced()) return;
+    for (let t = from; t < from + ms; t += 100) {
+      this.at(t, () => {
+        this.add({
+          kind: "ember",
+          x: box.x + Math.random() * box.width,
+          y: box.y + box.height + rnd(0, 40),
+          vx: rnd(-20, 20),
+          vy: -rnd(80, 170),
+          size: rnd(3, 7),
+          life: rnd(1.6, 2.4),
+          color: colors[Math.floor(Math.random() * colors.length)],
+        });
+      });
+    }
+  }
+
   ring(x: number, y: number, radius: number, color: string, at = 0) {
     if (reduced()) return;
     this.at(at, () => this.add({ kind: "ring", x, y, r1: radius, size: 6, life: 0.9, color }));
@@ -167,6 +186,15 @@ class Fx {
         ctx.lineTo(p.x, p.y + s * 0.25);
         ctx.lineTo(p.x + s * 0.6, p.y + s * 0.85);
         ctx.stroke();
+      } else if (p.kind === "ember") {
+        ctx.globalAlpha = 0.9 * Math.min(1, pulse * 1.6);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size / 2, 0, 6.283);
+        ctx.fill();
+        ctx.globalAlpha *= 0.25;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * 1.4, 0, 6.283);
+        ctx.fill();
       } else if (p.kind === "star") {
         const sc = pulse * p.size;
         ctx.globalAlpha = Math.min(1, 1.6 * pulse);

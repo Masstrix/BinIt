@@ -122,6 +122,9 @@ export function Overlay() {
   const centre = showWidgets && hasPopups && isCentre(celebration) ? celebration : null;
   // Taking the lead is its own moment, apart from the lap: it sits just above the middle, not in the Pop-ups slot.
   const lead = showWidgets && hasPopups && celebration?.kind === "lead" ? celebration : null;
+  // Who the new leader is clear of: the next place on the running challenge's board.
+  const next = data.challengeTop.find((r) => r.position === 2);
+  const second = next ? { name: next.name, gapMs: next.gapMs } : null;
   const slotCelebration = showWidgets && hasPopups && celebration && !centre && !lead ? celebration : null;
 
   return (
@@ -130,7 +133,7 @@ export function Overlay() {
       {centre && <CentreSwitch key={centre.id} c={centre} />}
       {lead && (
         <div style={{ position: "absolute", left: 0, right: 0, top: "30%", display: "flex", justifyContent: "center" }}>
-          <CelebrationView key={lead.id} c={lead} layout="pill" />
+          <CelebrationView key={lead.id} c={lead} layout="pill" ahead={second} />
         </div>
       )}
       {showWidgets &&

@@ -1296,3 +1296,10 @@ img.game-icon { object-fit: cover; display: inline-block; }
 .ed-space-row input[type="range"]:focus-visible { outline: 2px solid var(--peri-1); outline-offset: 2px; border-radius: 12px; }
 .ed-space-note { grid-column: 1 / -1; font-size: 13px; user-select: text; }
 .ed-spacing .chip { justify-self: start; }
+
+/* the lead card: a spotlight behind it and a trophy on the end */
+.cel-wrap { isolation: isolate; }
+.cel-cone { position: absolute; z-index: -1; left: 50%; top: -24px; width: 640px; height: 340px; margin-left: -320px; background: linear-gradient(180deg, rgba(255, 224, 138, .24), rgba(255, 224, 138, 0) 90%); clip-path: polygon(40% 0, 60% 0, 100% 100%, 0 100%); opacity: 0; pointer-events: none; animation: cel-cone 4300ms ease-in-out 200ms both; }
+@keyframes cel-cone { 0% { opacity: 0; } 14% { opacity: 1; } 80% { opacity: .85; } 100% { opacity: 0; } }
+.cel-trophy { display: flex; margin-left: 2px; }
+.cel-lead .cel-gap { background: #2A2B58; }
