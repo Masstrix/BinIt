@@ -161,7 +161,7 @@ export function WhoAreYou({ drivers, me, onClose, onChanged }: { drivers: Driver
       <Modal title={`${asking.name} already has a phone`} onClose={onClose} narrow>
         <div className="modal-body">
           <p className="muted" style={{ marginTop: 0 }}>
-            To use {asking.name} on this phone, enter the 6 digit code. Get it on the PC (Drivers, then Phones) or on {asking.name}'s own phone (tap the banner, then Pair another phone).
+            To use {asking.name} on this phone, enter the 6 digit code. Get it on the PC (open their profile, then Connections) or on {asking.name}'s own phone (tap the banner, then Pair another phone).
           </p>
           <input
             className="input code-input mono"

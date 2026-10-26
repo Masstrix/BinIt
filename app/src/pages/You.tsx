@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, useAppState, useFetch, type Driver, type Profile } from "../api";
+import { api, isTauri, useAppState, useFetch, type Driver, type Profile } from "../api";
 import { WhoAreYou } from "../components/MeBar";
 import { Coin } from "../components/Coin";
 import { Helmet } from "../components/Helmet";
@@ -101,35 +101,58 @@ export function YouPage({ path = "/you" }: { path?: string }) {
   );
 }
 
-/** From the PC: put them in the seat, change their name and colour, see how they have improved, manage their phones. */
+function ManageRow({ icon, title, sub, onClick, href, trailing }: { icon: string; title: string; sub?: string; onClick?: () => void; href?: string; trailing?: string }) {
+  const body = (
+    <>
+      <span className="manage-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={icon} /></svg>
+      </span>
+      <span className="grow">
+        <span className="manage-title">{title}</span>
+        {sub && <span className="muted manage-sub">{sub}</span>}
+      </span>
+      {trailing && <span className="chip plain">{trailing}</span>}
+      <svg className="manage-go" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+    </>
+  );
+  return href ? (
+    <a className="manage-row" href={href}>{body}</a>
+  ) : (
+    <button type="button" className="manage-row" onClick={onClick}>{body}</button>
+  );
+}
+
+/** From the PC: who is in the seat, how they look, how they have improved and (desktop app only) which devices are signed in as them. */
 function ManageDriver({ driver }: { driver: Driver }) {
   const { status } = useAppState();
   const seat = useSeatSwitcher();
   const [editing, setEditing] = useState(false);
-  const [phones, setPhones] = useState(false);
+  const [connections, setConnections] = useState(false);
+  const devices = useFetch(isTauri ? () => api.driverDevices(driver.id) : null, [driver.id, connections]);
   const seated = status?.seat === driver.id;
   return (
-    <div className="you-manage" role="group" aria-label={`Manage ${driver.name}`}>
-      {seated ? (
-        <span className="chip plain" style={{ color: "var(--peach)" }}>In the seat</span>
-      ) : (
-        <button className="btn" onClick={() => seat.choose(driver)}>Put in seat</button>
-      )}
-      <button className="btn ghost" onClick={() => setEditing(true)}>Edit name and colour</button>
-      <a className="btn ghost" href={`#/drivers/${driver.id}`}>Progress</a>
-      <button className="btn ghost" onClick={() => setPhones(true)}>Phones</button>
+    <section className="card manage" aria-label={`Manage ${driver.name}`}>
+      <h2>Manage {driver.name}</h2>
+      <div className="manage-list">
+        <ManageRow icon="M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4 21a8 8 0 0 1 16 0" title={seated ? "In the seat" : "Put in seat"} sub={seated ? "Laps are going to them now" : "Laps will go to them"} onClick={seated ? undefined : () => seat.choose(driver)} trailing={seated ? "Now" : undefined} />
+        <ManageRow icon="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" title="Name and colour" sub="Change how they appear everywhere" onClick={() => setEditing(true)} />
+        <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Progress over time" sub="Bests and speed score on every track" href={`#/drivers/${driver.id}`} />
+        {isTauri && (
+          <ManageRow icon="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM11 18h2" title="Connections" sub="Phones and browsers signed in as them" trailing={devices ? String(devices.length) : undefined} onClick={() => setConnections(true)} />
+        )}
+      </div>
       {seat.dialog}
       {editing && (
         <Modal title={`Edit ${driver.name}`} narrow onClose={() => setEditing(false)}>
           <EditDriverForm driver={driver} onDone={() => setEditing(false)} />
         </Modal>
       )}
-      {phones && (
-        <Modal title={`${driver.name}'s phones`} narrow onClose={() => setPhones(false)}>
+      {connections && (
+        <Modal title={`${driver.name}'s connections`} narrow onClose={() => setConnections(false)}>
           <PhonesDialog driver={driver} />
         </Modal>
       )}
-    </div>
+    </section>
   );
 }
 

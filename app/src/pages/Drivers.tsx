@@ -173,7 +173,7 @@ function DriverCard({ driver, seated, rating }: { driver: Driver; seated: boolea
   );
 }
 
-/** The phones paired to a driver: pair one more, sign one out, or sign them all out (a lost phone). */
+/** The phones and browsers signed in as a driver: pair one more, sign one out, or sign them all out (a lost phone). */
 export function PhonesDialog({ driver }: { driver: Driver }) {
   const [tick, setTick] = useState(0);
   const list = useFetch<Device[]>(() => api.driverDevices(driver.id), [driver.id, tick]);
@@ -195,7 +195,7 @@ export function PhonesDialog({ driver }: { driver: Driver }) {
           <span className="muted">Loading…</span>
         ) : list.length === 0 ? (
           <p className="muted" style={{ margin: 0 }}>
-            No phone is paired. The first phone to pick {driver.name} claims them; after that, another phone needs a code.
+            Nothing is signed in as {driver.name}. The first phone to pick them claims them; after that, another one needs a code.
           </p>
         ) : (
           <div className="list">
@@ -223,7 +223,7 @@ export function PhonesDialog({ driver }: { driver: Driver }) {
         {list != null && list.length > 0 && (
           <button className="btn ghost" onClick={() => confirm(`Sign every phone out of ${driver.name}?`) && run(() => api.signOutDriver(driver.id))}>Sign all out</button>
         )}
-        <button className="btn" onClick={() => run(async () => setShare(await api.pairCode(driver.id)))}>Pair a phone</button>
+        <button className="btn" onClick={() => run(async () => setShare(await api.pairCode(driver.id)))}>Get a pairing code</button>
       </div>
     </>
   );

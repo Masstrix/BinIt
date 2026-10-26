@@ -39,7 +39,7 @@ export function DriverProgress({ id }: { id: number }) {
 
   return (
     <>
-      <a href="#/drivers" className="back-link">← Drivers</a>
+      <a href={`#/you/${driver.id}`} className="back-link">← {driver.name}'s profile</a>
       <div className="head" style={{ alignItems: "center" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
           <Helmet color={driver.color} look={driver.look} size={64} seed={driver.id} />

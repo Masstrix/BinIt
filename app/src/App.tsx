@@ -21,6 +21,8 @@ import { CustomizePage } from "./pages/Customize";
 import { ShopPage } from "./pages/Shop";
 import { Updater } from "./pages/Updater";
 import { openPickDriver, PickDriverHost } from "./components/PickDriver";
+import { QrCode } from "./components/QrCode";
+import { SignIn } from "./components/SignIn";
 
 const ROUTES = [
   { path: "/", group: "Play", label: "Home", icon: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" },
@@ -100,6 +102,10 @@ function useCollapsed() {
 
 export function App() {
   const path = useHashPath();
+  const { drivers } = useAppState();
+  // A phone or browser that is not the PC and not signed in yet sees the sign-in and nothing else.
+  const [signedInTick, setSignedInTick] = useState(0);
+  const me = useFetch(() => (isTauri ? Promise.resolve(null) : api.me()), [drivers, signedInTick]);
   const [collapsed, userCollapsed, setUserCollapsed] = useCollapsed();
   useEffect(() => {
     const section = ROUTES.find((r) => r.path !== "/" && path.startsWith(r.path));
@@ -110,6 +116,7 @@ export function App() {
     document.querySelector(".content")?.scrollTo(0, 0);
   }, [path]);
   if (path.startsWith("/overlay")) return <Overlay />;
+  if (!isTauri && me && !me.local && !me.driver) return <SignIn onSignedIn={() => setSignedInTick((t) => t + 1)} />;
   if (path.startsWith("/updater")) return <Updater />;
 
   let page;
@@ -219,8 +226,11 @@ function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed: boole
       <span className="sidebar-fill" />
       {lanUrl && (
         <div className="lan-box">
-          <span className="muted">Open on any office device</span>
-          <span className="mono">{lanUrl}</span>
+          <QrCode url={lanUrl} size={84} />
+          <span className="lan-text">
+            <span className="muted">Scan or open on any office device</span>
+            <span className="mono">{lanUrl}</span>
+          </span>
         </div>
       )}
       <UpdateButton />
