@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent } from "react";
-import { isTauri, useAppState } from "../api";
+import { api, isTauri, useAppState } from "../api";
+import { readStored, writeStored } from "../persist";
 import {
   ANCHORS,
   GAME_PROFILES,
@@ -15,6 +16,7 @@ import {
   type WidgetId,
 } from "../overlayLayout";
 import { GameLabel } from "./GameIcon";
+import { useDevOverlay } from "../devOverlay";
 import { OverlayFocusToggle, OverlayShowPicker, OverlayToggle } from "./OverlayToggle";
 import {
   GapMonitorCard,
@@ -54,6 +56,40 @@ function growFrom(a: Anchor): string {
   const x = a.endsWith("left") ? "0%" : a.endsWith("right") ? "100%" : "50%";
   const y = a.startsWith("top") ? "0%" : a.startsWith("bottom") ? "100%" : "50%";
   return `${x} ${y}`;
+}
+
+/**
+ * Development builds only: draw the overlay over the desktop for the game picked in the tabs, with example data,
+ * with no game running, so it can be worked on and looked at. It also switches off "only while a game is focused"
+ * (and puts it back when turned off).
+ */
+function DevOverlayToggle({ game }: { game: string }) {
+  const { status } = useAppState();
+  const [dev, setDev] = useDevOverlay();
+  // Picking another game's tab switches the overlay to that game too.
+  useEffect(() => {
+    if (dev && dev !== game) setDev(game);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game]);
+  const flip = async () => {
+    if (dev) {
+      setDev(null);
+      const before = readStored<boolean | null>("devOverlayFocusBefore", null, (v) => typeof v === "boolean");
+      if (before !== null) await api.setOverlayFocusOnly(before).catch(() => {});
+      writeStored("devOverlayFocusBefore", null);
+    } else {
+      writeStored("devOverlayFocusBefore", status?.overlayFocusOnly ?? true);
+      await api.setOverlayEnabled(true).catch(() => {});
+      await api.setOverlayFocusOnly(false).catch(() => {});
+      setDev(game);
+    }
+  };
+  return (
+    <label className="overlay-toggle" title="Development builds only: draws this game's overlay over your desktop with example data, with no game running">
+      <span className="overlay-toggle-label">Dev: show it now</span>
+      <button className="toggle" role="switch" aria-checked={!!dev} aria-label="Draw the overlay now with example data (development only)" onClick={flip} />
+    </label>
+  );
 }
 
 const WIDGET_ORDER = Object.keys(WIDGETS) as WidgetId[];
@@ -302,8 +338,9 @@ export function OverlayEditor() {
         if (!items?.length) return null;
         return (
           <div key={a} data-anchor={a} style={{ ...anchorStyle(a, profile), pointerEvents: "auto" }}>
-            {/* On a phone the widgets are drawn bigger than life so they can be read; each grows away from its own edge. */}
-            <div style={boost === 1 ? undefined : { transform: `scale(${boost})`, transformOrigin: growFrom(a) }}>
+            {/* On a phone the widgets are drawn bigger than life so they can be read; each grows away from its own edge.
+                The wrapper lays its widgets out like the section does (a column with a gap), or they would run together. */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: anchorStyle(a, profile).alignItems, ...(boost === 1 ? {} : { transform: `scale(${boost})`, transformOrigin: growFrom(a) }) }}>
               <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={props} anchor={a} styles={layout.styles} />
             </div>
           </div>
@@ -320,6 +357,7 @@ export function OverlayEditor() {
           <OverlayToggle />
           <OverlayFocusToggle />
           <OverlayShowPicker />
+          {import.meta.env.DEV && isTauri && <DevOverlayToggle game={game} />}
         </div>
         <div className="segmented" role="group" aria-label="Game" style={{ flexWrap: "wrap" }}>
           {GAME_PROFILES.map((p) => (

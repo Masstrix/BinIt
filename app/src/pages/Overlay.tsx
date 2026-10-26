@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { api, isTauri, useAppEvent, useAppState, type AppEvent, type Driver } from "../api";
 import { Helmet } from "../components/Helmet";
-import { SectionWidgets, TOAST_KEYFRAMES, useLapToasts, useOverlayData } from "../components/OverlayWidgets";
+import { MOCK_DATA, MOCK_TOAST, SectionWidgets, TOAST_KEYFRAMES, useLapToasts, useOverlayData } from "../components/OverlayWidgets";
+import { useDevOverlay } from "../devOverlay";
 import { ANCHORS, anchorStyle, useOverlayLayout } from "../overlayLayout";
 
 export function Overlay() {
   const { status, drivers } = useAppState();
-  const game = status?.game ?? "acevo";
+  // Dev builds can draw the overlay for a chosen game with example data, with no game running (see the editor).
+  const [devGame] = useDevOverlay();
+  const game = devGame ?? status?.game ?? "acevo";
   const { layout, profile } = useOverlayLayout(game);
-  const data = useOverlayData();
-  const toast = useLapToasts(data.pbMs);
+  const live = useOverlayData();
+  const data = devGame ? MOCK_DATA : live;
+  const liveToast = useLapToasts(live.pbMs);
+  const toast = devGame ? MOCK_TOAST : liveToast;
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const keyHandler = useRef<(key: string) => void>(() => {});
   const switcherOpenRef = useRef(false);
@@ -65,7 +70,7 @@ export function Overlay() {
   const phase = status?.live?.phase ?? "menu";
   const mode = status?.overlayShow ?? "drivingPaused";
   const phaseOk = mode === "always" || phase === "driving" || (mode === "drivingPaused" && phase === "paused");
-  const showWidgets = (status?.connected || !isTauri) && (phaseOk || !isTauri);
+  const showWidgets = devGame != null || ((status?.connected || !isTauri) && (phaseOk || !isTauri));
 
   return (
     <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", fontFamily: "var(--font-body)" }}>
@@ -75,7 +80,7 @@ export function Overlay() {
           if (!items?.length) return null;
           return (
             <div key={a} style={anchorStyle(a, profile)}>
-              <SectionWidgets items={items} data={data} toast={toast} anchor={a} styles={layout.styles} />
+              <SectionWidgets items={items} data={data} toast={toast} preview={devGame != null} anchor={a} styles={layout.styles} />
             </div>
           );
         })}
