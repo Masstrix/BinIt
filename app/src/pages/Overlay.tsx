@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { api, isTauri, useAppEvent, useAppState, type AppEvent, type Driver } from "../api";
+import { CentreSwitch, isCentre, useCelebrations } from "../components/Celebrations";
 import { Helmet } from "../components/Helmet";
 import { MOCK_DATA, MOCK_TOAST, SectionWidgets, TOAST_KEYFRAMES, useLapToasts, useOverlayData } from "../components/OverlayWidgets";
 import { useDevOverlay } from "../devOverlay";
+import { fx } from "../fx";
 import { ANCHORS, anchorStyle, useOverlayLayout } from "../overlayLayout";
 
 export function Overlay() {
@@ -15,7 +17,19 @@ export function Overlay() {
   const data = devGame ? MOCK_DATA : live;
   const liveToast = useLapToasts(live.pbMs);
   const toast = devGame ? MOCK_TOAST : liveToast;
+  const celebration = useCelebrations();
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  const fxCanvas = useRef<HTMLCanvasElement>(null);
+  // The particle layer: one transparent canvas under the widgets.
+  useEffect(() => {
+    fx.attach(fxCanvas.current);
+    const onResize = () => fx.resize();
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      fx.attach(null);
+    };
+  }, []);
   const keyHandler = useRef<(key: string) => void>(() => {});
   const switcherOpenRef = useRef(false);
   switcherOpenRef.current = switcherOpen;
@@ -103,15 +117,22 @@ export function Overlay() {
   const phaseOk = mode === "always" || phase === "driving" || (mode === "drivingPaused" && phase === "paused");
   const showWidgets = devGame != null || ((status?.connected || !isTauri) && (phaseOk || !isTauri));
 
+  // Celebrations ride in the Pop-ups widget, wherever that sits. Taking the Pop-ups widget out turns them off.
+  const hasPopups = ANCHORS.some((a) => layout.sections[a]?.includes("toasts"));
+  const centre = showWidgets && hasPopups && isCentre(celebration) ? celebration : null;
+  const slotCelebration = showWidgets && hasPopups && celebration && !centre ? celebration : null;
+
   return (
     <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", fontFamily: "var(--font-body)", userSelect: "none", WebkitUserSelect: "none", cursor: "default" }}>
+      <canvas ref={fxCanvas} aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
+      {centre && <CentreSwitch key={centre.id} c={centre} />}
       {showWidgets &&
         ANCHORS.map((a) => {
           const items = layout.sections[a];
           if (!items?.length) return null;
           return (
             <div key={a} style={anchorStyle(a, profile)}>
-              <SectionWidgets items={items} data={data} toast={toast} preview={devGame != null} anchor={a} styles={layout.styles} onDriverClick={openSwitcher} />
+              <SectionWidgets items={items} data={data} toast={toast} celebration={slotCelebration} preview={devGame != null} anchor={a} styles={layout.styles} onDriverClick={openSwitcher} />
             </div>
           );
         })}

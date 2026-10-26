@@ -16,7 +16,7 @@ import {
   type WidgetId,
 } from "../overlayLayout";
 import { GameLabel } from "./GameIcon";
-import { useDevOverlay } from "../devOverlay";
+import { fireDevCelebration, useDevOverlay } from "../devOverlay";
 import { OverlayFocusToggle, OverlayShowPicker, OverlayToggle } from "./OverlayToggle";
 import {
   GapMonitorCard,
@@ -89,6 +89,30 @@ function DevOverlayToggle({ game }: { game: string }) {
       <span className="overlay-toggle-label">Dev: show it now</span>
       <button className="toggle" role="switch" aria-checked={!!dev} aria-label="Draw the overlay now with example data (development only)" onClick={flip} />
     </label>
+  );
+}
+
+/** Development builds only: play each celebration on the overlay, to look at it. */
+function DevCelebrations() {
+  const kinds: [string, string][] = [
+    ["pb", "PB"],
+    ["record", "Record"],
+    ["lead", "Lead"],
+    ["moved", "Moved up"],
+    ["level", "Level up"],
+    ["sticker", "Sticker"],
+    ["switch", "Switch"],
+    ["switchMoving", "Switch (moving)"],
+  ];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }} role="group" aria-label="Play a celebration (development only)">
+      <span className="muted" style={{ fontSize: 13 }}>Dev: play</span>
+      {kinds.map(([k, label]) => (
+        <button key={k} type="button" className="chip plain" onClick={() => fireDevCelebration(k)}>
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -359,6 +383,7 @@ export function OverlayEditor() {
           <OverlayShowPicker />
           {import.meta.env.DEV && isTauri && <DevOverlayToggle game={game} />}
         </div>
+        {import.meta.env.DEV && <DevCelebrations />}
         <div className="segmented" role="group" aria-label="Game" style={{ flexWrap: "wrap" }}>
           {GAME_PROFILES.map((p) => (
             <button key={p.key} aria-pressed={game === p.key} onClick={() => setGame(p.key)}>

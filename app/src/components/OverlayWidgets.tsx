@@ -7,6 +7,7 @@ import { lapKind, lapTime, trackName } from "../format";
 import { words } from "../vocab";
 import { orientationFor, styleOf, WIDGETS, type Anchor, type Orientation, type OverlayLayout, type WidgetId } from "../overlayLayout";
 import { BASE, gapText as ladderGap, place, room } from "./GapLadder";
+import { CelebrationView, type Celebration } from "./Celebrations";
 import { Helmet } from "./Helmet";
 import { QrCode } from "./QrCode";
 import { Signed } from "./Signed";
@@ -878,6 +879,8 @@ export function useLapToasts(pbMs: number | null): Toast | null {
       const moved = s?.position != null && s.position !== s.previousPosition ? ` · up to P${s.position}` : "";
       let t: Omit<Toast, "id">;
       const kind = lapKind(r.lap);
+      // The big moments (PB, record, the lead) are celebrations now; the Pop-ups slot shows those.
+      if (kind === "timed" && (r.comboRecord || r.personalBest || (s?.position === 1 && s.previousPosition !== 1))) return;
       if (kind === "outLap") t = { tone: "out", title: `Out lap ${lapTime(r.lap.timeMs)}`, detail: "Timing starts now. Good luck!" };
       else if (kind === "inLap") t = { tone: "in", title: `In lap ${lapTime(r.lap.timeMs)}`, detail: "Not timed" };
       else if (kind === "partial") t = { tone: "lap", title: `${lapTime(r.lap.timeMs)} not timed`, detail: `Bin It joined part-way through the ${words(r.lap.game).lap}` };
@@ -918,10 +921,13 @@ export function SectionWidgets({
   anchor,
   styles,
   onDriverClick,
+  celebration = null,
 }: {
   items: WidgetId[];
   data: OverlayData;
   toast: Toast | null;
+  /** A celebration to show in the Pop-ups slot, ahead of the quiet toasts. */
+  celebration?: Celebration | null;
   preview?: boolean;
   itemProps?: ItemProps;
   /** The section these sit in, for a widget (the gap tower) that lays itself out to suit its place. */
@@ -955,6 +961,7 @@ export function SectionWidgets({
           return wrap(g, <Tower data={data} orientation={orientationFor(anchor)} />);
         }
         if (g === "qr") return wrap(g, <QrCard data={data} />);
+        if (celebration) return wrap(g, <CelebrationView key={celebration.id} c={celebration} layout={orientationFor(anchor) === "horizontal" ? "pill" : "card"} />);
         const shown = toast ?? (preview ? MOCK_TOAST : null);
         return shown ? wrap(g, <ToastCard toast={shown} animate={!preview} />) : null;
       })}
