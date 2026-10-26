@@ -147,7 +147,7 @@ export function Overlay() {
         })}
 
       {/* The particles drift over the pop-up that made them (and, briefly, whatever is near it). */}
-      <canvas ref={fxCanvas} aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
+      <canvas id="tt-fx" ref={fxCanvas} aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
       {switcherOpen && <Switcher onClose={closeSwitcher} keyHandler={keyHandler} />}
       <style>{TOAST_KEYFRAMES}</style>
     </div>

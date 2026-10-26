@@ -43,6 +43,19 @@ class Fx {
     else this.resize();
   }
 
+  /**
+   * The overlay window is created hidden and resized to the screen before it is shown, so the page can have measured
+   * a different size when the canvas was set up. Check the size whenever something is about to be drawn.
+   */
+  private fit() {
+    // Find the layer by itself when it was not handed one (or lost it), so a reloaded module still draws.
+    if (!this.canvas || !this.canvas.isConnected) this.attach(document.getElementById("tt-fx") as HTMLCanvasElement | null);
+    const c = this.canvas;
+    if (!c || !window.innerWidth || !window.innerHeight) return;
+    const dpr = window.devicePixelRatio || 1;
+    if (c.width !== Math.round(window.innerWidth * dpr) || c.height !== Math.round(window.innerHeight * dpr)) this.resize();
+  }
+
   resize() {
     const c = this.canvas;
     if (!c) return;
@@ -71,6 +84,7 @@ class Fx {
   }
 
   private add(p: Partial<Particle> & { kind: Kind }) {
+    this.fit();
     this.parts.push({ x: 0, y: 0, vx: 0, vy: 0, size: 10, life: 1.5, age: 0, color: "#fff", rot: 0, r1: 0, ...p });
     if (!this.raf) {
       this.last = performance.now();
@@ -145,6 +159,7 @@ class Fx {
   }
 
   private frame(now: number) {
+    this.fit();
     const ctx = this.ctx;
     if (!ctx) {
       this.raf = 0;
@@ -152,6 +167,7 @@ class Fx {
     }
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
+    this.fit();
     const w = window.innerWidth;
     const h = window.innerHeight;
     ctx.clearRect(0, 0, w, h);
