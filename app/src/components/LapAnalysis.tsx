@@ -10,9 +10,9 @@ import { TrackFilters, trackKey, useTrackSelection } from "./TrackFilters";
 import { GapLadder } from "./GapLadder";
 import { cameraAt, MapViewControls, pointAlong, TrackMap, useMapView } from "./TrackMap";
 
-const THROTTLE = "#4BE3A6";
-const BRAKE = "#FF6B8A";
-const LAP_A = "#A9AEFF";
+const THROTTLE = "#4fd39a";
+const BRAKE = "#ff7a92";
+const LAP_A = "#c9c9ff";
 const LAP_B = "#FFC93C";
 
 /** One sample of a recorded lap: where on the lap, when, and what the driver was doing. */
@@ -270,7 +270,7 @@ export function LapAnalysis({ lapId }: { lapId: number | null }) {
       value: p.key,
       label: `${name(p.driverId)} · ${carName(p.car)}`,
       hint: `Fastest ${lapTime(p.laps[0].timeMs)} · ${p.laps.length} ${p.laps.length === 1 ? w.lap : w.laps}`,
-      icon: <Helmet color={d?.color ?? "#5B6488"} size={30} seed={d?.id} />,
+      icon: <Helmet color={d?.color ?? "#5b6578"} size={30} seed={d?.id} />,
     };
   });
   // A pairing's laps for the dropdown: fastest first, each with when it was set.
@@ -388,7 +388,7 @@ function LapCard({
       <Dropdown label={title} value={pairValue} options={anyLabel ? [{ value: "", label: anyLabel }, ...pairItems] : pairItems} onChange={onPair} className="la-lap-who">
         {info ? (
           <>
-            <Helmet color={driver?.color ?? "#5B6488"} size={40} seed={driver?.id} />
+            <Helmet color={driver?.color ?? "#5b6578"} size={40} seed={driver?.id} />
             <span className="la-lap-text">
               <span className="la-lap-name"><i style={{ background: color }} />{driver?.name ?? "Guest"}{chevron}</span>
               <span className="muted" style={{ fontSize: 12 }}>{carName(info.car)} · {ago(info.at)}</span>
@@ -949,7 +949,7 @@ const START_ICON = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" s
 const ALL_ICON = <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4" /></svg>;
 
 /** One colour per sector, used on the overview strip and the map. */
-const SECTOR_COLORS = ["#7EA8FF", "#4BE3A6", "#FFB86B", "#C38BFF", "#FF7DB0", "#6FE0E8"];
+const SECTOR_COLORS = ["#7EA8FF", "#4fd39a", "#FFB86B", "#b79bff", "#FF7DB0", "#6FE0E8"];
 
 /**
  * The whole lap as a thin speed line over its sectors (each tinted and labelled), with the part in

@@ -8,7 +8,7 @@ import { TrackMap } from "./TrackMap";
 import { carName, gameName, lapTime, prettify, SECTOR_PURPLE } from "../format";
 
 /** One colour per sector, in lap order, so the map and its legend agree. */
-const SECTOR_HUES = ["#4FC3FF", "#FF9F6B", "#FF7AC6", "#4BE3A6", "#FFC93C", "#B18CFF"];
+const SECTOR_HUES = ["#4FC3FF", "#FF9F6B", "#FF7AC6", "#4fd39a", "#FFC93C", "#b79bff"];
 
 /**
  * The selected track, front and centre: where it is, which layout, what's been driven on it, and

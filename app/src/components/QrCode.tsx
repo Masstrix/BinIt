@@ -13,7 +13,7 @@ export function QrCode({ url, size = 120 }: { url: string | null | undefined; si
 
   return (
     <div
-      style={{ width: size, height: size, borderRadius: 18, background: "#EEF0FF", padding: 6, flex: "none", display: "grid", placeItems: "center", color: "var(--bg)", fontSize: 12 }}
+      style={{ width: size, height: size, borderRadius: 18, background: "#e8ebf4", padding: 6, flex: "none", display: "grid", placeItems: "center", color: "var(--bg)", fontSize: 12 }}
       role="img"
       aria-label={url ? `QR code for ${url}` : "No network address"}
       dangerouslySetInnerHTML={svg ? { __html: svg } : undefined}

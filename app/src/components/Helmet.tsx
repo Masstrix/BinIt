@@ -102,11 +102,11 @@ export function Helmet({ color, size = 48, tile = true, mood = "idle", seed }: {
     <svg className={face === "binned" ? "helmet-shake" : undefined} width={tile ? size * 0.76 : size} height={tile ? size * 0.76 : size} viewBox="0 0 48 48" aria-hidden="true">
       {/* Full-face shell: the straight underside rises from the chin to the nape, as on a race helmet. */}
       <path d="M11.2 34C7.4 26.4 8 15.6 15.6 10.2C21.6 6 31.6 5.6 38 9C43 11.8 46.2 17 46.6 23L46.6 31.4C46.6 36.4 44.6 39.6 40.8 40L13.4 35.6C12.4 35.4 11.6 34.8 11.2 34Z" fill={color} />
-      <path d="M11.2 34L13.4 35.6L40.8 40C43 39.8 44.6 38.6 45.6 36.8L11.6 31.4Z" fill="#0D1224" opacity="0.25" />
-      <path d="M24.2 14.8H44.4C45.6 17 46.3 19.6 46.6 22.6V26.2H25.4C22.8 26.2 21.4 24.4 21.8 22L22.6 17C22.8 15.6 23.4 14.8 24.2 14.8Z" fill="#0D1224" />
-      <circle cx="18" cy="20.6" r="1.6" fill="#0D1224" opacity="0.5" />
+      <path d="M11.2 34L13.4 35.6L40.8 40C43 39.8 44.6 38.6 45.6 36.8L11.6 31.4Z" fill="#0e1117" opacity="0.25" />
+      <path d="M24.2 14.8H44.4C45.6 17 46.3 19.6 46.6 22.6V26.2H25.4C22.8 26.2 21.4 24.4 21.8 22L22.6 17C22.8 15.6 23.4 14.8 24.2 14.8Z" fill="#0e1117" />
+      <circle cx="18" cy="20.6" r="1.6" fill="#0e1117" opacity="0.5" />
       <path d="M13 28C12.4 19.6 17 12.6 25.4 10.4" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" opacity="0.55" />
-      <path d="M36.6 32.4L43.6 33.5M37.2 35.2L42.6 36.1" stroke="#0D1224" strokeWidth="1.3" strokeLinecap="round" opacity="0.45" />
+      <path d="M36.6 32.4L43.6 33.5M37.2 35.2L42.6 36.1" stroke="#0e1117" strokeWidth="1.3" strokeLinecap="round" opacity="0.45" />
       <g className="helmet-look" style={vars}>
         <g key={face} className="helmet-pop">
           <g className={blinks ? "helmet-blink" : undefined}>

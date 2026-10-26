@@ -79,8 +79,8 @@ export const LAP_BADGE: Record<Exclude<LapKind, "timed">, { text: string; classN
 export const GAMES = [
   { key: "acevo", name: "AC EVO", detail: "Laps · shared memory", ready: true, mark: "EVO", color: "#E5484D", ink: "#FFFFFF" },
   { key: "ac", name: "Assetto Corsa", detail: "Laps · shared memory", ready: true, mark: "AC", color: "#3E7BFA", ink: "#FFFFFF" },
-  { key: "dr2", name: "DiRT Rally 2.0", detail: "Stages · UDP telemetry", ready: false, mark: "DR2", color: "#2FBF8F", ink: "#0D1224" },
-  { key: "acr", name: "Assetto Corsa Rally", detail: "Stages · shared memory", ready: true, mark: "ACR", color: "#F5A524", ink: "#0D1224" },
+  { key: "dr2", name: "DiRT Rally 2.0", detail: "Stages · UDP telemetry", ready: false, mark: "DR2", color: "#2FBF8F", ink: "#0e1117" },
+  { key: "acr", name: "Assetto Corsa Rally", detail: "Stages · shared memory", ready: true, mark: "ACR", color: "#F5A524", ink: "#0e1117" },
 ];
 
 /** Keys of the games Bin It can record, in display order. */
@@ -109,8 +109,8 @@ export function whenLabel(ts: number, now = Date.now()): string {
 }
 
 /** Timing-screen colours: fastest sector on the board, and a driver's own best sector. */
-export const SECTOR_PURPLE = "#C38BFF";
-export const SECTOR_MINT = "#4BE3A6";
+export const SECTOR_PURPLE = "#b79bff";
+export const SECTOR_MINT = "#4fd39a";
 
 /** Fastest time for each sector across a board (null where nobody has one). */
 export function bestSectors(board: { sectorsMs: number[] }[]): (number | null)[] {

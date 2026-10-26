@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { api, isTauri, openDownload, useAppState, useCurrentChallenge, useDriverMap, useFetch, type Driver } from "../api";
-import { Helmet, Sparkle } from "../components/Helmet";
+import { Helmet } from "../components/Helmet";
 import { LiveMap } from "../components/LiveMap";
 import { useSeatSwitcher } from "../components/SeatSwitcher";
 import { Podium } from "../components/Podium";
@@ -31,21 +31,18 @@ export function Home() {
 
   return (
     <>
-      <div className="head" style={{ alignItems: "flex-end" }}>
+      <div className="page-head">
         <h1>Who's in the seat?</h1>
-        <span className="muted">
+        <span className="muted page-sub">
           {session ? `${trackName(session.track, session.layout)} · ${carName(session.car)}` : status?.connected ? `Waiting for you to ${w.rally ? "start a stage" : "get on track"}` : "Start a game to begin timing"}
         </span>
       </div>
 
+      <div className="home-top">
       <section className="hero" aria-label="Current driver">
-        <Sparkle size={26} opacity={0.7} style={{ right: 36, top: 28 }} />
-        <Sparkle size={14} opacity={0.5} style={{ right: 80, top: 70 }} delay={0.9} />
-        <Sparkle size={10} opacity={0.6} style={{ right: 128, top: 24 }} delay={1.7} />
-        <Sparkle size={16} opacity={0.4} style={{ right: 22, top: 104 }} delay={2.4} />
         <div className="hero-top">
           <span className="hero-tile">
-            <Helmet color={seat?.color ?? "#9AA3C7"} size={70} tile={false} seed={seat?.id} mood={seat ? "focus" : "idle"} />
+            <Helmet color={seat?.color ?? "#8f99b3"} size={84} tile={false} seed={seat?.id} mood={seat ? "focus" : "idle"} />
           </span>
           <div className="hero-who">
             <div className="hero-kicker">{seat ? "Driving now" : "Nobody picked"}</div>
@@ -60,42 +57,56 @@ export function Home() {
           </button>
         </div>
 
-        <div className="stat-grid">
-          <div className={`stat${cutLap ? " invalid" : ""}`}>
-            <div className="label" style={{ color: "#fff", opacity: 0.85 }}>{swapped ? "Driver changed" : cutLap ? `${cap(w.lap)} invalid` : `Current ${w.lap}`}</div>
-            <span className="mono">{status?.live?.driving ? lapTime(status.live.currentLapMs) : "--:--.---"}</span>
+        <div className={`now-lap${cutLap ? " invalid" : ""}`}>
+          <div className="now-lap-main">
+            <span className="label">{swapped ? "Driver changed" : cutLap ? `${cap(w.lap)} invalid` : `Current ${w.lap}`}</span>
+            <span className="mono now-lap-time">{status?.live?.driving ? lapTime(status.live.currentLapMs) : "--:--.---"}</span>
           </div>
+          {status?.live?.driving && status.live.timing?.deltaMs != null && !cutLap && (
+            <>
+              <span className={`delta-pill${status.live.timing.deltaMs > 0 ? " slower" : ""}`}>
+                {status.live.timing.deltaMs <= 0 ? "−" : "+"}{(Math.abs(status.live.timing.deltaMs) / 1000).toFixed(3)}
+              </span>
+              <span className="muted now-lap-ref">vs {status.live.timing.reference ?? "your best"}</span>
+            </>
+          )}
+        </div>
+        <div className="stat-grid">
           <div className="stat">
-            <div className="label" style={{ color: "#fff", opacity: 0.85 }}>Last {w.lap}</div>
+            <div className="label">Last {w.lap}</div>
             <span className="mono" style={seatLast && !seatLast.valid ? { textDecoration: "line-through", opacity: 0.7 } : undefined}>
               {lapTime(seatLast?.timeMs)}
             </span>
           </div>
           <div className="stat">
-            <div className="label" style={{ color: "#fff", opacity: 0.85 }}>Personal best</div>
-            <span className="mono" style={{ color: "var(--mint-bright)" }}>{lapTime(seatPb?.timeMs)}</span>
+            <div className="label">Personal best</div>
+            <span className="mono" style={{ color: "var(--mint)" }}>{lapTime(seatPb?.timeMs)}</span>
           </div>
         </div>
 
         {challenge && seat && (
-          <div className="banner">
-            <span className="badge">{standing ? `#${standing.position}` : "?"}</span>
-            <span>
+          <a className="banner" href={`#/challenges/${challenge.id}`}>
+            <span className="badge">{standing ? `P${standing.position}` : "?"}</span>
+            <span className="banner-text">
               {!standing
                 ? `Set a ${w.lap === "run" ? "time" : "lap"} to get on the board in ${challenge.name}.`
                 : standing.position === 1
                   ? `${seat.name} holds the crown in ${challenge.name}. Defend it!`
                   : `Just ${(standing.gapMs / 1000).toFixed(3)}s off the crown. ${leaderName} holds P1 in ${challenge.name}.`}
             </span>
-          </div>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+          </a>
         )}
       </section>
 
-      <LiveMap />
+      <div className="home-side">
+        <LiveMap />
+        <RecentLaps />
+      </div>
+      </div>
 
-      <DriverPicker drivers={drivers} seatId={status?.seat ?? null} />
-
-      <div className="row">
+      <div className="home-bottom">
+        <DriverPicker drivers={drivers} seatId={status?.seat ?? null} />
         <section className="card" aria-label="Active challenge">
           {challenge ? (
             <>
@@ -118,50 +129,65 @@ export function Home() {
           )}
         </section>
 
-        <section className="card" aria-label={`Recent ${w.laps}`}>
-          <h2>Recent {w.laps}</h2>
-          {recentLaps.length === 0 && <div className="empty">No {w.laps} yet. Get out there!</div>}
-          <div className="list">
-            {recentLaps.slice(0, 6).map((l) => {
-              const d = l.driverId != null ? driverMap.get(l.driverId) : undefined;
-              const kind = lapKind(l);
-              const badge = kind === "timed" ? null : LAP_BADGE[kind];
-              return (
-                <div className="list-row" key={l.id}>
-                  <span className="grow">
-                    <span>
-                      {d?.name ?? "Guest"} <span className="muted" style={{ fontSize: 14 }}>· {words(l.game).lap} {l.lapNumber} · {ago(l.recordedAt)}</span>
-                    </span>
-                  </span>
-                  {badge && <span className={badge.className} title={badge.title}>{badge.text}</span>}
-                  {l.driverId == null && seat && (
-                    <button className="chip plain" style={{ border: "none" }} onClick={() => api.claimLap(l.id, seat.id)}>
-                      Claim for {seat.name}
-                    </button>
-                  )}
-                  <span
-                    className="mono"
-                    style={{
-                      fontSize: 15,
-                      ...(kind === "cut" ? { color: "#7F88AE", textDecoration: "line-through" } : kind !== "timed" ? { color: "#7F88AE" } : {}),
-                    }}
-                  >
-                    {lapTime(l.timeMs)}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          {comboBoard && comboBoard.length > 0 && seatPb && (
-            <span className="muted" style={{ fontSize: 13 }}>
-              {seat?.name} is P{seatPb.position} on this combo ({gap(seatPb.gapMs)})
-            </span>
-          )}
-        </section>
       </div>
 
       {isTauri && <GetLatest />}
     </>
+  );
+}
+
+function RecentLaps() {
+  const { status, recentLaps } = useAppState();
+  const driverMap = useDriverMap();
+  const seat = status?.seat != null ? driverMap.get(status.seat) : undefined;
+  const session = status?.session ?? null;
+  const w = words(session?.game ?? status?.game);
+  const comboBoard = useFetch(
+    session ? () => api.leaderboard({ game: session.game, track: session.track, layout: session.layout, car: session.car }) : null,
+    [session?.game, session?.track, session?.layout, session?.car],
+  );
+  const seatPb = seat ? comboBoard?.find((e) => e.driverId === seat.id) : undefined;
+  return (
+    <section className="card" aria-label={`Recent ${w.laps}`}>
+      <h2>Recent {w.laps}</h2>
+      {recentLaps.length === 0 && <div className="empty">No {w.laps} yet. Get out there!</div>}
+      <div className="list">
+        {recentLaps.slice(0, 6).map((l) => {
+          const d = l.driverId != null ? driverMap.get(l.driverId) : undefined;
+          const kind = lapKind(l);
+          const badge = kind === "timed" ? null : LAP_BADGE[kind];
+          return (
+            <div className="list-row" key={l.id}>
+              <span className="grow">
+                <span>
+                  {d?.name ?? "Guest"} <span className="muted" style={{ fontSize: 14 }}>· {words(l.game).lap} {l.lapNumber} · {ago(l.recordedAt)}</span>
+                </span>
+              </span>
+              {badge && <span className={badge.className} title={badge.title}>{badge.text}</span>}
+              {l.driverId == null && seat && (
+                <button className="chip plain" style={{ border: "none" }} onClick={() => api.claimLap(l.id, seat.id)}>
+                  Claim for {seat.name}
+                </button>
+              )}
+              <span
+                className="mono"
+                style={{
+                  fontSize: 15,
+                  ...(kind === "cut" ? { color: "#8f99b3", textDecoration: "line-through" } : kind !== "timed" ? { color: "#8f99b3" } : {}),
+                }}
+              >
+                {lapTime(l.timeMs)}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {comboBoard && comboBoard.length > 0 && seatPb && (
+        <span className="muted" style={{ fontSize: 13 }}>
+          {seat?.name} is P{seatPb.position} on this combo ({gap(seatPb.gapMs)})
+        </span>
+      )}
+    </section>
   );
 }
 

@@ -10,11 +10,11 @@ export const PALETTE = [
   ["#FF9F6B", "Peach"],
   ["#4FC3FF", "Sky"],
   ["#FF7AC6", "Pink"],
-  ["#4BE3A6", "Mint"],
+  ["#4fd39a", "Mint"],
   ["#FFC93C", "Gold"],
-  ["#B18CFF", "Violet"],
-  ["#FF6B8A", "Red"],
-  ["#EEF0FF", "White"],
+  ["#b79bff", "Violet"],
+  ["#ff7a92", "Red"],
+  ["#e8ebf4", "White"],
 ] as const;
 
 export function DriversPage({ path = "/drivers" }: { path?: string }) {

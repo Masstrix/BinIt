@@ -174,7 +174,7 @@ function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed: boole
       <UpdateButton />
       <div className="seat-card">
         <button type="button" className="seat-who" data-driving={driving || undefined} onClick={switchDriver} title={driver ? `${driver.name} is in the seat. Switch driver (F8)` : "Nobody in the seat. Pick a driver"}>
-          <Helmet color={driver?.color ?? "#5B6488"} size={44} seed={driver?.id} mood={driving ? "happy" : "idle"} />
+          <Helmet color={driver?.color ?? "#5b6578"} size={44} seed={driver?.id} mood={driving ? "happy" : "idle"} />
           <span className="seat-text">
             <span className="seat-name">{driver ? driver.name : "Guest"}</span>
             <span className="seat-sub" data-driving={driving || undefined}>{driving ? "Driving" : driver ? "In the seat" : "Pick a driver"}</span>

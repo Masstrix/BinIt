@@ -11,7 +11,7 @@ import { GapLadder, initials } from "./GapLadder";
 /** Seconds to linger on the finished picture before the replay starts over. */
 const HOLD_MS = 2000;
 const SPEEDS = [1, 2, 4] as const;
-const GUEST = "#9AA3C7";
+const GUEST = "#8f99b3";
 
 /** How far round the lap (0..1) a car with this timing profile is after `t` ms. */
 function progressAt(profile: number[], t: number): number {

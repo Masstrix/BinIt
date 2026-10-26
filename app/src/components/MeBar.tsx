@@ -22,7 +22,7 @@ export function MeBar() {
   return (
     <div className="me-bar">
       <button type="button" className="me-who" onClick={() => setPicking(true)} title="Choose who you are on this phone">
-        <Helmet color={me?.color ?? "#5B6488"} size={34} seed={me?.id} mood={inSeat ? "happy" : "idle"} />
+        <Helmet color={me?.color ?? "#5b6578"} size={34} seed={me?.id} mood={inSeat ? "happy" : "idle"} />
         <span className="me-text">
           <span className="me-name">{me ? me.name : "Who are you?"}</span>
           <span className="me-sub">{me ? (inSeat ? "In the seat" : "Tap to change") : "Pick your driver"}</span>

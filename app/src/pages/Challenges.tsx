@@ -221,7 +221,7 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
           </div>
           {board.map((e) => {
             const d = e.driverId != null ? drivers.get(e.driverId) : undefined;
-            const color = d?.color ?? "#5B6488";
+            const color = d?.color ?? "#5b6578";
             const me = live && e.driverId != null && e.driverId === seat;
             const prize = prizeFor(c, e.position, board.length);
             const podium = e.position <= 3;

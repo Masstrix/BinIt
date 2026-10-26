@@ -166,7 +166,7 @@ export function LeaderboardPage() {
                         <span className="mono r lb-time">{lapTime(e.timeMs)}</span>
                         <span className="lb-break" />
                         <span className="lb-c-stat lb-driver-cell" data-label="DRIVER">
-                          <Helmet color={d?.color ?? "#5B6488"} size={28} seed={d?.id} />
+                          <Helmet color={d?.color ?? "#5b6578"} size={28} seed={d?.id} />
                           <span className="lb-name" style={{ fontSize: 14 }}>{d?.name ?? "Guest"}</span>
                         </span>
                         <span className="r lb-small lb-c-stat" data-label="SET" style={{ color: "var(--muted)" }}>{ago(e.setAt)}</span>
@@ -192,7 +192,7 @@ export function LeaderboardPage() {
                     </div>
                     {board.map((e, idx) => {
                       const d = e.driverId != null ? driverMap.get(e.driverId) : undefined;
-                      const color = d?.color ?? "#5B6488";
+                      const color = d?.color ?? "#5b6578";
                       const top = idx === 0;
                       const podium = idx < 3;
                       const me = e.driverId != null && e.driverId === seat;
