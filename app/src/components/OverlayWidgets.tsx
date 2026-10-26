@@ -415,9 +415,9 @@ const WAVE_OUT_MS = 170;
 const WAVE_IN_MS = 380;
 
 /** Your best is green and the fastest lap anyone has set is purple, as everywhere else in the app. */
-const REF_COLOUR: Record<string, { fg: string; bg: string }> = {
-  pb: { fg: "var(--mint)", bg: "rgba(79, 211, 154, 0.2)" },
-  best: { fg: "var(--fast)", bg: "rgba(183, 155, 255, 0.2)" },
+const REF_COLOUR: Record<string, { fg: string; bg: string; ring: string }> = {
+  pb: { fg: "#6FF0B4", bg: "rgba(79, 211, 154, 0.3)", ring: "rgba(79, 211, 154, 0.75)" },
+  best: { fg: "#CDB8FF", bg: "rgba(183, 155, 255, 0.3)", ring: "rgba(183, 155, 255, 0.75)" },
 };
 
 /**
@@ -506,11 +506,11 @@ export function TimingCard({ data, mode }: { data: OverlayData; mode?: string })
           <span
             aria-hidden="true"
             className="tt-slide"
-            style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 999, background: (REF_COLOUR[shown ?? "pb"] ?? REF_COLOUR.pb).bg, transition: "left 0.3s cubic-bezier(0.3, 0.8, 0.3, 1), background 0.3s", width: "calc((100% - 6px * (var(--n) - 1)) / var(--n))", left: "calc(var(--i) * ((100% - 6px * (var(--n) - 1)) / var(--n) + 6px))" }}
+            style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 999, background: (REF_COLOUR[shown ?? "pb"] ?? REF_COLOUR.pb).bg, boxShadow: `inset 0 0 0 1.5px ${(REF_COLOUR[shown ?? "pb"] ?? REF_COLOUR.pb).ring}`, transition: "left 0.3s cubic-bezier(0.3, 0.8, 0.3, 1), background 0.3s, box-shadow 0.3s", width: "calc((100% - 6px * (var(--n) - 1)) / var(--n))", left: "calc(var(--i) * ((100% - 6px * (var(--n) - 1)) / var(--n) + 6px))" }}
           />
           {refs.map((r) => {
             const on = r.kind === shown;
-            const look = { position: "relative" as const, flex: 1, textAlign: "center" as const, padding: "4px 0", borderRadius: 999, font: "500 11px var(--font-mono)", background: on ? "transparent" : "var(--panel-2)", color: on ? (REF_COLOUR[r.kind] ?? REF_COLOUR.pb).fg : "var(--muted)", transition: "color 0.25s, background 0.25s" };
+            const look = { position: "relative" as const, flex: 1, textAlign: "center" as const, padding: "5px 0", borderRadius: 999, font: on ? "800 12px var(--font-mono)" : "500 11px var(--font-mono)", letterSpacing: on ? "0.02em" : undefined, background: on ? "transparent" : "var(--panel-2)", color: on ? (REF_COLOUR[r.kind] ?? REF_COLOUR.pb).fg : "var(--muted)", transition: "color 0.25s, background 0.25s" };
             // Only the pills can be clicked (and only when there is more than one lap to choose between).
             return several ? (
               <button
