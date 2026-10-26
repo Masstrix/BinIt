@@ -381,6 +381,24 @@ h2 { font-size: 22px; line-height: 1.2; }
 .ch-tab-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ch-tab-meta { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+.ch-stack { display: flex; flex-direction: column; gap: 28px; }
+.ch-head { align-items: flex-end; }
+.ch-sub { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 16px; }
+.ch-views { width: 280px; max-width: 100%; }
+.ch-views button { flex: 1; }
+.ch-top { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 24px; align-items: stretch; }
+.ch-top > * { min-width: 0; }
+.ch-podium { padding: 0; overflow: hidden; justify-content: flex-end; border-radius: 32px; }
+.ch-podium .podium-stage { max-width: none; }
+.ch-gaps { padding: 24px; border-radius: 32px; }
+.ch-gaps-rail { position: relative; flex: 1; margin: 18px 0 4px; }
+.ch-gaps-rail::before { content: ""; position: absolute; left: 20px; top: 0; bottom: 0; width: 2px; background: var(--panel-2); }
+.ch-gap-row { position: absolute; left: 0; right: 0; display: flex; align-items: center; gap: 12px; transform: translateY(-50%); transition: top 500ms cubic-bezier(.2, .8, .2, 1); }
+.ch-gap-tile { flex: none; width: 44px; height: 44px; border-radius: 14px; display: flex; align-items: center; justify-content: center; position: relative; }
+.ch-gap-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-gap-val { font-size: 13px; }
+@media (max-width: 1000px) { .ch-top { grid-template-columns: 1fr; } .ch-gaps-rail { min-height: 0; } }
+@media (prefers-reduced-motion: reduce) { .ch-gap-row { transition: none; } }
 .ch-view { gap: 28px; padding: 28px; border-radius: 32px; }
 .ch-name { font-size: clamp(24px, 2.6vw, 34px); margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .ch-title { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
@@ -389,7 +407,7 @@ h2 { font-size: 22px; line-height: 1.2; }
 @media (max-width: 640px) { .trophy-badge:not(.sm) { width: 38px; height: 38px; border-radius: 12px; } }
 .ch-rules { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .ch-rules .chip { font-size: 13px; padding: 6px 12px; }
-.ch-clock { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.ch-clock { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; }
 .ch-countdown { font-size: clamp(22px, 2.4vw, 30px); }
 .ch-view .lb-scroll { margin: 0 -12px; }
 
