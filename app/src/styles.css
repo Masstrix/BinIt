@@ -27,7 +27,8 @@
   --radius: 28px;
   --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
   --font-body: "Plus Jakarta Sans", system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  /* Numbers and captions: Plus Jakarta Sans with tabular figures (plain zero, steady widths). */
+  --font-mono: "Plus Jakarta Sans", system-ui, sans-serif;
   --font-num: "Archivo", system-ui, sans-serif;
   color-scheme: dark;
 }
@@ -50,6 +51,8 @@ input::placeholder { color: #8f99b3; }
 h1, h2, h3 { margin: 0; font-family: var(--font-display); font-weight: 700; letter-spacing: -0.03em; }
 h1 { font-size: clamp(28px, 3vw, 34px); line-height: 1.1; }
 h2 { font-size: 22px; line-height: 1.2; }
+/* The font shorthand resets this, so force it: digits keep a fixed width so timers do not jitter. */
+* { font-variant-numeric: tabular-nums !important; }
 .mono { font-family: var(--font-mono); font-weight: 500; letter-spacing: -0.06em; }
 .muted { color: var(--muted); }
 
