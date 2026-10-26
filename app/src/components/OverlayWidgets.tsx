@@ -258,15 +258,12 @@ export function StandingsCard({ data }: { data: OverlayData }) {
 
 const SECTOR_COLOURS = { purple: "#B79BFF", green: "#4FD39A", yellow: "#FFC93C", current: "#E8EBF4", pending: "#262D3B" };
 
-const CAPTION = { font: "500 11px var(--font-mono)", letterSpacing: "0.08em", color: "var(--muted)", textTransform: "uppercase" } as const;
-
 /** Delta to the reference lap plus one bar per sector (purple / green / yellow). */
 export function TimingCard({ data }: { data: OverlayData }) {
   const t = data.timing;
   if (data.outLap || !t) {
     return data.outLap ? (
       <div style={{ ...card, padding: "14px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 4 }}>
-        <span style={CAPTION}>Live timing</span>
         <span style={{ font: "700 20px var(--font-display)", letterSpacing: "-0.02em" }}>Out lap</span>
         <span style={{ fontSize: 12, color: "var(--muted)" }}>Timing starts at the line</span>
       </div>
@@ -279,14 +276,11 @@ export function TimingCard({ data }: { data: OverlayData }) {
   const pills = ["PB", "Leader"];
   return (
     <div style={{ ...card, borderRadius: 28, padding: "16px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 10, ...(cut ? { boxShadow: "inset 0 0 0 1.5px rgba(255,122,146,0.7), 0 8px 30px rgba(0,0,0,0.35)", background: "#2A1420" } : {}) }}>
-      <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-        <span style={CAPTION}>Live timing</span>
-        {cut && (
-          <span style={{ font: "500 11px var(--font-mono)", letterSpacing: "0.06em", color: "var(--red)" }}>
-            {data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : `${words(data.game).lap.toUpperCase()} INVALID`} · WON'T COUNT
-          </span>
-        )}
-      </span>
+      {cut && (
+        <span style={{ font: "500 11px var(--font-mono)", letterSpacing: "0.06em", color: "var(--red)" }}>
+          {data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : `${words(data.game).lap.toUpperCase()} INVALID`} · WON'T COUNT
+        </span>
+      )}
       {t.reference && !cut && (
         <span style={{ display: "flex", gap: 6 }}>
           {pills.map((name) => {
