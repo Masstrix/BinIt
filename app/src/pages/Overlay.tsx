@@ -129,7 +129,6 @@ export function Overlay() {
 
   return (
     <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", fontFamily: "var(--font-body)", userSelect: "none", WebkitUserSelect: "none", cursor: "default" }}>
-      <canvas ref={fxCanvas} aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
       {centre && <CentreSwitch key={centre.id} c={centre} />}
       {lead && (
         <div style={{ position: "absolute", left: 0, right: 0, top: "30%", display: "flex", justifyContent: "center" }}>
@@ -147,6 +146,8 @@ export function Overlay() {
           );
         })}
 
+      {/* The particles drift over the pop-up that made them (and, briefly, whatever is near it). */}
+      <canvas ref={fxCanvas} aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
       {switcherOpen && <Switcher onClose={closeSwitcher} keyHandler={keyHandler} />}
       <style>{TOAST_KEYFRAMES}</style>
     </div>

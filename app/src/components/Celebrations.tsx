@@ -254,14 +254,26 @@ function runFx(c: Celebration, box: Rect) {
 
 export function CelebrationView({ c, layout, ahead = null }: { c: Celebration; layout: "pill" | "card"; ahead?: { name: string; gapMs: number } | null }) {
   const ref = useRef<HTMLDivElement>(null);
-  // The particle layer waits for the card to land, then works around where it ended up.
+  // The particle layer waits for the card to land (its entrance has finished), then works around where it ended up.
   useEffect(() => {
-    const t = window.setTimeout(() => {
+    const el = ref.current;
+    let dead = false;
+    let timer: number | undefined;
+    let ran = false;
+    const go = () => {
+      if (ran || dead) return;
+      ran = true;
       const r = ref.current?.getBoundingClientRect();
       if (r) runFx(c, { x: r.x, y: r.y, width: r.width, height: r.height });
-    }, 700);
+    };
+    // As soon as the entrance is over, or after a second at the latest if the animation clock is not running.
+    const entrance = el?.getAnimations?.()[0];
+    if (entrance) entrance.finished.then(() => (timer = window.setTimeout(go, 60))).catch(() => {});
+    const fallback = window.setTimeout(go, 1000);
     return () => {
-      window.clearTimeout(t);
+      dead = true;
+      window.clearTimeout(timer);
+      window.clearTimeout(fallback);
       fx.clear();
     };
   }, [c]);
