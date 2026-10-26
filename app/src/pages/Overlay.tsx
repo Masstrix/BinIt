@@ -53,12 +53,20 @@ export function Overlay() {
       window.addEventListener("keydown", onKey);
       return () => window.removeEventListener("keydown", onKey);
     }
+    // Listening is asynchronous: if this effect is torn down before a listener is ready (React runs every effect twice
+    // in development), that listener must be dropped as soon as it arrives. Otherwise two are left and every key,
+    // an arrow press in the picker for one, is handled twice.
+    let gone = false;
     const unlisten: (() => void)[] = [];
+    const keep = (u: () => void) => (gone ? u() : unlisten.push(u));
     import("@tauri-apps/api/event").then(({ listen }) => {
-      listen<boolean>("switcher", (e) => setSwitcherOpen(e.payload)).then((u) => unlisten.push(u));
-      listen<string>("switcher-key", (e) => keyHandler.current(e.payload)).then((u) => unlisten.push(u));
+      listen<boolean>("switcher", (e) => setSwitcherOpen(e.payload)).then(keep);
+      listen<string>("switcher-key", (e) => keyHandler.current(e.payload)).then(keep);
     });
-    return () => unlisten.forEach((u) => u());
+    return () => {
+      gone = true;
+      unlisten.forEach((u) => u());
+    };
   }, []);
   const closeSwitcher = useCallback(() => {
     setSwitcherOpen(false);
