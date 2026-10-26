@@ -515,6 +515,11 @@ h2 { font-size: 22px; line-height: 1.2; }
 .sticker[data-earned] .sticker-icon { border: 0; background: var(--tint); color: var(--peri-1); }
 .sticker:nth-child(3n+2)[data-earned] .sticker-icon { background: var(--mint-bg); color: var(--mint); }
 .sticker:nth-child(3n)[data-earned] .sticker-icon { background: rgba(255, 201, 60, 0.18); color: var(--gold); }
+/* Overlay live timing: the lit pill slides between laps and the delta rolls in when the lap changes. */
+.tt-slide { transition: left 0.3s cubic-bezier(0.3, 0.8, 0.3, 1); }
+.tt-roll { animation: tt-roll 0.35s cubic-bezier(0.2, 0.8, 0.3, 1); }
+@keyframes tt-roll { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tt-slide { transition: none; } .tt-roll { animation: none; } }
 .sticker-name { font-size: 12px; font-weight: 500; text-align: center; color: var(--muted); }
 .sticker[data-earned] .sticker-name { color: var(--text); }
 .you-drivers { display: flex; flex-wrap: wrap; gap: 8px; }

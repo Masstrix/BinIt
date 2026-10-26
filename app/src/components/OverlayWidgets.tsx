@@ -449,10 +449,17 @@ export function TimingCard({ data, mode }: { data: OverlayData; mode?: string })
         </span>
       )}
       {refs.length > 0 && !cut && (
-        <span style={{ display: "flex", gap: 6 }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+         {/* The lit pill is one shape that slides to whichever lap is chosen. */}
+         <span style={{ position: "relative", flex: 1, display: "flex", gap: 6, ["--n" as string]: refs.length, ["--i" as string]: Math.max(0, refs.findIndex((r) => r.kind === shown)) }}>
+          <span
+            aria-hidden="true"
+            className="tt-slide"
+            style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 999, background: "var(--tint)", width: "calc((100% - 6px * (var(--n) - 1)) / var(--n))", left: "calc(var(--i) * ((100% - 6px * (var(--n) - 1)) / var(--n) + 6px))" }}
+          />
           {refs.map((r) => {
             const on = r.kind === shown;
-            const look = { flex: 1, textAlign: "center" as const, padding: "4px 0", borderRadius: 999, font: "500 11px var(--font-mono)", background: on ? "var(--tint)" : "var(--panel-2)", color: on ? "var(--peri-1)" : "var(--muted)" };
+            const look = { position: "relative" as const, flex: 1, textAlign: "center" as const, padding: "4px 0", borderRadius: 999, font: "500 11px var(--font-mono)", background: on ? "transparent" : "var(--panel-2)", color: on ? "var(--peri-1)" : "var(--muted)", transition: "color 0.25s, background 0.25s" };
             // Only the pills can be clicked (and only when there is more than one lap to choose between).
             return several ? (
               <button
@@ -475,12 +482,14 @@ export function TimingCard({ data, mode }: { data: OverlayData; mode?: string })
               </span>
             );
           })}
+         </span>
           {wait && <CountdownRing key={wait.key} ms={wait.ms} held={wait.held} />}
         </span>
       )}
       <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, ...(cut ? { opacity: 0.55, textDecoration: "line-through" } : {}) }}>
         {t.reference ? (
-          <span className="mono" style={{ font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.08em", color: cut ? "var(--red)" : deltaColour(d) }}>{deltaText(d)}</span>
+          // Keyed by the lap in use, so a switch makes a new number roll in rather than the old one changing in place.
+          <span key={shown ?? "-"} className={several ? "mono tt-roll" : "mono"} style={{ font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.08em", color: cut ? "var(--red)" : deltaColour(d) }}>{deltaText(d)}</span>
         ) : (
           // First lap on this track: nothing to compare against yet, so show the lap clock.
           <>
