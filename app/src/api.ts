@@ -316,7 +316,7 @@ export interface PointEvent {
 /** One thing the shop sells. Free items (price 0) belong to everyone. */
 export interface ShopItem {
   id: string;
-  slot: "shell" | "decal" | "stripe";
+  slot: "shell" | "decal" | "stripe" | "face";
   price: number;
   minLevel: number;
 }

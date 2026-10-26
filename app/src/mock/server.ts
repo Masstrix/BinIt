@@ -239,7 +239,7 @@ const TITLES = ["Rookie", "Qualifier", "Regular", "Podium Regular", "Contender",
 const titleFor = (l: number) => TITLES[l - 1] ?? "Legend";
 
 /** What each mock driver bought (`shell:aurora`), starting with whatever their look wears, and every spend since. */
-const owned = new Map<number, string[]>(DRIVERS.map((d) => [d.id, [["shell", d.look?.shell], ["decal", d.look?.decal], ["stripe", d.look?.stripe]].flatMap(([slot, id]) => (id && SHOP_ITEMS.find((i) => i.slot === slot && i.id === id && i.price > 0) ? [`${slot}:${id}`] : []))]));
+const owned = new Map<number, string[]>(DRIVERS.map((d) => [d.id, [["shell", d.look?.shell], ["decal", d.look?.decal], ["stripe", d.look?.stripe], ["face", d.look?.face]].flatMap(([slot, id]) => (id && SHOP_ITEMS.find((i) => i.slot === slot && i.id === id && i.price > 0) ? [`${slot}:${id}`] : []))]));
 const spends: { driverId: number; item: string; price: number; at: number }[] = [];
 /** Mock drivers start with some spare coins so there is something to buy. */
 const MOCK_COINS = 700;
@@ -426,7 +426,7 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
     const id = +r[1];
     if (claimed(id)) mayManage(id, token);
     const st = shopState(id);
-    for (const slot of ["shell", "decal", "stripe"] as const) {
+    for (const slot of ["shell", "decal", "stripe", "face"] as const) {
       const v = body[slot];
       const item = v && SHOP_ITEMS.find((i) => i.slot === slot && i.id === v);
       if (v && !item) throw new ApiError(`no such ${slot}: ${v}`, undefined, 400);

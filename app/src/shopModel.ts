@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { api, useAppState, useFetch, type Driver, type ShopItem, type ShopState } from "./api";
-import { DECALS, RARITY_COLOR, SHELLS, STRIPES, type Look, type Rarity } from "./looks";
+import { DECALS, FACES, RARITY_COLOR, SHELLS, STRIPES, type Look, type Rarity } from "./looks";
 
 export type Slot = ShopItem["slot"];
 
@@ -10,6 +10,7 @@ export const SLOTS: { slot: Slot; label: string; title: string }[] = [
   { slot: "shell", label: "Shells", title: "Shell" },
   { slot: "decal", label: "Decals", title: "Decal" },
   { slot: "stripe", label: "Stripes", title: "Stripe" },
+  { slot: "face", label: "Eyes", title: "Eyes" },
 ];
 
 export interface Offer {
@@ -30,7 +31,7 @@ export interface Offer {
   preview: Look;
 }
 
-const NAMES: Record<Slot, { id: string; name: string; rarity: Rarity }[]> = { shell: SHELLS, decal: DECALS, stripe: STRIPES };
+const NAMES: Record<Slot, { id: string; name: string; rarity: Rarity }[]> = { shell: SHELLS, decal: DECALS, stripe: STRIPES, face: FACES };
 
 export const ownedKey = (slot: Slot, id: string) => `${slot}:${id}`;
 
@@ -54,7 +55,7 @@ export function offers(shop: ShopState): Offer[] {
         free,
         locked: !owned && shop.level < it.minLevel,
         affordable: owned || shop.coins >= it.price,
-        preview: it.slot === "shell" ? { shell: it.id } : it.slot === "decal" ? { decal: it.id } : { stripe: it.id },
+        preview: { [it.slot]: it.id },
       },
     ];
   });

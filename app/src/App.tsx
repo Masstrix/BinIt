@@ -17,7 +17,7 @@ import { AdvancedPage } from "./pages/Advanced";
 import { TelemetryPage } from "./pages/Telemetry";
 import { Overlay } from "./pages/Overlay";
 import { YouPage } from "./pages/You";
-import { GaragePage } from "./pages/Garage";
+import { CustomizePage } from "./pages/Customize";
 import { ShopPage } from "./pages/Shop";
 import { Updater } from "./pages/Updater";
 import { openPickDriver, PickDriverHost } from "./components/PickDriver";
@@ -79,7 +79,7 @@ function useHashPath() {
 const lastPathKey = (section: string) => `lastPath.${section}`;
 
 function titleFor(path: string) {
-  if (path.startsWith("/garage")) return "Garage";
+  if (path.startsWith("/customize")) return "Customize";
   if (path.startsWith("/shop")) return "Shop";
   return ROUTES.find((r) => (r.path === "/" ? path === "/" : path.startsWith(r.path)))?.label ?? "Bin It";
 }
@@ -120,7 +120,7 @@ export function App() {
   else if (path.startsWith("/telemetry")) page = <TelemetryPage path={path} />;
   else if (path.startsWith("/advanced")) page = <AdvancedPage />;
   else if (path.startsWith("/you")) page = <YouPage path={path} />;
-  else if (path.startsWith("/garage")) page = <GaragePage />;
+  else if (path.startsWith("/customize")) page = <CustomizePage />;
   else if (path.startsWith("/shop")) page = <ShopPage />;
   else page = <Home />;
 

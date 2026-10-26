@@ -199,9 +199,9 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
 
       {(mine || (manage && status?.seat === p.driver.id)) && (
         <div className="you-switch">
-          <a className="btn" href="#/garage">Garage</a>
+          <a className="btn" href="#/customize">Customize</a>
           <a className="btn ghost" href="#/shop">Shop</a>
-          <span className="grow muted" style={{ fontSize: 13 }}>Spend coins on shells, decals and stripes.</span>
+          <span className="grow muted" style={{ fontSize: 13 }}>Spend coins on shells, decals, stripes and eyes.</span>
         </div>
       )}
 

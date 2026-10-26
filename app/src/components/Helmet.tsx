@@ -1,13 +1,13 @@
 import { useEffect, useId, useMemo, useState, type CSSProperties } from "react";
-import { DECAL_AT, decalById, shellById, stripeById, type Look } from "../looks";
+import { DECAL_AT, decalById, faceById, shellById, stripeById, type Look } from "../looks";
 
 /**
  * How the driver looks through the visor: `happy` for a win, `binned` for a lap the game threw out,
  * `focus` while they're in the seat, `wink` for a cheeky moment.
  */
-export type HelmetMood = "idle" | "happy" | "binned" | "focus" | "wink";
+export type HelmetMood = "idle" | "happy" | "binned" | "focus" | "wink" | "sleepy" | "wide" | "angry" | "peaked" | "stars" | "hearts" | "cash";
 
-function Eyes({ mood }: { mood: HelmetMood }) {
+export function Eyes({ mood }: { mood: HelmetMood }) {
   const arc = { fill: "none", stroke: "#fff", strokeWidth: 1.6, strokeLinecap: "round" } as const;
   switch (mood) {
     case "happy":
@@ -21,6 +21,37 @@ function Eyes({ mood }: { mood: HelmetMood }) {
         <>
           <ellipse cx="31.4" cy="20.5" rx="1.7" ry="2.6" fill="#fff" />
           <path d="M37 21.4Q38.8 19.4 40.6 21.4" {...arc} />
+        </>
+      );
+    case "sleepy":
+      return <path d="M29.6 20.6Q31.4 22.8 33.2 20.6M37 20.6Q38.8 22.8 40.6 20.6" {...arc} />;
+    case "wide":
+      return (
+        <>
+          <ellipse cx="31.4" cy="20.5" rx="2.4" ry="3.5" fill="#fff" />
+          <ellipse cx="38.8" cy="20.5" rx="2.4" ry="3.5" fill="#fff" />
+        </>
+      );
+    case "angry":
+      return (
+        <>
+          <ellipse cx="31.4" cy="21.2" rx="1.6" ry="2.2" fill="#fff" />
+          <ellipse cx="38.8" cy="21.2" rx="1.6" ry="2.2" fill="#fff" />
+          <path d="M28.8 17.2L33.6 18.8M41.4 17.2L36.6 18.8" {...arc} strokeWidth={1.4} />
+        </>
+      );
+    case "peaked":
+      return <path d="M29.4 21.8L31.4 18.6L33.4 21.8M36.8 21.8L38.8 18.6L40.8 21.8" {...arc} strokeWidth={1.7} strokeLinejoin="round" />;
+    case "stars":
+      return <path d="M31.4 17.4L32.3 19.6L34.5 20.5L32.3 21.4L31.4 23.6L30.5 21.4L28.3 20.5L30.5 19.6ZM38.8 17.4L39.7 19.6L41.9 20.5L39.7 21.4L38.8 23.6L37.9 21.4L35.7 20.5L37.9 19.6Z" fill="#FFE48A" />;
+    case "hearts":
+      return <path d="M31.4 23.2C28.6 21.3 28.8 18.6 30.5 18.6C31 18.6 31.3 18.9 31.4 19.3C31.5 18.9 31.8 18.6 32.3 18.6C34 18.6 34.2 21.3 31.4 23.2ZM38.8 23.2C36 21.3 36.2 18.6 37.9 18.6C38.4 18.6 38.7 18.9 38.8 19.3C38.9 18.9 39.2 18.6 39.7 18.6C41.4 18.6 41.6 21.3 38.8 23.2Z" fill="#FF6FA3" />;
+    case "cash":
+      return (
+        <>
+          <circle cx="31.4" cy="20.5" r="2.5" fill="#FFC93C" />
+          <circle cx="38.8" cy="20.5" r="2.5" fill="#FFC93C" />
+          <path d="M31.4 19L30.4 20.8H31.6L31.2 22L32.4 20.2H31.2Z M38.8 19L37.8 20.8H39L38.6 22L39.8 20.2H38.6Z" fill="#8A5405" />
         </>
       );
     default:
@@ -97,8 +128,10 @@ function useAmbientMood(base: HelmetMood, seed: string): HelmetMood {
 export function Helmet({ color, size = 48, tile = true, mood = "idle", seed, round = false, look }: { color: string; /** What is equipped (gradient shell, decal, stripe, number); without it the helmet is plain `color`. */ look?: Look; size?: number; tile?: boolean; mood?: HelmetMood; seed?: string | number; /** The tile is a circle instead of a rounded square. */ round?: boolean }) {
   const key = String(seed ?? color);
   const { vars } = useMemo(() => personality(key), [key]);
-  const face = useAmbientMood(mood, key);
-  const blinks = face === "idle" || face === "focus";
+  // The default face is the driver's own choice of how they look when idle; a real moment (a win, a binned lap) still overrides it.
+  const chosen = mood === "idle" ? (faceById(look?.face)?.mood as HelmetMood | undefined) : undefined;
+  const face = useAmbientMood(chosen && chosen !== "idle" ? chosen : mood, key);
+  const blinks = face === "idle" || face === "focus" || face === "wide" || face === "angry";
   const gradId = `helmet-shell-${useId().replace(/:/g, "")}`;
   const shell = shellById(look?.shell);
   const decal = decalById(look?.decal);

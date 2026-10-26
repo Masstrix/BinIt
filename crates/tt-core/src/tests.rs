@@ -1232,3 +1232,16 @@ fn a_database_from_before_the_garage_gains_looks_and_keeps_its_drivers() {
     assert_eq!((sam.name.as_str(), sam.look.clone()), ("Sam", Look::default()));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn default_eyes_are_a_shop_slot_with_free_starters() {
+    let tt = BinIt::in_memory().unwrap();
+    let id = rich_driver(&tt, 100, 0);
+    // Chill, focus and happy are free; the cheeky face is sold.
+    assert!(tt.set_look(id, &Look { face: Some("happy".into()), ..Look::default() }).is_ok());
+    assert!(tt.set_look(id, &Look { face: Some("cheeky".into()), ..Look::default() }).is_err());
+    tt.buy(id, "face", "cheeky").unwrap();
+    let d = tt.set_look(id, &Look { face: Some("cheeky".into()), ..Look::default() }).unwrap();
+    assert_eq!(d.look.face.as_deref(), Some("cheeky"));
+    assert_eq!(tt.shop(id).unwrap().coins, 80);
+}

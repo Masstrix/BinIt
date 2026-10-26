@@ -23,10 +23,10 @@ function rng(seed: number) {
 
 export const DRIVERS: Driver[] = [
   { id: 1, name: "Sam", color: "#FF8A4C", look: { shell: "aurora", decal: "flame", stripe: "centre", number: 7 }, createdAt: NOW - 30 * DAY },
-  { id: 2, name: "Jess", color: "#2FA8FF", look: { shell: "holo", decal: "star", decalAt: "top", number: 12 }, createdAt: NOW - 29 * DAY },
+  { id: 2, name: "Jess", color: "#2FA8FF", look: { shell: "holo", decal: "star", decalAt: "top", number: 12, face: "stars" }, createdAt: NOW - 29 * DAY },
   { id: 3, name: "Priya", color: "#FF5FA2", look: { shell: "nightsky", decal: "moon", stripe: "twin", number: 5 }, createdAt: NOW - 20 * DAY },
   { id: 4, name: "Tom", color: "#23C98A", look: { shell: "inferno", decal: "flame", number: 33 }, createdAt: NOW - 12 * DAY },
-  { id: 5, name: "Alex", color: "#9B7BFF", look: { decal: "bolt", stripe: "band", number: 88 }, createdAt: NOW - 3 * DAY },
+  { id: 5, name: "Alex", color: "#9B7BFF", look: { decal: "bolt", stripe: "band", number: 88, face: "sleepy" }, createdAt: NOW - 3 * DAY },
 ];
 
 export const CARS = ["Porsche 911 GT3 R (992)", "Ferrari 296 GT3", "BMW M4 GT3"];
@@ -152,8 +152,9 @@ export function catalogue(game: string): Catalogue {
 }
 
 /** The shop's prices, copied from crates/tt-core/src/shop.rs so the mock server can sell things. */
-export const SHOP_ITEMS: { slot: "shell" | "decal" | "stripe"; id: string; price: number; minLevel: number }[] = [
+export const SHOP_ITEMS: { slot: "shell" | "decal" | "stripe" | "face"; id: string; price: number; minLevel: number }[] = [
   ...[["sunset", 150, 1], ["ocean", 150, 1], ["ember", 150, 1], ["lagoon", 180, 1], ["aurora", 320, 3], ["rally", 420, 3], ["holo", 1500, 5], ["gold", 2000, 9], ["nightsky", 1200, 5], ["inferno", 1500, 5], ["nebula", 1800, 7], ["glacier", 1200, 5]].map(([id, price, minLevel]) => ({ slot: "shell" as const, id: id as string, price: price as number, minLevel: minLevel as number })),
   ...[["flame", 0, 1], ["bolt", 0, 1], ["star", 40, 1], ["chequer", 40, 1], ["heart", 60, 1], ["flag", 80, 1], ["moon", 80, 1], ["wing", 160, 2], ["crown", 250, 6], ["skull", 300, 3]].map(([id, price, minLevel]) => ({ slot: "decal" as const, id: id as string, price: price as number, minLevel: minLevel as number })),
   ...[["centre", 0, 1], ["twin", 20, 1], ["band", 20, 1], ["chequer", 100, 2]].map(([id, price, minLevel]) => ({ slot: "stripe" as const, id: id as string, price: price as number, minLevel: minLevel as number })),
+  ...[["chill", 0, 1], ["focus", 0, 1], ["happy", 0, 1], ["cheeky", 20, 1], ["sleepy", 40, 1], ["wide", 40, 1], ["angry", 60, 1], ["peaked", 60, 1], ["stars", 150, 2], ["hearts", 150, 2], ["cash", 300, 4]].map(([id, price, minLevel]) => ({ slot: "face" as const, id: id as string, price: price as number, minLevel: minLevel as number })),
 ];

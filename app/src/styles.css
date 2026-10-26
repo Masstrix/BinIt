@@ -1384,18 +1384,13 @@ img.game-icon { object-fit: cover; display: inline-block; }
 .garage-num { padding: 2px 10px; border-radius: 999px; background: var(--panel-2); font: italic 800 15px var(--font-num); }
 .garage-chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; min-height: 24px; }
 .garage-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.garage-slots { display: flex; gap: 8px; flex-wrap: wrap; }
-.garage-slots .chip { cursor: pointer; text-decoration: none; }
-.garage-slots .chip[aria-pressed="true"] { background: var(--tint); color: var(--peri-1); }
-.garage-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
-.garage-tile, .shop-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 8px; border-radius: 20px; border: 1.5px solid transparent; background: var(--panel); color: var(--text); cursor: pointer; font: inherit; text-align: center; }
-.garage-tile:hover:not(:disabled), .shop-card:hover { background: var(--panel-2); }
-.garage-tile[aria-pressed="true"], .shop-card[data-wearing] { border-color: var(--violet); }
-.garage-tile[data-locked], .shop-card[data-locked] { opacity: 0.55; }
-.garage-tile:disabled { cursor: default; }
-.garage-swatch, .shop-tile { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 18px; background: var(--panel-2); }
+.shop-card { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 8px; border-radius: 20px; border: 1.5px solid transparent; background: var(--panel); color: var(--text); cursor: pointer; font: inherit; text-align: center; }
+.shop-card:hover { background: var(--panel-2); }
+.shop-card[data-wearing] { border-color: var(--violet); }
+.shop-card[data-locked] { opacity: 0.55; }
+.shop-tile { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 18px; background: var(--panel-2); }
 .shop-tile { width: 100%; height: 104px; border-radius: 16px; }
-.garage-tile-name, .shop-card-name { font: 700 14px var(--font-display); }
+.shop-card-name { font: 700 14px var(--font-display); }
 .garage-tile-rarity { font: 700 10px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
 .garage-row { flex-direction: row; align-items: center; gap: 10px; padding: 14px 18px; }
 .garage-numval { min-width: 44px; text-align: center; font: italic 800 30px var(--font-num); }
@@ -1417,3 +1412,32 @@ img.game-icon { object-fit: cover; display: inline-block; }
   .garage-preview { position: static; }
   .shop-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Customize and Shop: header, item art, sections */
+.shop-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; margin-bottom: 14px; }
+.shop-header h1 { margin: 0; font: 700 20px var(--font-display); letter-spacing: -0.02em; }
+.shop-back { width: 44px; height: 44px; border-radius: 16px; background: var(--panel); color: var(--text); display: grid; place-items: center; text-decoration: none; }
+.shop-back:hover { background: var(--panel-2); color: var(--text); }
+a.garage-coins { text-decoration: none; }
+.shop-customize { align-self: flex-start; text-decoration: none; }
+.art-swatch { display: block; border-radius: 20px; }
+.art-glyph { display: grid; place-items: center; border-radius: 16px; background: var(--panel-2); color: var(--text); font-size: 12px; }
+.garage-section { display: flex; flex-direction: column; gap: 12px; }
+.garage-section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.garage-section h2 { margin: 0; font: 700 16px var(--font-display); }
+.more-shop { font-size: 13px; color: var(--peri-1); text-decoration: none; }
+.more-shop:hover { text-decoration: underline; }
+.garage-colours { display: flex; flex-wrap: wrap; gap: 10px; }
+.garage-dot { width: 44px; height: 44px; border-radius: 50%; padding: 0; border: 3px solid var(--panel); cursor: pointer; }
+.garage-dot[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--text); }
+.garage-grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.garage-grid5 { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.garage-pick { display: flex; flex-direction: column; align-items: center; gap: 6px; background: transparent; border: none; padding: 0; color: var(--muted); font: 500 12px var(--font-body); cursor: pointer; text-align: center; }
+.garage-pick > :first-child { border: 1.5px solid transparent; box-sizing: border-box; }
+.garage-pick[aria-pressed="true"] { color: var(--text); font-weight: 600; }
+.garage-pick[aria-pressed="true"] > :first-child { border-color: var(--violet); }
+.garage-section .garage-row { background: var(--panel); border-radius: 20px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; }
+@media (max-width: 760px) { .garage-grid5 { gap: 8px; } }
+.garage-slots { display: flex; gap: 8px; flex-wrap: wrap; }
+.garage-slots .chip { cursor: pointer; text-decoration: none; }
+.garage-slots .chip[aria-pressed="true"] { background: var(--tint); color: var(--peri-1); }

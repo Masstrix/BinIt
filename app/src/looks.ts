@@ -14,6 +14,8 @@ export interface Look {
   stripe?: string;
   /** Race number, 1 to 99, printed on the side. */
   number?: number;
+  /** The default eyes (`FACES` id) shown when the driver is just sitting there. */
+  face?: string;
 }
 
 export interface Shell {
@@ -72,6 +74,28 @@ export const DECALS: Decal[] = [
   { id: "skull", name: "Skull", rarity: "epic", path: "M12 2a8 8 0 0 0-8 8c0 3 1.5 4.6 3 5.6V19h2v-2h2v2h2v-2h2v2h2v-3.4c1.5-1 3-2.6 3-5.6a8 8 0 0 0-8-8zM9 11a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm6 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z" },
 ];
 
+export interface Face {
+  id: string;
+  name: string;
+  rarity: Rarity;
+  /** The mood `Helmet` draws for it (see Eyes in Helmet.tsx). */
+  mood: string;
+}
+
+export const FACES: Face[] = [
+  { id: "chill", name: "Chill", rarity: "common", mood: "idle" },
+  { id: "focus", name: "Focus", rarity: "common", mood: "focus" },
+  { id: "happy", name: "Happy", rarity: "common", mood: "happy" },
+  { id: "cheeky", name: "Cheeky", rarity: "common", mood: "wink" },
+  { id: "sleepy", name: "Sleepy", rarity: "common", mood: "sleepy" },
+  { id: "wide", name: "Wide eyed", rarity: "common", mood: "wide" },
+  { id: "angry", name: "Fired up", rarity: "rare", mood: "angry" },
+  { id: "peaked", name: "Peaked", rarity: "rare", mood: "peaked" },
+  { id: "stars", name: "Starstruck", rarity: "rare", mood: "stars" },
+  { id: "hearts", name: "Hearts", rarity: "rare", mood: "hearts" },
+  { id: "cash", name: "Cash", rarity: "epic", mood: "cash" },
+];
+
 export const STRIPES: Stripe[] = [
   { id: "centre", name: "Centre", rarity: "common", paths: ["M17.5 13 C23 10 31 9.8 37.5 12.6"], width: 2.8 },
   { id: "twin", name: "Twin", rarity: "common", paths: ["M17.2 12.4 C23 9.4 31 9.2 37.4 12", "M17.2 16 C23 13 31 12.8 38 15.6"], width: 1.6 },
@@ -81,6 +105,7 @@ export const STRIPES: Stripe[] = [
 
 export const shellById = (id?: string) => SHELLS.find((s) => s.id === id);
 export const decalById = (id?: string) => DECALS.find((d) => d.id === id);
+export const faceById = (id?: string) => FACES.find((f) => f.id === id);
 export const stripeById = (id?: string) => STRIPES.find((s) => s.id === id);
 
 /** Where a decal sits on the helmet, as a translate and a scale of its 24 by 24 box. */
@@ -89,3 +114,6 @@ export const DECAL_AT: Record<NonNullable<Look["decalAt"]>, { x: number; y: numb
   top: { x: 22, y: 7.5, s: 0.4 },
   chin: { x: 26, y: 29.5, s: 0.35 },
 };
+
+/** CSS for a shell as a swatch: the same stops the helmet uses. */
+export const shellCss = (stops: string[]) => `linear-gradient(135deg, ${stops.join(", ")})`;

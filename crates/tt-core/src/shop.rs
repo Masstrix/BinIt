@@ -8,6 +8,7 @@ use crate::model::Look;
 pub const SHELL: &str = "shell";
 pub const DECAL: &str = "decal";
 pub const STRIPE: &str = "stripe";
+pub const FACE: &str = "face";
 
 pub struct Entry {
     pub slot: &'static str,
@@ -47,6 +48,17 @@ pub const CATALOGUE: &[Entry] = &[
     e(STRIPE, "twin", 20, 1),
     e(STRIPE, "band", 20, 1),
     e(STRIPE, "chequer", 100, 2),
+    e(FACE, "chill", 0, 1),
+    e(FACE, "focus", 0, 1),
+    e(FACE, "happy", 0, 1),
+    e(FACE, "cheeky", 20, 1),
+    e(FACE, "sleepy", 40, 1),
+    e(FACE, "wide", 40, 1),
+    e(FACE, "angry", 60, 1),
+    e(FACE, "peaked", 60, 1),
+    e(FACE, "stars", 150, 2),
+    e(FACE, "hearts", 150, 2),
+    e(FACE, "cash", 300, 4),
 ];
 
 pub fn item(slot: &str, id: &str) -> Option<&'static Entry> {
@@ -83,6 +95,9 @@ pub fn check_look(owned: &[String], look: &Look) -> Result<Look, String> {
     }
     if let Some(id) = &look.stripe {
         usable(owned, STRIPE, id)?;
+    }
+    if let Some(id) = &look.face {
+        usable(owned, FACE, id)?;
     }
     if let Some(n) = look.number
         && !(1..=99).contains(&n)

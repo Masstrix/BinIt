@@ -1,11 +1,10 @@
 import { useMemo, useState } from "react";
 import { api, type Driver, type ShopState } from "../api";
-import { Coin } from "../components/Coin";
 import { Helmet } from "../components/Helmet";
 import { Modal } from "../components/Modal";
 import type { Look } from "../looks";
 import { SLOTS, offers, useShop, useShopDriver, type Offer, type Slot } from "../shopModel";
-import { PriceTag, TRY_KEY } from "./Garage";
+import { ItemArt, PriceTag, ShopHeader } from "../components/ShopParts";
 
 /** Everything for sale, as a grid. Tap one to see it on your helmet and buy it. */
 export function ShopPage() {
@@ -21,6 +20,7 @@ export function ShopPage() {
           <a className="btn big" href="#/you">Profile</a>
         </section>
       )}
+      <ShopHeader title="Shop" coins={shop?.coins ?? null} />
       {driver && shop && <Grid driver={driver} shop={shop} refresh={refresh} />}
       {driver && !shop && <div className="empty">Loading…</div>}
     </>
@@ -38,11 +38,7 @@ function Grid({ driver, shop, refresh }: { driver: Driver; shop: ShopState; refr
 
   return (
     <div className="shop">
-      <header className="shop-head">
-        <a className="btn ghost" href="#/garage">Garage</a>
-        <span className="grow" />
-        <span className="garage-coins"><Coin size={22} title="Coins" />{shop.coins.toLocaleString()}</span>
-      </header>
+      <a className="btn ghost shop-customize" href="#/customize">Customize your helmet</a>
       <nav className="garage-slots" aria-label="Categories">
         <button type="button" className="chip plain" aria-pressed={filter === "all"} onClick={() => setFilter("all")}>All</button>
         {SLOTS.map((s) => (
@@ -55,7 +51,7 @@ function Grid({ driver, shop, refresh }: { driver: Driver; shop: ShopState; refr
           return (
             <button key={`${o.slot}:${o.id}`} type="button" className="shop-card" data-wearing={wearing || undefined} data-locked={o.locked || undefined} onClick={() => setOpen(o)}>
               <span className="shop-tile">
-                <Helmet color={driver.color} look={o.preview} size={80} tile={false} seed={driver.id} />
+                <ItemArt slot={o.slot} id={o.id} driver={driver} size={o.slot === "shell" ? 72 : 80} />
               </span>
               <span className="garage-tile-rarity" style={{ color: o.rarityColor }}>{o.rarity} · {o.slot}</span>
               <span className="shop-card-name">{o.name}</span>
@@ -96,19 +92,11 @@ function ItemSheet({ driver, shop, offer, onClose, onChanged }: { driver: Driver
       onClose();
     });
   };
-  const tryOn = () => {
-    try {
-      sessionStorage.setItem(TRY_KEY, `${offer.slot}:${offer.id}`);
-    } catch {
-      /* private mode: the Garage opens without it */
-    }
-    location.hash = "#/garage";
-  };
 
   return (
     <Modal title={offer.name} narrow onClose={onClose}>
       <div className="modal-body" style={{ alignItems: "center", textAlign: "center", gap: 14 }}>
-        <Helmet color={driver.color} look={{ ...shop.look, ...offer.preview }} size={120} seed={driver.id} mood="happy" />
+        <Helmet color={driver.color} look={{ ...shop.look, ...offer.preview }} size={120} seed={driver.id} mood="idle" />
         <div>
           <div className="garage-tile-rarity" style={{ color: offer.rarityColor }}>{offer.rarity} · {offer.slot}</div>
           <h2 style={{ margin: 0 }}>{offer.name}</h2>
@@ -127,7 +115,7 @@ function ItemSheet({ driver, shop, offer, onClose, onChanged }: { driver: Driver
         {error && <span className="error">{error}</span>}
       </div>
       <div className="modal-foot">
-        <button className="btn ghost" onClick={tryOn} disabled={offer.locked}>Try on</button>
+        <button className="btn ghost" onClick={onClose}>Close</button>
         {offer.owned ? (
           <button className="btn big" onClick={equip} disabled={busy || wearing}>{wearing ? "Equipped" : "Equip"}</button>
         ) : (

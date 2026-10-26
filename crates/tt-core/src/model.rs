@@ -48,6 +48,9 @@ pub struct Look {
     /// Race number, 1 to 99.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub number: Option<u8>,
+    /// The default eyes, shown when the driver is idle (`shop::FACE`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub face: Option<String>,
 }
 
 /// What the shop shows one driver: their balance, what they own and wear, and every item's price.
