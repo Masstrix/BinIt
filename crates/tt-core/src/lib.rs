@@ -142,6 +142,8 @@ struct Runtime {
     void_pending: bool,
     /// The car has crossed the line on a lap that should be reported shortly (out laps aren't reported by the game).
     wrap_waiting: bool,
+    /// Who was in the seat as the car crossed the line, for the result that arrives after it.
+    wrap_driver: Option<Option<DriverId>>,
     last_progress: f32,
     last_out_lap: bool,
     /// The stage clock at the previous live reading, to notice a restart.
@@ -532,8 +534,11 @@ impl BinIt {
             // Swapping drivers part-way round a lap would let someone take over a good lap (or dump a bad
             // one on somebody else), so the lap in progress is voided for everybody.
             let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
+            // A swap in the moment between the car crossing the line and the game publishing the lap that
+            // just ended is a swap at the line: the new driver has the whole new lap, so it isn't voided.
+            let at_the_line = rt.wrap_waiting;
             let on_track = rt.session_info.is_some() && rt.live.as_ref().is_some_and(|l| l.phase == "driving" || l.phase == "paused");
-            if on_track {
+            if on_track && !at_the_line {
                 rt.lap_driver_changed = true;
             }
         }
@@ -739,8 +744,16 @@ impl BinIt {
     }
 
     fn record_lap_at(&self, completed: &CompletedLap, now: Timestamp) -> Result<LapResult> {
+        self.record_lap_for(completed, now, None)
+    }
+
+    /// `driver` names who drove it when that is known (`Some(None)` = a guest); otherwise it is whoever is in the seat.
+    fn record_lap_for(&self, completed: &CompletedLap, now: Timestamp, driver: Option<Option<DriverId>>) -> Result<LapResult> {
         let combo = combo_of(&completed.session);
-        let driver_id = self.seat()?;
+        let driver_id = match driver {
+            Some(d) => d,
+            None => self.seat()?,
+        };
         let store = self.store();
 
         let challenges: Vec<Challenge> =
@@ -912,14 +925,14 @@ impl BinIt {
                 self.emit(AppEvent::Session { session: Some(view) });
             }
             GameEvent::LapCompleted(mut lap) => {
-                let changed = {
+                let (changed, driver) = {
                     let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
                     // The lap's result can arrive a moment after the car crossed the line: by then a new
                     // lap has begun, and a swap made in that gap belongs to the new lap, not this one.
                     if std::mem::take(&mut rt.wrap_waiting) {
-                        std::mem::take(&mut rt.void_pending)
+                        (std::mem::take(&mut rt.void_pending), rt.wrap_driver.take())
                     } else {
-                        std::mem::take(&mut rt.lap_driver_changed)
+                        (std::mem::take(&mut rt.lap_driver_changed), None)
                     }
                 };
                 // Only a lap that would have counted (or been a failed attempt) needs voiding; out, in and
@@ -931,9 +944,11 @@ impl BinIt {
                     lap.trace = None;
                 }
                 self.learn_map(&lap)?;
-                self.record_lap(&lap)?;
+                // The lap belongs to whoever was driving as it ended, even if the seat changed hands since.
+                self.record_lap_for(&lap, now_ms(), driver)?;
             }
             GameEvent::Live(LiveState { driving, phase, current_lap_ms, lap_valid, out_lap, lap_progress, position, inputs }) => {
+                let mut crossed = false;
                 let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
                 let timing = if out_lap {
                     rt.timing.pause();
@@ -962,6 +977,7 @@ impl BinIt {
                     } else {
                         rt.void_pending = std::mem::take(&mut rt.lap_driver_changed);
                         rt.wrap_waiting = true;
+                        crossed = true;
                     }
                 }
                 rt.last_progress = lap_progress;
@@ -971,6 +987,10 @@ impl BinIt {
                 let live = LiveView { driving, phase: phase.key(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
                 rt.live = Some(live.clone());
                 drop(rt);
+                if crossed {
+                    let seat = self.seat()?;
+                    self.runtime.lock().expect("runtime mutex poisoned").wrap_driver = Some(seat);
+                }
                 self.emit(AppEvent::Live { live });
             }
         }

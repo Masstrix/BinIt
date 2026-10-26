@@ -760,6 +760,26 @@ fn a_handover_in_the_pits_does_not_spoil_the_first_flying_lap() {
 }
 
 #[test]
+fn a_swap_just_after_the_line_leaves_both_laps_alone() {
+    let tt = BinIt::in_memory().unwrap();
+    let jess = tt.add_and_seat("Jess", None).unwrap();
+    let sam = tt.add_driver("Sam", None).unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
+    tt.handle_game_event(driving(0.5)).unwrap();
+    tt.handle_game_event(driving(0.97)).unwrap();
+    tt.handle_game_event(driving(0.01)).unwrap(); // over the line; the game hasn't published the time yet
+    tt.set_seat(Some(sam.id)).unwrap(); // Sam takes over before it does
+    tt.handle_game_event(GameEvent::LapCompleted(lap(90_000, true))).unwrap();
+    let ended = &tt.recent_laps(1).unwrap()[0];
+    assert_eq!((ended.valid, ended.driver_id), (true, Some(jess.id)), "Jess drove it, and nothing was swapped during it");
+    // Sam has had the whole of the lap that began at the line.
+    tt.handle_game_event(driving(0.5)).unwrap();
+    tt.handle_game_event(GameEvent::LapCompleted(lap(87_000, true))).unwrap();
+    let next = &tt.recent_laps(1).unwrap()[0];
+    assert_eq!((next.valid, next.driver_id), (true, Some(sam.id)));
+}
+
+#[test]
 fn a_swap_mid_lap_still_voids_the_lap_when_its_result_arrives_after_the_line() {
     let tt = BinIt::in_memory().unwrap();
     tt.add_and_seat("Jess", None).unwrap();
