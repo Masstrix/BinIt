@@ -72,6 +72,15 @@ function liveView(): LiveView {
       gear: 3 + Math.round(Math.abs(corner) * 3), speedKmh: Math.round(150 + 90 * corner), rpm: Math.round(6500 + 1500 * corner),
     },
     timing: {
+      // The other drivers' best laps at this point: a little quicker or slower than this lap, trading places.
+      field: [
+        { driverId: 2, factor: 0.985, wobble: 380, phase: 0 },
+        { driverId: 3, factor: 0.996, wobble: 520, phase: 1.5 },
+        { driverId: 4, factor: 1.012, wobble: 640, phase: 3 },
+        { driverId: 5, factor: 1.03, wobble: 300, phase: 4.5 },
+      ]
+        .filter((g) => g.driverId !== settings.seat)
+        .map((g) => ({ driverId: g.driverId, ghostMs: Math.round(ms * g.factor + Math.sin(p * 9 + g.phase) * g.wobble * p) })),
       deltaMs: Math.round(Math.sin(p * 6) * 380 - 82), reference: "PB", currentSector: sector,
       references: [
         { kind: "pb", label: "PB", deltaMs: Math.round(Math.sin(p * 6) * 380 - 82) },

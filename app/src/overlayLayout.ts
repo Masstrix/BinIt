@@ -21,12 +21,20 @@ export interface OverlayLayout {
   styles?: Partial<Record<WidgetId, string>>;
   /** Say "Sam is driving" when the driver changes (works even when the overlay can't be seen). */
   voice: boolean;
+  /** What the gap tower lists: the best laps set here ("static", the default) or this lap raced against them, live. */
+  towerMode?: TowerMode;
   /**
    * How far the widgets sit from each screen edge (% of the screen). 0 is right against the edge. A side that is
    * not set keeps the game's own spacing, which clears its HUD.
    */
   margins?: Partial<Record<Side, number>>;
 }
+
+export type TowerMode = "static" | "live";
+export const TOWER_MODES: { id: TowerMode; label: string; hint: string }[] = [
+  { id: "static", label: "Best laps", hint: "Everyone's best time on this track and car, as on the leaderboard" },
+  { id: "live", label: "Live", hint: "Starts level at the line each lap or stage and shows where you are against everyone's best as you drive" },
+];
 
 export type Side = "top" | "bottom" | "left" | "right";
 export const SIDES: Side[] = ["top", "bottom", "left", "right"];
@@ -261,7 +269,14 @@ function sanitize(raw: unknown, fallback: OverlayLayout): OverlayLayout {
     const m = r.margins?.[side];
     if (typeof m === "number" && m >= 0) margins[side] = Math.min(MAX_MARGIN, Math.round(m * 2) / 2);
   }
-  return { version: 1, sections, voice: r.voice ?? fallback.voice, ...(Object.keys(styles).length ? { styles } : {}), ...(Object.keys(margins).length ? { margins } : {}) };
+  return {
+    version: 1,
+    sections,
+    voice: r.voice ?? fallback.voice,
+    ...(Object.keys(styles).length ? { styles } : {}),
+    ...(r.towerMode === "live" ? { towerMode: "live" as const } : {}),
+    ...(Object.keys(margins).length ? { margins } : {}),
+  };
 }
 
 /** The saved layout for a game (or its default), kept live across windows. */

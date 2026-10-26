@@ -1046,7 +1046,12 @@ impl BinIt {
                 _ => Vec::new(),
             };
             let reference = pb.or(best);
-            TimingContext { boundaries, reference, others, best_overall, best_driver }
+            // Everyone else who has a lap to race against, for the gap tower's live mode.
+            let mut ids: Vec<DriverId> = rows.iter().filter_map(|(who, _)| *who).filter(|id| Some(*id) != seat).collect();
+            ids.sort_unstable();
+            ids.dedup();
+            let field = ids.into_iter().filter_map(|id| store.best_profile(&combo, Some(id)).ok().flatten().map(|p| (id, p))).collect();
+            TimingContext { boundaries, reference, others, best_overall, best_driver, field }
         };
         self.runtime.lock().expect("runtime mutex poisoned").timing.configure(ctx);
         Ok(())

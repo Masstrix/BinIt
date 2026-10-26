@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { api, isTauri, useAppEvent, useAppState, type AppEvent, type Driver } from "../api";
 import { CelebrationView, CentreSwitch, isCentre, useCelebrations } from "../components/Celebrations";
 import { Helmet } from "../components/Helmet";
-import { MOCK_DATA, SectionWidgets, withDevClimb, TOAST_KEYFRAMES, useLapToasts, useOverlayData } from "../components/OverlayWidgets";
+import { MOCK_DATA, SectionWidgets, withDevClimb, withDevLive, TOAST_KEYFRAMES, useLapToasts, useOverlayData } from "../components/OverlayWidgets";
 import { useDevCelebrate, useDevOverlay } from "../devOverlay";
 import { fx } from "../fx";
 import { ANCHORS, anchorStyle, useOverlayLayout } from "../overlayLayout";
@@ -22,7 +22,15 @@ export function Overlay() {
       else if (kind === "rankReset") setDevClimb(0);
     }, []),
   );
-  const data = devGame ? withDevClimb(MOCK_DATA, devClimb) : live;
+  // Development only: with the gap tower on its live mode, the example lap runs so the tower can be watched.
+  const [devClock, setDevClock] = useState(0);
+  useEffect(() => {
+    if (!devGame || layout.towerMode !== "live") return;
+    const t0 = performance.now();
+    const id = window.setInterval(() => setDevClock((performance.now() - t0) / 1000), 150);
+    return () => window.clearInterval(id);
+  }, [devGame, layout.towerMode]);
+  const data = devGame ? (layout.towerMode === "live" ? withDevLive(withDevClimb(MOCK_DATA, devClimb), devClock) : withDevClimb(MOCK_DATA, devClimb)) : live;
   // In the dev overlay a quiet pop-up played from the editor shows over the example one.
   const toast = useLapToasts(live.pbMs);
   const celebration = useCelebrations();
@@ -157,7 +165,7 @@ export function Overlay() {
           if (!items?.length) return null;
           return (
             <div key={a} style={anchorStyle(a, profile, layout.margins)}>
-              <SectionWidgets items={items} data={data} toast={toast} celebration={slotCelebration} preview={devGame != null} anchor={a} styles={layout.styles} onDriverClick={openSwitcher} />
+              <SectionWidgets items={items} data={data} toast={toast} celebration={slotCelebration} preview={devGame != null} anchor={a} styles={layout.styles} towerMode={layout.towerMode} onDriverClick={openSwitcher} />
             </div>
           );
         })}

@@ -1,6 +1,7 @@
 //! Live timing: delta to a reference lap and per-sector status, from the stream of
 //! (progress, elapsed) updates a game adapter publishes. Pure logic, no I/O.
 
+use crate::model::DriverId;
 use serde::{Deserialize, Serialize};
 use tt_games::timing::TimingProfile;
 
@@ -50,9 +51,21 @@ pub struct RefDelta {
     pub delta_ms: Option<i32>,
 }
 
+/// Where one other driver's best lap has got to at the point the car is at: the time on their clock when they were
+/// there. Lined up with the current lap's own clock it says who would be ahead right now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldGhost {
+    pub driver_id: DriverId,
+    pub ghost_ms: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LiveTimingView {
+    /// Every other driver's best lap, at this point of the lap (empty when nobody else has a lap with a profile).
+    /// Everything is level at the line and spreads out from there.
+    pub field: Vec<FieldGhost>,
     /// Current time minus the reference lap's time at the same point (negative = faster).
     pub delta_ms: Option<i32>,
     /// What the delta is against: "PB" (the driver's best) or "Best" (anyone's).
@@ -76,6 +89,8 @@ pub struct TimingContext {
     pub others: Vec<(TimingProfile, String)>,
     pub best_overall: Vec<Option<u32>>,
     pub best_driver: Vec<Option<u32>>,
+    /// Each other driver's best lap on this track and car, to race the current lap against.
+    pub field: Vec<(DriverId, TimingProfile)>,
 }
 
 #[derive(Debug, Default)]
@@ -171,7 +186,15 @@ impl LiveTiming {
             references.push(RefDelta { kind: "best".into(), label: label.clone(), delta_ms: against(prof) });
         }
 
+        let field = self
+            .ctx
+            .field
+            .iter()
+            .map(|(driver_id, prof)| FieldGhost { driver_id: *driver_id, ghost_ms: prof.at(progress).round().max(0.0) as u32 })
+            .collect();
+
         Some(LiveTimingView {
+            field,
             references,
             delta_ms,
             reference: self.ctx.reference.as_ref().map(|(_, label)| label.to_string()),
@@ -198,7 +221,25 @@ mod tests {
             others: vec![],
             best_overall: vec![Some(29_000), Some(30_000), Some(30_000)],
             best_driver: vec![Some(30_500), Some(30_500), Some(30_500)],
+            field: vec![],
         }
+    }
+
+    #[test]
+    fn the_field_is_level_at_the_line_and_spreads_out_from_there() {
+        // Two other drivers: one on a 90 s lap, one 3 s quicker over the same line.
+        let slower = TimingProfile((0..PROFILE_POINTS).map(|i| (i as u32) * 450).collect());
+        let quicker = TimingProfile((0..PROFILE_POINTS).map(|i| (i as u32) * 435).collect());
+        let mut lt = LiveTiming::default();
+        lt.configure(TimingContext { field: vec![(7, slower), (8, quicker)], ..ctx() });
+        let v = lt.update(0.0, 0).unwrap();
+        assert!(v.field.iter().all(|g| g.ghost_ms == 0), "everyone starts level at the line");
+        let v = lt.update(0.5, 44_000).unwrap();
+        assert_eq!(v.field, vec![FieldGhost { driver_id: 7, ghost_ms: 45_000 }, FieldGhost { driver_id: 8, ghost_ms: 43_500 }]);
+        // A new lap: the clock goes back and the field is level again.
+        lt.update(0.99, 89_000);
+        let v = lt.update(0.0, 0).unwrap();
+        assert!(v.field.iter().all(|g| g.ghost_ms == 0));
     }
 
     #[test]

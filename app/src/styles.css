@@ -1315,3 +1315,7 @@ img.game-icon { object-fit: cover; display: inline-block; }
 [data-trend="closing"] { color: #4FD39A !important; }
 [data-trend="growing"] { color: #FF7A92 !important; }
 .gap-tower-num, [data-trend] { transition: color 250ms; }
+
+/* gap tower, live: the seated driver is about to pass the car ahead */
+[data-range] { box-shadow: inset 0 0 0 1.5px rgba(255, 201, 60, .8); }
+.range-tag { position: absolute; right: 6px; top: -9px; z-index: 4; padding: 1px 8px; border-radius: 999px; background: #FFC93C; color: #2A1D00; font: 800 10px var(--font-display); letter-spacing: .04em; white-space: nowrap; pointer-events: none; }

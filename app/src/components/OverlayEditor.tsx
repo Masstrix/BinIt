@@ -8,6 +8,7 @@ import {
   WIDGET_STYLES,
   MAX_MARGIN,
   SIDES,
+  TOWER_MODES,
   defaultMargin,
   anchorBox,
   anchorStyle,
@@ -415,7 +416,7 @@ export function OverlayEditor() {
             {/* On a phone the widgets are drawn bigger than life so they can be read; each grows away from its own edge.
                 The wrapper lays its widgets out like the section does (a column with a gap), or they would run together. */}
             <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: anchorStyle(a, profile, margins).alignItems, ...(boost === 1 ? {} : { transform: `scale(${boost})`, transformOrigin: growFrom(a) }) }}>
-              <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={props} anchor={a} styles={layout.styles} />
+              <SectionWidgets items={items} data={MOCK_DATA} toast={null} preview itemProps={props} anchor={a} styles={layout.styles} towerMode={layout.towerMode} />
             </div>
           </div>
         );
@@ -631,6 +632,15 @@ export function OverlayEditor() {
                       title={o.hint}
                       onClick={() => save({ ...layout, styles: { ...layout.styles, [w]: o.id } })}
                     >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {w === "tower" && (
+                <div className="segmented compact" role="group" aria-label="Gap tower data">
+                  {TOWER_MODES.map((o) => (
+                    <button key={o.id} type="button" aria-pressed={(layout.towerMode ?? "static") === o.id} title={o.hint} onClick={() => save({ ...layout, towerMode: o.id })}>
                       {o.label}
                     </button>
                   ))}

@@ -245,6 +245,8 @@ export interface LiveTiming {
   reference: string | null;
   /** Every lap the delta can be against, the one above first: your PB, then the fastest lap anyone has set when different. */
   references?: { kind: "pb" | "best"; label: string; deltaMs: number | null }[];
+  /** Every other driver's best lap at this point of the lap, to race the current one against (level at the line). */
+  field?: { driverId: number; ghostMs: number }[];
   currentSector: number;
   /** deltaMs: sector time minus the reference lap's (negative = faster). */
   sectors: { timeMs: number | null; deltaMs: number | null; status: SectorStatus }[];

@@ -42,6 +42,8 @@ export interface OverlayData {
   /** Top 5 on the current track + car, plus the seated driver's row if outside it. */
   comboTop: { position: number; name: string; color: string; timeMs: number; gapMs: number; isSeat: boolean; driverId?: number | null }[];
   timing: LiveTiming | null;
+  /** Each other driver's best lap at this point of the lap (the gap tower's live mode); empty off the track. */
+  field: { name: string; color: string; ghostMs: number; driverId?: number }[];
   /** The running lap clock, for when there's no reference lap to show a delta against. */
   lapMs: number;
   /** The game has invalidated the lap in progress (a cut): it won't be timed. */
@@ -99,6 +101,13 @@ export function useOverlayData(): OverlayData {
     game: session?.game ?? null,
     comboTop,
     timing: status?.live?.driving ? status.live.timing : null,
+    field:
+      status?.live?.driving && !status.live.outLap
+        ? (status.live.timing?.field ?? []).map((g) => {
+            const d = drivers.get(g.driverId);
+            return { name: d?.name ?? "Guest", color: d?.color ?? "#8F99B3", ghostMs: g.ghostMs, driverId: g.driverId };
+          })
+        : [],
     lapMs: status?.live?.currentLapMs ?? 0,
     lapInvalid: !!(status?.live?.driving && !status.live.outLap && !status.live.lapValid),
     lapVoidReason: status?.live?.voidReason ?? null,
@@ -121,6 +130,46 @@ export function withDevClimb(data: OverlayData, step: number): OverlayData {
   const challengeTop = rank(data.challengeTop);
   const comboTop = rank(data.comboTop);
   return { ...data, challengeTop, comboTop, top3: challengeTop.slice(0, 3).map(({ name, color, timeMs }) => ({ name, color, timeMs })) };
+}
+
+/**
+ * Development only: the example lap running, so the gap tower's live mode can be watched. `t` is seconds into a 70 s
+ * lap that repeats; the others' best laps are a little quicker or slower than Sam's, so they trade places.
+ */
+export function withDevLive(data: OverlayData, t: number): OverlayData {
+  const p = (t % 70) / 70;
+  const lapMs = Math.round(p * 70_000);
+  const pace = (factor: number, wobble: number, phase: number) => Math.round(lapMs * factor + Math.sin(p * 9 + phase) * wobble * p);
+  return {
+    ...data,
+    lapMs,
+    timing: data.timing ? { ...data.timing } : data.timing,
+    field: [
+      { name: "Jess", color: "#2FA8FF", ghostMs: pace(0.985, 380, 0) },
+      { name: "Priya", color: "#FF5FA2", ghostMs: pace(0.996, 520, 1.5) },
+      { name: "Tom", color: "#4FD39A", ghostMs: pace(1.012, 640, 3) },
+      { name: "Alex", color: "#FFC93C", ghostMs: pace(1.03, 300, 4.5) },
+    ],
+  };
+}
+
+/**
+ * The drivers the gap tower lists. Static: the best laps set on this track and car. Live: this lap raced against
+ * everyone else's best, point by point, so it starts level at the line and spreads out as the lap goes on.
+ */
+function useTowerRows(data: OverlayData, live: boolean): { rows: OverlayData["comboTop"]; racing: boolean } {
+  const racing = live && data.timing != null && !data.outLap && data.field.length > 0;
+  if (!racing) return { rows: data.comboTop, racing: false };
+  const all = [
+    { name: data.driverName, color: data.driverColor, timeMs: data.lapMs, isSeat: true, driverId: undefined as number | undefined },
+    ...data.field.map((f) => ({ name: f.name, color: f.color, timeMs: f.ghostMs, isSeat: false, driverId: f.driverId })),
+  ].sort((a, b) => a.timeMs - b.timeMs || (a.isSeat ? -1 : b.isSeat ? 1 : 0));
+  const lead = all[0].timeMs;
+  const ranked = all.map((r, i) => ({ ...r, position: i + 1, gapMs: r.timeMs - lead }));
+  const top = ranked.slice(0, 5);
+  const mine = ranked.find((r) => r.isSeat);
+  if (mine && mine.position > 5) top.push(mine);
+  return { rows: top, racing: true };
 }
 
 /** Example data so the layout editor always shows what every widget looks like. */
@@ -167,6 +216,12 @@ export const MOCK_DATA: OverlayData = {
       { timeMs: null, deltaMs: null, status: "current" },
     ],
   },
+  field: [
+    { name: "Jess", color: "#2FA8FF", ghostMs: 70200 },
+    { name: "Priya", color: "#FF5FA2", ghostMs: 71100 },
+    { name: "Tom", color: "#4FD39A", ghostMs: 72300 },
+    { name: "Alex", color: "#FFC93C", ghostMs: 74000 },
+  ],
   lapMs: 71500,
   lapInvalid: false,
   lapVoidReason: null,
@@ -632,12 +687,13 @@ function deltaText(ms: number | null) {
  * column it is the tower down the side of the screen; in a row it runs along the top or bottom edge.
  * The seated driver is picked out, and appended after a break when outside the top few.
  */
-export function GapTowerCard({ data, orientation = "vertical" }: { data: OverlayData; orientation?: Orientation }) {
-  const rows = data.comboTop;
+export function GapTowerCard({ data, orientation = "vertical", live = false }: { data: OverlayData; orientation?: Orientation; live?: boolean }) {
+  const { rows, racing } = useTowerRows(data, live);
   const row = orientation === "horizontal";
   const box = useRef<HTMLDivElement>(null);
   // Track games have a running order that changes; a rally stage is driven one car at a time, so it stays still.
-  const flash = useRankMotion(rows.map((r) => r.name), box, !words(data.game).rally, data.comboLabel ?? "");
+  // A rally stage listed by best times stays still; raced live, its order changes as the stage goes on.
+  const flash = useRankMotion(rows.map((r) => r.name), box, racing || !words(data.game).rally, data.comboLabel ?? "");
   const trend = useTrends(Object.fromEntries(rows.map((r) => [r.name, r.gapMs])), 8);
   const gapText = (r: (typeof rows)[number]) => (r.position === 1 ? lapTime(r.timeMs) : `+${(r.gapMs / 1000).toFixed(3)}`);
   const tag = (r: (typeof rows)[number]) => (
@@ -658,6 +714,8 @@ export function GapTowerCard({ data, orientation = "vertical" }: { data: Overlay
       {r.position}
     </span>
   );
+  // Live: the seated driver within half a second of the car ahead is about to pass it.
+  const inRange = (r: (typeof rows)[number], i: number) => racing && r.isSeat && i > 0 && r.timeMs - rows[i - 1].timeMs < 500;
   const seatStyle = (r: (typeof rows)[number]) => (r.isSeat ? { background: "var(--tint)", color: "var(--peri-1)" } : {});
   return (
     <div
@@ -687,8 +745,9 @@ export function GapTowerCard({ data, orientation = "vertical" }: { data: Overlay
               <span className="mono" data-trend={trend[r.name]} style={{ fontSize: 13, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}><Signed text={gapText(r)} /></span>
             </span>
           ) : (
-            <span data-flip={`r:${r.name}`} data-mv={flash(r.name).mv || undefined} style={{ position: "relative", display: "flex", alignItems: "center", gap: 8, padding: "3px 8px 3px 3px", borderRadius: 12, ...seatStyle(r) }}>
+            <span data-flip={`r:${r.name}`} data-mv={flash(r.name).mv || undefined} data-range={inRange(r, i) || undefined} style={{ position: "relative", display: "flex", alignItems: "center", gap: 8, padding: "3px 8px 3px 3px", borderRadius: 12, ...seatStyle(r) }}>
               {!!flash(r.name).gain && <span className="mv-badge">▲ {flash(r.name).gain}</span>}
+              {!flash(r.name).gain && inRange(r, i) && <span className="range-tag">IN RANGE</span>}
               {tag(r)}
               <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: r.color, flex: "none" }} />
               <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: r.isSeat ? 800 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
@@ -707,8 +766,9 @@ export function GapTowerCard({ data, orientation = "vertical" }: { data: Overlay
  * driver far back is far), with the gap to the driver ahead written between each pair. In a column it runs
  * down the rail; in a row it runs along it.
  */
-export function GapMonitorCard({ data, orientation = "vertical" }: { data: OverlayData; orientation?: Orientation }) {
-  const cars = [...data.comboTop].sort((a, b) => a.gapMs - b.gapMs);
+export function GapMonitorCard({ data, orientation = "vertical", live = false }: { data: OverlayData; orientation?: Orientation; live?: boolean }) {
+  const { rows: listed } = useTowerRows(data, live);
+  const cars = [...listed].sort((a, b) => a.gapMs - b.gapMs);
   const row = orientation === "horizontal";
   const rail = useRef<HTMLDivElement>(null);
   // The cars glide along the rail by themselves (below); this only supplies the green and red rings.
@@ -986,6 +1046,7 @@ export function SectionWidgets({
   styles,
   onDriverClick,
   celebration = null,
+  towerMode,
 }: {
   items: WidgetId[];
   data: OverlayData;
@@ -998,6 +1059,8 @@ export function SectionWidgets({
   anchor?: Anchor;
   /** The layout's chosen styles, for a widget that comes in more than one. */
   styles?: OverlayLayout["styles"];
+  /** What the gap tower lists (best laps, or this lap raced against them live). */
+  towerMode?: OverlayLayout["towerMode"];
   /** Makes the driver on the strip clickable (the real overlay only: it opens the driver picker). */
   onDriverClick?: () => void;
 }) {
@@ -1022,7 +1085,7 @@ export function SectionWidgets({
         if (g === "leaderboard") return wrap(g, <LeaderboardCard data={data} />);
         if (g === "tower") {
           const Tower = styleOf({ styles }, "tower") === "gaps" ? GapMonitorCard : GapTowerCard;
-          return wrap(g, <Tower data={data} orientation={orientationFor(anchor)} />);
+          return wrap(g, <Tower data={data} orientation={orientationFor(anchor)} live={towerMode === "live"} />);
         }
         if (g === "qr") return wrap(g, <QrCard data={data} />);
         if (celebration) return wrap(g, <CelebrationView key={celebration.id} c={celebration} layout={orientationFor(anchor) === "horizontal" ? "pill" : "card"} />);
