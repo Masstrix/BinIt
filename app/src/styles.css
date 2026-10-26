@@ -27,8 +27,8 @@
   --radius: 28px;
   --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
   --font-body: "Plus Jakarta Sans", system-ui, sans-serif;
-  /* Numbers and captions: Plus Jakarta Sans with tabular figures (plain zero, steady widths). */
-  --font-mono: "Plus Jakarta Sans", system-ui, sans-serif;
+  /* Numbers and captions: DM Mono, a true monospace with a plain zero. */
+  --font-mono: "DM Mono", ui-monospace, monospace;
   --font-num: "Archivo", system-ui, sans-serif;
   color-scheme: dark;
 }
