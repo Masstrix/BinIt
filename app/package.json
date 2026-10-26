@@ -1,7 +1,7 @@
 {
   "name": "binit-app",
   "private": true,
-  "version": "0.6.1",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "start": "tauri dev",
