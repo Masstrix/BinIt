@@ -23,30 +23,54 @@ const STICKER_ICON: Record<string, string> = {
  * The page behind the phone banner: who you are, how far you have got and what you have done. It follows the
  * phone's paired driver (see MeBar); from the PC there is no paired driver, so it asks to pick one.
  */
-export function YouPage() {
-  const { drivers } = useAppState();
+export function YouPage({ path = "/you" }: { path?: string }) {
+  const { drivers, status } = useAppState();
   const [tick, setTick] = useState(0);
   const [switching, setSwitching] = useState(false);
   const info = useFetch(() => api.me(), [drivers, tick]);
   const me = info?.driver ?? null;
-  const profile = useFetch<Profile>(me ? () => api.profile(me.id) : null, [me?.id, tick]);
+  // `#/you/3` shows driver 3; otherwise this phone's driver; on the PC (nobody is paired) whoever is in the seat.
+  const asked = path.match(/^\/you\/(\d+)/);
+  const viewId = asked ? Number(asked[1]) : (me?.id ?? (info?.local ? (status?.seat ?? null) : null));
+  const profile = useFetch<Profile>(viewId != null ? () => api.profile(viewId) : null, [viewId, tick]);
+  const mine = me != null && me.id === viewId;
 
   return (
     <>
       <div className="page-head">
-        <h1>You</h1>
+        <h1>{info?.local ? "Profile" : "You"}</h1>
       </div>
 
-      {info && !me && (
+      {info && viewId == null && (
         <section className="card" style={{ alignItems: "center", textAlign: "center", padding: "40px 24px" }}>
-          <h2>Who are you?</h2>
-          <p className="muted" style={{ margin: 0 }}>Pick yourself once and this phone remembers you. Your level, bests and stickers live here.</p>
-          <button className="btn big" onClick={() => setSwitching(true)}>Pick your driver</button>
+          {info.local ? (
+            <>
+              <h2>Nobody is in the seat</h2>
+              <p className="muted" style={{ margin: 0 }}>Pick a driver below to see their level, bests and stickers.</p>
+            </>
+          ) : (
+            <>
+              <h2>Who are you?</h2>
+              <p className="muted" style={{ margin: 0 }}>Pick yourself once and this phone remembers you. Your level, bests and stickers live here.</p>
+              <button className="btn big" onClick={() => setSwitching(true)}>Pick your driver</button>
+            </>
+          )}
         </section>
       )}
 
-      {me && profile && <ProfileView profile={profile} onSwitch={() => setSwitching(true)} />}
-      {me && !profile && <div className="empty">Loading…</div>}
+      {viewId != null && profile && <ProfileView profile={profile} mine={mine} onSwitch={() => setSwitching(true)} />}
+      {viewId != null && !profile && <div className="empty">Loading…</div>}
+
+      {info?.local && drivers.length > 0 && (
+        <nav className="you-drivers" aria-label="Whose profile">
+          {drivers.map((d) => (
+            <a key={d.id} href={`#/you/${d.id}`} aria-current={d.id === viewId ? "page" : undefined}>
+              <Helmet color={d.color} size={36} seed={d.id} />
+              {d.name}
+            </a>
+          ))}
+        </nav>
+      )}
 
       {switching && (
         <WhoAreYou
@@ -63,12 +87,13 @@ export function YouPage() {
   );
 }
 
-function ProfileView({ profile: p, onSwitch }: { profile: Profile; onSwitch: () => void }) {
+function ProfileView({ profile: p, mine, onSwitch }: { profile: Profile; mine: boolean; onSwitch: () => void }) {
   const into = p.xp - p.levelStartXp;
   const span = Math.max(1, p.nextLevelXp - p.levelStartXp);
   const earned = p.stickers.filter((s) => s.earned).length;
   return (
-    <>
+    <div className="you-layout">
+      <div className="you-main">
       <section className="card you-hero" aria-label="Level">
         <span className="you-tile" style={{ background: `${p.driver.color}2E` }}>
           <Helmet color={p.driver.color} size={92} tile={false} seed={p.driver.id} mood="happy" />
@@ -97,6 +122,15 @@ function ProfileView({ profile: p, onSwitch }: { profile: Profile; onSwitch: () 
         <div className="stat-tile"><span className="mono">{p.tracks}</span><span className="label">Tracks</span></div>
       </div>
 
+      {mine && (
+        <div className="you-switch">
+          <span className="grow muted">This phone is set to {p.driver.name}.</span>
+          <button className="btn ghost" onClick={onSwitch}>Not you?</button>
+        </div>
+      )}
+      </div>
+
+      <div className="you-side">
       <section className="you-section" aria-label="Your bests">
         <div className="head"><h2>Your bests</h2><span className="muted" style={{ fontSize: 13 }}>All games</span></div>
         {p.bests.length === 0 && <div className="empty">No times yet. Get out there!</div>}
@@ -147,10 +181,7 @@ function ProfileView({ profile: p, onSwitch }: { profile: Profile; onSwitch: () 
         </div>
       </section>
 
-      <div className="you-switch">
-        <span className="grow muted">This phone is set to {p.driver.name}.</span>
-        <button className="btn ghost" onClick={onSwitch}>Not you?</button>
       </div>
-    </>
+    </div>
   );
 }

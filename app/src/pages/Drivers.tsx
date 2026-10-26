@@ -202,6 +202,7 @@ function DriverCard({ driver, seated, rating }: { driver: Driver; seated: boolea
         )}
       </div>
       <span className="driver-actions">
+        <a className="chip plain" href={`#/you/${driver.id}`}>Profile</a>
         <a className="chip plain" href={`#/drivers/${driver.id}`}>Progress</a>
         {!seated && <button className="chip plain" onClick={() => seat.choose(driver)}>Drive</button>}
         <button className="chip plain" onClick={() => setEditing(true)}>Edit</button>

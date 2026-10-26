@@ -512,9 +512,22 @@ h2 { font-size: 22px; line-height: 1.2; }
 .sticker:nth-child(3n)[data-earned] .sticker-icon { background: rgba(255, 201, 60, 0.18); color: var(--gold); }
 .sticker-name { font-size: 12px; font-weight: 500; text-align: center; color: var(--muted); }
 .sticker[data-earned] .sticker-name { color: var(--text); }
+.you-drivers { display: flex; flex-wrap: wrap; gap: 8px; }
+.you-drivers a { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 16px 0 8px; border-radius: 999px; background: var(--panel); color: var(--text); text-decoration: none; font-weight: 600; font-size: 14px; }
+.you-drivers a:hover { background: var(--panel-2); }
+.you-drivers a[aria-current="page"] { background: var(--tint); color: var(--peri-1); }
 .you-switch { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 22px; background: var(--panel-2); }
 .you-switch .btn { min-height: 44px; }
-@media (min-width: 641px) { .you-hero, .you-stats, .you-section, .you-switch { max-width: 640px; } }
+.you-layout, .you-main, .you-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.you-side { gap: 24px; }
+/* Desktop: the profile card stays put on the left while the lists scroll beside it. */
+@media (min-width: 900px) {
+  .you-layout { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 28px; align-items: start; }
+  .you-main { position: sticky; top: 0; }
+  .you-section h2 { font-size: 20px; }
+  .sticker-grid { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 14px; }
+  .you-best { background: var(--panel); }
+}
 .code-input { text-align: center; font-size: 28px; letter-spacing: 0.3em; min-height: 60px; }
 .pair-code { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px; border-radius: 22px; background: var(--tint); color: var(--peri-1); text-align: center; }
 .pair-code-digits { font-size: 40px; line-height: 1.1; font-weight: 500; letter-spacing: 0.06em; color: var(--text); }

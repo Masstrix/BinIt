@@ -21,6 +21,7 @@ import { Updater } from "./pages/Updater";
 
 const ROUTES = [
   { path: "/", group: "Play", label: "Home", icon: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" },
+  { path: "/you", group: "Play", label: "Profile", icon: "M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4 21a8 8 0 0 1 16 0" },
   { path: "/telemetry", group: "Play", label: "Telemetry", icon: "M3 12h4l3-8 4 16 3-8h4" },
   { path: "/leaderboard", group: "Compete", label: "Leaderboards", icon: "M4 20v-6h5v6M9 20V9h6v11M15 20v-8h5v8" },
   { path: "/challenges", group: "Compete", label: "Challenges", icon: "M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3a3 3 0 0 1-3 4M7 5H4a3 3 0 0 0 3 4" },
@@ -75,7 +76,6 @@ function useHashPath() {
 const lastPathKey = (section: string) => `lastPath.${section}`;
 
 function titleFor(path: string) {
-  if (path.startsWith("/you")) return "You";
   return ROUTES.find((r) => (r.path === "/" ? path === "/" : path.startsWith(r.path)))?.label ?? "Bin It";
 }
 
@@ -114,7 +114,7 @@ export function App() {
   else if (path.startsWith("/games")) page = <GamesPage />;
   else if (path.startsWith("/telemetry")) page = <TelemetryPage path={path} />;
   else if (path.startsWith("/advanced")) page = <AdvancedPage />;
-  else if (path.startsWith("/you")) page = <YouPage />;
+  else if (path.startsWith("/you")) page = <YouPage path={path} />;
   else page = <Home />;
 
   return (
@@ -220,7 +220,7 @@ function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed: boole
       )}
       <UpdateButton />
       <div className="seat-card">
-        <button type="button" className="seat-who" data-driving={driving || undefined} onClick={switchDriver} title={driver ? `${driver.name} is in the seat. Switch driver (F8)` : "Nobody in the seat. Pick a driver"}>
+        <button type="button" className="seat-who" data-driving={driving || undefined} onClick={driver ? () => (location.hash = `#/you/${driver.id}`) : switchDriver} title={driver ? `${driver.name} is in the seat. Open their profile` : "Nobody in the seat. Pick a driver"}>
           <Helmet color={driver?.color ?? "#5b6578"} size={44} seed={driver?.id} mood={driving ? "happy" : "idle"} />
           <span className="seat-text">
             <span className="seat-name">{driver ? driver.name : "Guest"}</span>
