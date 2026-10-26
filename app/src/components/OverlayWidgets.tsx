@@ -409,6 +409,48 @@ function useTimingReference(
 
 const REF_NAME: Record<string, string> = { pb: "PB", best: "Leader" };
 
+const WAVE_STEP_MS = 45;
+
+/**
+ * A number that changes in a wave when `switchKey` changes (the lap it is measured against): the old digits lift
+ * away left to right while the new ones rise in just behind them. Between switches it updates in place, as a live
+ * delta must.
+ */
+function WaveNumber({ text, switchKey, color, enabled }: { text: string; switchKey: string; color: string; enabled: boolean }) {
+  const [leaving, setLeaving] = useState<string | null>(null);
+  const lastText = useRef(text);
+  const lastKey = useRef(switchKey);
+  // Runs before the effect below stores this render's text, so `lastText` is still what was on show.
+  useEffect(() => {
+    if (lastKey.current === switchKey) return;
+    lastKey.current = switchKey;
+    if (!enabled) return;
+    setLeaving(lastText.current);
+    const t = window.setTimeout(() => setLeaving(null), 380 + WAVE_STEP_MS * Math.max(text.length, lastText.current.length));
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [switchKey]);
+  useEffect(() => {
+    lastText.current = text;
+  });
+  const chars = (t: string, cls: string) =>
+    [...t].map((c, i) => (
+      <span key={i} className={cls} style={{ display: "inline-block", whiteSpace: "pre", animationDelay: `${i * WAVE_STEP_MS}ms` }}>
+        {c}
+      </span>
+    ));
+  return (
+    <span className="mono" style={{ position: "relative", display: "inline-block", overflow: "hidden", padding: "4px 0", margin: "-4px 0", font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.08em", color }}>
+      {leaving ? chars(text, "tt-in") : text}
+      {leaving && (
+        <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 4, pointerEvents: "none", whiteSpace: "pre" }}>
+          {chars(leaving, "tt-out")}
+        </span>
+      )}
+    </span>
+  );
+}
+
 /** A small ring that empties over `ms`: how long until live timing switches to the other lap (muted while a hand switch is held). */
 function CountdownRing({ ms, held }: { ms: number; held: boolean }) {
   const r = 6;
@@ -488,8 +530,7 @@ export function TimingCard({ data, mode }: { data: OverlayData; mode?: string })
       )}
       <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, ...(cut ? { opacity: 0.55, textDecoration: "line-through" } : {}) }}>
         {t.reference ? (
-          // Keyed by the lap in use, so a switch makes a new number roll in rather than the old one changing in place.
-          <span key={shown ?? "-"} className={several ? "mono tt-roll" : "mono"} style={{ font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.08em", color: cut ? "var(--red)" : deltaColour(d) }}>{deltaText(d)}</span>
+          <WaveNumber text={deltaText(d)} switchKey={shown ?? "-"} enabled={several} color={cut ? "var(--red)" : deltaColour(d)} />
         ) : (
           // First lap on this track: nothing to compare against yet, so show the lap clock.
           <>
