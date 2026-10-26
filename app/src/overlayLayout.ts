@@ -21,7 +21,10 @@ export interface OverlayLayout {
   styles?: Partial<Record<WidgetId, string>>;
   /** Say "Sam is driving" when the driver changes (works even when the overlay can't be seen). */
   voice: boolean;
-  /** Extra space between the widgets and each screen edge, on top of the game's own clearance (% of the screen). */
+  /**
+   * How far the widgets sit from each screen edge (% of the screen). 0 is right against the edge. A side that is
+   * not set keeps the game's own spacing, which clears its HUD.
+   */
   margins?: Partial<Record<Side, number>>;
 }
 
@@ -120,29 +123,37 @@ function edgeOffset(a: Anchor, profile?: GameProfile): number {
 
 const SIDE_GAP = 2;
 
+/** Where a side sits when it has not been set: the game's own spacing for the first section on that side that is used. */
+export function defaultMargin(side: Side, profile: GameProfile, layout: Pick<OverlayLayout, "sections">): number {
+  if (side === "left" || side === "right") return SIDE_GAP;
+  const anchors = ANCHORS.filter((a) => a.startsWith(side));
+  const used = anchors.find((a) => layout.sections[a]?.length) ?? anchors[0];
+  return edgeOffset(used, profile);
+}
+
 /** The section's approximate area for this game, with its edge offset and the chosen spacing applied. */
 export function anchorBox(a: Anchor, profile?: GameProfile, margins?: OverlayLayout["margins"]): Box {
   const b = { ...ANCHOR_BOX[a] };
   const [v, h] = a.split("-");
-  if (v === "top") b.y = edgeOffset(a, profile) + (margins?.top ?? 0);
-  if (v === "bottom") b.y = 100 - edgeOffset(a, profile) - (margins?.bottom ?? 0) - b.h;
-  if (h === "left") b.x = SIDE_GAP + (margins?.left ?? 0);
-  if (h === "right") b.x = 100 - SIDE_GAP - (margins?.right ?? 0) - b.w;
+  if (v === "top") b.y = margins?.top ?? edgeOffset(a, profile);
+  if (v === "bottom") b.y = 100 - (margins?.bottom ?? edgeOffset(a, profile)) - b.h;
+  if (h === "left") b.x = margins?.left ?? SIDE_GAP;
+  if (h === "right") b.x = 100 - (margins?.right ?? SIDE_GAP) - b.w;
   return b;
 }
 
 export function anchorStyle(a: Anchor, profile?: GameProfile, margins?: OverlayLayout["margins"]): CSSProperties {
   const [v, h] = a.split("-") as ["top" | "middle" | "bottom", "left" | "center" | "right"];
   const style: CSSProperties = { position: "absolute", display: "flex", flexDirection: "column", gap: 10 };
-  if (v === "top") style.top = `${edgeOffset(a, profile) + (margins?.top ?? 0)}%`;
-  if (v === "bottom") style.bottom = `${edgeOffset(a, profile) + (margins?.bottom ?? 0)}%`;
+  if (v === "top") style.top = `${margins?.top ?? edgeOffset(a, profile)}%`;
+  if (v === "bottom") style.bottom = `${margins?.bottom ?? edgeOffset(a, profile)}%`;
   if (v === "middle") style.top = "50%";
   if (h === "left") {
-    style.left = `${SIDE_GAP + (margins?.left ?? 0)}%`;
+    style.left = `${margins?.left ?? SIDE_GAP}%`;
     style.alignItems = "flex-start";
   }
   if (h === "right") {
-    style.right = `${SIDE_GAP + (margins?.right ?? 0)}%`;
+    style.right = `${margins?.right ?? SIDE_GAP}%`;
     style.alignItems = "flex-end";
   }
   if (h === "center") {
@@ -248,7 +259,7 @@ function sanitize(raw: unknown, fallback: OverlayLayout): OverlayLayout {
   const margins: NonNullable<OverlayLayout["margins"]> = {};
   for (const side of SIDES) {
     const m = r.margins?.[side];
-    if (typeof m === "number" && m > 0) margins[side] = Math.min(MAX_MARGIN, Math.round(m * 2) / 2);
+    if (typeof m === "number" && m >= 0) margins[side] = Math.min(MAX_MARGIN, Math.round(m * 2) / 2);
   }
   return { version: 1, sections, voice: r.voice ?? fallback.voice, ...(Object.keys(styles).length ? { styles } : {}), ...(Object.keys(margins).length ? { margins } : {}) };
 }

@@ -8,6 +8,7 @@ import {
   WIDGET_STYLES,
   MAX_MARGIN,
   SIDES,
+  defaultMargin,
   anchorBox,
   anchorStyle,
   moveWidget,
@@ -176,17 +177,22 @@ export function OverlayEditor() {
   const overlayOn = status?.overlayEnabled ?? true;
   const [game, setGame] = useState(status?.game ?? "acevo");
   const { layout, save, reset, custom, profile } = useOverlayLayout(game);
-  // The spacing sliders move the widgets as they are dragged and save when they are let go.
+  // The spacing sliders move the widgets as they are dragged and save a moment after the last change.
   const [draft, setDraft] = useState<OverlayLayout["margins"] | null>(null);
   const margins = draft ?? layout.margins;
-  const commitMargins = () => {
-    if (!draft) return;
-    const clean: NonNullable<OverlayLayout["margins"]> = {};
-    for (const s of SIDES) if ((draft[s] ?? 0) > 0) clean[s] = draft[s];
-    const { margins: _old, ...rest } = layout;
-    save({ ...rest, ...(Object.keys(clean).length ? { margins: clean } : {}) });
-    setDraft(null);
+  const saveTimer = useRef<number | undefined>(undefined);
+  const layoutRef = useRef(layout);
+  layoutRef.current = layout;
+  const setMargin = (side: Side, value: number) => {
+    const next = { ...(draft ?? layout.margins ?? {}), [side]: value };
+    setDraft(next);
+    window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => {
+      save({ ...layoutRef.current, margins: next });
+      setDraft(null);
+    }, 350);
   };
+  useEffect(() => () => window.clearTimeout(saveTimer.current), []);
 
   const [selected, setSelected] = useState<WidgetId | null>(null);
   const [dragging, setDragging] = useState<WidgetId | null>(null);
@@ -487,29 +493,28 @@ export function OverlayEditor() {
               min={0}
               max={MAX_MARGIN}
               step={0.5}
-              value={margins?.[side] ?? 0}
-              aria-label={`Extra space from the ${side} of the screen`}
-              onChange={(e) => setDraft({ ...(margins ?? {}), [side]: Number(e.target.value) })}
-              onPointerUp={commitMargins}
-              onKeyUp={commitMargins}
-              onBlur={commitMargins}
+              value={margins?.[side] ?? defaultMargin(side, profile, layout)}
+              aria-label={`Space from the ${side} of the screen`}
+              style={{ ["--p" as string]: `${((margins?.[side] ?? defaultMargin(side, profile, layout)) / MAX_MARGIN) * 100}%` }}
+              onChange={(e) => setMargin(side, Number(e.target.value))}
             />
-            <output className="mono">{margins?.[side] ?? 0}%</output>
+            <output className="mono">{margins?.[side] ?? defaultMargin(side, profile, layout)}%</output>
           </label>
         ))}
         <button
           type="button"
           className="chip plain"
-          disabled={!margins || SIDES.every((s) => !margins[s])}
+          disabled={!margins || SIDES.every((s) => margins[s] === undefined)}
           onClick={() => {
+            window.clearTimeout(saveTimer.current);
             const { margins: _m, ...rest } = layout;
             setDraft(null);
             save(rest);
           }}
         >
-          Reset spacing
+          Back to the game's spacing
         </button>
-        <span className="muted ed-space-note">Added to each game's own clearance for its HUD, for this game only.</span>
+        <span className="muted ed-space-note">0% puts the widgets right against the edge. Untouched sides keep this game's own spacing, which clears its HUD.</span>
       </fieldset>
       {compact && (
         <button type="button" className="btn ghost ed-enlarge" onClick={() => setZoomed(true)}>
