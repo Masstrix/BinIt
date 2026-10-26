@@ -1,5 +1,6 @@
 import { words } from "../vocab";
-import { type CSSProperties } from "react";
+import { useRef, type CSSProperties } from "react";
+import { useRankMotion } from "../rankMotion";
 import { api, useAppState, useDriverMap, useFetch } from "../api";
 import { CarBadge } from "../catalogueItems";
 import { Helmet } from "../components/Helmet";
@@ -79,6 +80,9 @@ export function LeaderboardPage() {
   const cars = view === "cars" && carsHere.length > 1 && carRows.length > 0;
   const tableCols = cars ? carCols : cols;
   const { ref: tableRef, compact } = useCompactTable(gridMinWidth(tableCols));
+  const rankKey = (e: (typeof board)[number]) => (e.driverId != null ? `d${e.driverId}` : `l${e.lapId}`);
+  const motion = useRef<HTMLDivElement>(null);
+  const flash = useRankMotion(board.map(rankKey), motion, true, `${track}|${car}|${period}|${includeInvalid}`);
   const idealMs = sectorCount > 0 && bestSectors.every((t) => t !== null) ? bestSectors.reduce((a, t) => a! + t!, 0)! : null;
 
   return (
@@ -179,6 +183,7 @@ export function LeaderboardPage() {
                 {board.length === 0 ? (
                   <div className="empty">No {w.laps} in this period.</div>
                 ) : (
+                  <div ref={motion} style={{ display: "contents" }}>
                   <div className="lb-scroll" style={{ "--lb-min": `${gridMinWidth(cols)}px` } as CSSProperties} ref={tableRef} data-compact={compact || undefined}>
                     <div className="lb-grid lb-head" style={{ gridTemplateColumns: cols }}>
                       <span style={{ textAlign: "center" }}>POS</span>
@@ -198,7 +203,7 @@ export function LeaderboardPage() {
                       const me = e.driverId != null && e.driverId === seat;
                       return (
                         <a
-                          key={e.lapId}
+                          key={rankKey(e)}
                           href={`#/telemetry/lap/${e.lapId}`}
                           title="Analyse this lap"
                           className={`lb-grid lb-row lb-btn${top ? " top" : podium ? " lb-podium" : ""}`}
@@ -206,10 +211,15 @@ export function LeaderboardPage() {
                             gridTemplateColumns: cols,
                           }}
                           data-me={me || undefined}
+                          data-flip={`r:${rankKey(e)}`}
+                          data-mv={flash(rankKey(e)).mv || undefined}
                         >
+                          {!!flash(rankKey(e)).gain && <span className="mv-badge">▲ {flash(rankKey(e)).gain}</span>}
                           <span className="lb-pos">{e.position}</span>
                           <span className="lb-c-driver" style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
-                            <Helmet color={color} size={top ? 60 : podium ? 52 : 44} seed={d?.id} mood={e.position === 1 ? "happy" : "idle"} />
+                            <span data-flip={`h:${rankKey(e)}`} style={{ display: "flex" }}>
+                              <Helmet color={color} size={top ? 60 : podium ? 52 : 44} seed={d?.id} mood={e.position === 1 ? "happy" : "idle"} />
+                            </span>
                             <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
                               <span className="lb-name">
                                 {d?.name ?? "Guest"}
@@ -239,6 +249,7 @@ export function LeaderboardPage() {
                         </a>
                       );
                     })}
+                  </div>
                   </div>
                 )}
                 </>

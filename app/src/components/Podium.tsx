@@ -54,6 +54,9 @@ function Trophy({ x, y, gold }: { x: number; y: number; gold: string }) {
   );
 }
 
+/** A driver's key on a board: the same for the podium, the table and the motion between them. */
+export const keyOf = (e: LeaderboardEntry) => (e.driverId != null ? `d${e.driverId}` : `l${e.lapId}`);
+
 /** Podium for the top three. `prizes` (1st, 2nd, 3rd) are printed under each time. */
 export function Podium({
   entries,
@@ -119,9 +122,12 @@ export function Podium({
             <g key={`h${s.place}`}>
               <ellipse className="pod-shadow" style={{ animationDelay: delay(s.place) }} cx={s.shadow[0]} cy={s.shadow[1]} rx={47.6 * k} ry={9.8 * k} fill="#000" opacity="0.35" />
               {helmets && (
-                <g transform={`translate(${s.helmetAt[0]},${s.helmetAt[1]})`}>
-                  <g className={`pod-bob${s.place === 1 ? " lead" : ""}`} style={{ animationDelay: delay(s.place) }}>
-                    <Helmet color={d?.color ?? "#5b6578"} size={s.helmet} tile={false} seed={d?.id} mood={s.place === 1 ? "happy" : "idle"} />
+                // The wrapper has no transform of its own, so it can be moved without disturbing the helmet's place.
+                <g data-flip={`p:${keyOf(e)}`} data-flip-from={`h:${keyOf(e)}`}>
+                  <g transform={`translate(${s.helmetAt[0]},${s.helmetAt[1]})`}>
+                    <g className={`pod-bob${s.place === 1 ? " lead" : ""}`} style={{ animationDelay: delay(s.place) }}>
+                      <Helmet color={d?.color ?? "#5b6578"} size={s.helmet} tile={false} seed={d?.id} mood={s.place === 1 ? "happy" : "idle"} />
+                    </g>
                   </g>
                 </g>
               )}

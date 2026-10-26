@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { api, isTauri, useAppEvent, useAppState, type AppEvent, type Driver } from "../api";
 import { CelebrationView, CentreSwitch, isCentre, useCelebrations } from "../components/Celebrations";
 import { Helmet } from "../components/Helmet";
-import { MOCK_DATA, SectionWidgets, TOAST_KEYFRAMES, useLapToasts, useOverlayData } from "../components/OverlayWidgets";
-import { useDevOverlay } from "../devOverlay";
+import { MOCK_DATA, SectionWidgets, withDevClimb, TOAST_KEYFRAMES, useLapToasts, useOverlayData } from "../components/OverlayWidgets";
+import { useDevCelebrate, useDevOverlay } from "../devOverlay";
 import { fx } from "../fx";
 import { ANCHORS, anchorStyle, useOverlayLayout } from "../overlayLayout";
 
@@ -14,7 +14,15 @@ export function Overlay() {
   const game = devGame ?? status?.game ?? "acevo";
   const { layout, profile } = useOverlayLayout(game);
   const live = useOverlayData();
-  const data = devGame ? MOCK_DATA : live;
+  // Development only: the editor's "Rank" buttons move Tom up the example standings so the motion can be seen.
+  const [devClimb, setDevClimb] = useState(0);
+  useDevCelebrate(
+    useCallback((kind: string) => {
+      if (kind === "rankUp") setDevClimb((n) => Math.min(2, n + 1));
+      else if (kind === "rankReset") setDevClimb(0);
+    }, []),
+  );
+  const data = devGame ? withDevClimb(MOCK_DATA, devClimb) : live;
   // In the dev overlay a quiet pop-up played from the editor shows over the example one.
   const toast = useLapToasts(live.pbMs);
   const celebration = useCelebrations();

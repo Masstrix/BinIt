@@ -1,5 +1,6 @@
 import { cap, words } from "../vocab";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useRankMotion } from "../rankMotion";
 import { api, challengeMatches, isActive, useAppState, useCatalogue, useDriverMap, useFetch, useTrackMaps, type Challenge, type Prize } from "../api";
 import { carItems, findMap, splitTrackValue, TrackThumb, trackItems } from "../catalogueItems";
 import { ChallengeReplay } from "../components/ChallengeReplay";
@@ -10,7 +11,7 @@ import { Dropdown } from "../components/Dropdown";
 import { DateTimePicker } from "../components/DateTimePicker";
 import { Modal } from "../components/Modal";
 import { Picker } from "../components/Picker";
-import { Podium } from "../components/Podium";
+import { keyOf, Podium } from "../components/Podium";
 import { ago, bestSectors, carName, countdown, gameName, gap, gridMinWidth, lapTime, ordinal, SECTOR_MINT, SECTOR_PURPLE, sectorColor, SUPPORTED_GAMES, trackName, whenLabel } from "../format";
 
 type EndPreset = "lunch" | "five" | "friday" | "custom" | "never";
@@ -158,10 +159,13 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
   const sectors = bestSectors(board);
   const cols = `44px minmax(150px, 1fr) ${hasPrizes ? "minmax(100px, 0.6fr) " : ""}132px 64px ${sectors.map(() => "56px ").join("")}44px`;
   const { ref: tableRef, compact } = useCompactTable(gridMinWidth(cols));
+  // The podium and the table below it move together when somebody changes place.
+  const motion = useRef<HTMLElement>(null);
+  const flash = useRankMotion(board.map(keyOf), motion, true, String(c.id));
 
   return (
     <>
-    <section className="card ch-view" aria-label={c.name}>
+    <section className="card ch-view" aria-label={c.name} ref={motion}>
       <div className="head" style={{ alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
           <div className="label" style={{ color: live ? "var(--peach)" : "var(--muted)" }}>{live ? "Running" : "Finished"}</div>
@@ -225,13 +229,18 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
             const podium = e.position <= 3;
             return (
               <div
-                key={e.lapId}
+                key={keyOf(e)}
+                data-flip={`r:${keyOf(e)}`}
+                data-mv={flash(keyOf(e)).mv || undefined}
                 className={`lb-grid lb-row${podium ? ` place place-${e.position}` : ""}`}
                 style={{ gridTemplateColumns: cols, ...(me && !podium ? { background: `${color}1F`, borderColor: `${color}73` } : {}) }}
               >
+                {!!flash(keyOf(e)).gain && <span className="mv-badge">▲ {flash(keyOf(e)).gain}</span>}
                 <span className="lb-pos">{e.position}</span>
                 <span className="lb-c-driver" style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
-                  <Helmet color={color} size={podium ? 52 : 44} seed={d?.id} mood={e.position === 1 ? "happy" : "idle"} />
+                  <span data-flip={`h:${keyOf(e)}`} style={{ display: "flex" }}>
+                    <Helmet color={color} size={podium ? 52 : 44} seed={d?.id} mood={e.position === 1 ? "happy" : "idle"} />
+                  </span>
                   <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
                     <span className="lb-name">{d?.name ?? "Guest"}</span>
                     <span className="lb-meta" style={{ color: me ? color : "var(--muted)" }}>

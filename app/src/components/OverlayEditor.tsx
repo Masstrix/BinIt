@@ -99,6 +99,8 @@ function DevOverlayToggle({ game }: { game: string }) {
 /** Development builds only: play each celebration on the overlay, to look at it. */
 function DevCelebrations() {
   const kinds: [string, string][] = [
+    ["rankUp", "Rank: Tom climbs"],
+    ["rankReset", "Rank: reset"],
     ["toastOut", "Out lap"],
     ["toastIn", "In lap"],
     ["toastCut", "Cut lap"],

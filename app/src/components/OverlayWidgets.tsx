@@ -2,6 +2,7 @@
 // editor renders the same components, scaled down, as its preview.
 
 import { useCallback, useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
+import { useRankMotion, useTrends, type Flash } from "../rankMotion";
 import { api, isTauri, type LiveTiming, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
 import { lapKind, lapTime, trackName } from "../format";
 import { words } from "../vocab";
@@ -104,6 +105,22 @@ export function useOverlayData(): OverlayData {
     outLap: !!(status?.live?.driving && status.live.outLap),
     url,
   };
+}
+
+/**
+ * Development only: the example standings after Tom (fourth) sets faster laps. Step 1 takes him to second, which
+ * pushes Priya off the podium; step 2 takes him past Jess to the lead.
+ */
+export function withDevClimb(data: OverlayData, step: number): OverlayData {
+  if (step <= 0) return data;
+  const time = step >= 2 ? 102050 : 102240;
+  const rank = <T extends { name: string; timeMs: number; position: number; gapMs: number }>(rows: T[]): T[] => {
+    const sorted = rows.map((r) => (r.name === "Tom" ? { ...r, timeMs: time } : r)).sort((a, b) => a.timeMs - b.timeMs);
+    return sorted.map((r, i) => ({ ...r, position: i + 1, gapMs: r.timeMs - sorted[0].timeMs }));
+  };
+  const challengeTop = rank(data.challengeTop);
+  const comboTop = rank(data.comboTop);
+  return { ...data, challengeTop, comboTop, top3: challengeTop.slice(0, 3).map(({ name, color, timeMs }) => ({ name, color, timeMs })) };
 }
 
 /** Example data so the layout editor always shows what every widget looks like. */
@@ -251,11 +268,14 @@ export function StripCard({ items, data, itemProps, onDriverClick }: { items: Wi
 }
 
 /** One place in a ranking: used by the track leaderboard and the challenge list so they look alike. */
-function RankRow({ position, name, color, seed, right, isSeat, rightColor }: { position: number; name: string; color: string; seed?: string | number; right: string; isSeat: boolean; rightColor?: string }) {
+function RankRow({ position, name, color, seed, right, isSeat, rightColor, flip, mv }: { position: number; name: string; color: string; seed?: string | number; right: string; isSeat: boolean; rightColor?: string; flip?: string; mv?: Flash }) {
   const placeColour = position === 1 ? "#FFE14D" : position === 3 ? "#FF8A4C" : "var(--muted)";
   return (
     <span
+      data-flip={flip ? `r:${flip}` : undefined}
+      data-mv={mv?.mv || undefined}
       style={{
+        position: "relative",
         display: "flex",
         alignItems: "center",
         gap: 8,
@@ -268,9 +288,12 @@ function RankRow({ position, name, color, seed, right, isSeat, rightColor }: { p
       }}
     >
       <span style={{ font: "600 12px var(--font-mono)", width: 14, color: isSeat ? "var(--peri-1)" : placeColour }}>{position}</span>
-      <Helmet color={color} size={26} seed={seed ?? name} />
+      <span data-flip={flip ? `h:${flip}` : undefined} style={{ display: "flex" }}>
+        <Helmet color={color} size={26} seed={seed ?? name} />
+      </span>
       <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: isSeat ? 700 : 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
       <span className="mono" style={{ fontSize: 13, color: rightColor }}><Signed text={right} /></span>
+      {!!mv?.gain && <span className="mv-badge">▲ {mv.gain}</span>}
     </span>
   );
 }
@@ -293,6 +316,8 @@ export function StandingsCard({ data, mode }: { data: OverlayData; mode?: string
     return () => window.clearInterval(t);
   }, [data.challengeEndsAt]);
   const below = mode === "list" ? data.challengeTop.filter((r) => r.position > 3) : [];
+  const box = useRef<HTMLDivElement>(null);
+  const flash = useRankMotion([...data.top3.map((r) => r.name), ...below.map((r) => r.name)], box, true, data.challengeName ?? "");
   // Second, first, third, left to right: the winner's step is the tallest.
   const steps = [
     { place: 2, h: 34 },
@@ -300,7 +325,7 @@ export function StandingsCard({ data, mode }: { data: OverlayData; mode?: string
     { place: 3, h: 24 },
   ];
   return (
-    <div style={{ ...card, borderRadius: 28, padding: "14px 16px", width: 260, display: "flex", flexDirection: "column", gap: 12 }}>
+    <div ref={box} style={{ ...card, borderRadius: 28, padding: "14px 16px", width: 260, display: "flex", flexDirection: "column", gap: 12 }}>
       <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
         <span style={{ flex: "none", width: 28, height: 28, borderRadius: 10, background: "rgba(255,201,60,0.15)", display: "grid", placeItems: "center" }}>
           <Trophy size={16} />
@@ -330,7 +355,10 @@ export function StandingsCard({ data, mode }: { data: OverlayData; mode?: string
               <span key={place} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 4 }}>
                 {r ? (
                   <>
-                    <Helmet color={r.color} size={38} seed={r.name} />
+                    <span data-flip={`h:${r.name}`} style={{ position: "relative", display: "flex" }}>
+                      <Helmet color={r.color} size={38} seed={r.name} />
+                      {!!flash(r.name).gain && <span className="mv-badge" style={{ top: -8, right: -14 }}>▲ {flash(r.name).gain}</span>}
+                    </span>
                     <span style={{ fontSize: 12, fontWeight: 600, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.name}</span>
                     <span className="mono" style={{ fontSize: 11, color: "var(--muted)" }}>{lapTime(r.timeMs)}</span>
                   </>
@@ -350,7 +378,7 @@ export function StandingsCard({ data, mode }: { data: OverlayData; mode?: string
           {below.map((r, i) => (
             <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
               {i > 0 && r.position - below[i - 1].position > 1 && <span style={{ height: 1, background: "var(--line)", margin: "4px 0" }} />}
-              <RankRow position={r.position} name={r.name} color={r.color} seed={r.driverId ?? r.name} right={`+${(r.gapMs / 1000).toFixed(3)}`} rightColor="var(--muted)" isSeat={r.isSeat} />
+              <RankRow position={r.position} name={r.name} color={r.color} seed={r.driverId ?? r.name} right={`+${(r.gapMs / 1000).toFixed(3)}`} rightColor="var(--muted)" isSeat={r.isSeat} flip={r.name} mv={flash(r.name)} />
             </span>
           ))}
         </span>
@@ -607,6 +635,10 @@ function deltaText(ms: number | null) {
 export function GapTowerCard({ data, orientation = "vertical" }: { data: OverlayData; orientation?: Orientation }) {
   const rows = data.comboTop;
   const row = orientation === "horizontal";
+  const box = useRef<HTMLDivElement>(null);
+  // Track games have a running order that changes; a rally stage is driven one car at a time, so it stays still.
+  const flash = useRankMotion(rows.map((r) => r.name), box, !words(data.game).rally, data.comboLabel ?? "");
+  const trend = useTrends(Object.fromEntries(rows.map((r) => [r.name, r.gapMs])), 8);
   const gapText = (r: (typeof rows)[number]) => (r.position === 1 ? lapTime(r.timeMs) : `+${(r.gapMs / 1000).toFixed(3)}`);
   const tag = (r: (typeof rows)[number]) => (
     <span
@@ -629,6 +661,7 @@ export function GapTowerCard({ data, orientation = "vertical" }: { data: Overlay
   const seatStyle = (r: (typeof rows)[number]) => (r.isSeat ? { background: "var(--tint)", color: "var(--peri-1)" } : {});
   return (
     <div
+      ref={box}
       style={{
         ...card,
         padding: 6,
@@ -641,23 +674,25 @@ export function GapTowerCard({ data, orientation = "vertical" }: { data: Overlay
     >
       {rows.length === 0 && <span className="muted" style={{ fontSize: 13, padding: "4px 8px" }}>No {words(data.game).laps} yet</span>}
       {rows.map((r, i) => (
-        <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
+        <span key={r.name} style={{ display: "contents" }}>
           {i === 5 && <span style={row ? { width: 1, background: "var(--line)", margin: "2px 2px" } : { height: 1, background: "var(--line)", margin: "1px 4px" }} />}
           {row ? (
-            <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 92, padding: "5px 8px", borderRadius: 12, ...seatStyle(r) }}>
+            <span data-flip={`r:${r.name}`} data-mv={flash(r.name).mv || undefined} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 3, minWidth: 92, padding: "5px 8px", borderRadius: 12, ...seatStyle(r) }}>
+              {!!flash(r.name).gain && <span className="mv-badge">▲ {flash(r.name).gain}</span>}
               <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 {tag(r)}
                 <span style={{ flex: 1, height: 4, borderRadius: 2, background: r.color }} />
               </span>
               <span style={{ fontSize: 14, fontWeight: r.isSeat ? 800 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 110 }}>{r.name}</span>
-              <span className="mono" style={{ fontSize: 13, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}><Signed text={gapText(r)} /></span>
+              <span className="mono" data-trend={trend[r.name]} style={{ fontSize: 13, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}><Signed text={gapText(r)} /></span>
             </span>
           ) : (
-            <span style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 8px 3px 3px", borderRadius: 12, ...seatStyle(r) }}>
+            <span data-flip={`r:${r.name}`} data-mv={flash(r.name).mv || undefined} style={{ position: "relative", display: "flex", alignItems: "center", gap: 8, padding: "3px 8px 3px 3px", borderRadius: 12, ...seatStyle(r) }}>
+              {!!flash(r.name).gain && <span className="mv-badge">▲ {flash(r.name).gain}</span>}
               {tag(r)}
               <span style={{ width: 4, alignSelf: "stretch", borderRadius: 2, background: r.color, flex: "none" }} />
               <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: r.isSeat ? 800 : 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</span>
-              <span className="mono" style={{ fontSize: 13, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}>{gapText(r)}</span>
+              <span className="mono" data-trend={trend[r.name]} style={{ fontSize: 13, color: r.position === 1 ? "var(--gold)" : "var(--text-2)" }}>{gapText(r)}</span>
             </span>
           )}
         </span>
@@ -675,6 +710,9 @@ export function GapTowerCard({ data, orientation = "vertical" }: { data: Overlay
 export function GapMonitorCard({ data, orientation = "vertical" }: { data: OverlayData; orientation?: Orientation }) {
   const cars = [...data.comboTop].sort((a, b) => a.gapMs - b.gapMs);
   const row = orientation === "horizontal";
+  const rail = useRef<HTMLDivElement>(null);
+  // The cars glide along the rail by themselves (below); this only supplies the green and red rings.
+  const flash = useRankMotion(cars.map((c) => c.name), rail, false, data.comboLabel ?? "");
   const intervals = cars.slice(1).map((c, i) => c.gapMs - cars[i].gapMs);
   const size = Math.max(BASE, intervals.reduce((sum, ms) => sum + room(ms), 0));
   const at = place(intervals, size);
@@ -705,7 +743,7 @@ export function GapMonitorCard({ data, orientation = "vertical" }: { data: Overl
     : { width: sideReach + Math.max(0, ...cars.map((c) => avatar(c) / 2)) + 8 + 34, height: startReach + length + endReach };
   return (
     <div style={{ ...card, padding: 16, display: "flex" }}>
-      <div style={{ position: "relative", ...box }}>
+      <div ref={rail} style={{ position: "relative", ...box }}>
         {/* The rail. */}
         <span
           style={
@@ -716,10 +754,11 @@ export function GapMonitorCard({ data, orientation = "vertical" }: { data: Overl
         />
         {cars.slice(1).map((c, i) => (
           <span
-            key={`gap-${c.position}-${c.name}`}
+            key={`gap-${c.name}`}
             className="mono"
             style={{
               position: "absolute",
+              transition: `${along} 520ms cubic-bezier(.3, 1.25, .4, 1)`,
               [along]: px(mid(i)),
               ...(row ? { top: railAt + 20, transform: "translateX(-50%)" } : { left: railAt + 20, transform: "translateY(-50%)" }),
               fontSize: 11,
@@ -737,10 +776,11 @@ export function GapMonitorCard({ data, orientation = "vertical" }: { data: Overl
           const s = avatar(c);
           return (
             <span
-              key={`${c.position}-${c.name}`}
+              key={c.name}
               title={`${c.position}. ${c.name}`}
               style={{
                 position: "absolute",
+                transition: `${along} 520ms cubic-bezier(.3, 1.25, .4, 1)`,
                 [along]: px(f),
                 ...(row ? { top: railAt, transform: "translate(-50%, -50%)" } : { left: railAt, transform: "translate(-50%, -50%)" }),
                 width: s,
@@ -752,7 +792,15 @@ export function GapMonitorCard({ data, orientation = "vertical" }: { data: Overl
                 style={{
                   display: "block",
                   borderRadius: s * 0.3,
-                  boxShadow: c.isSeat ? "0 0 0 2px #161B24, 0 0 0 4px var(--violet)" : "0 0 0 2px #161B24",
+                  transition: "box-shadow 300ms",
+                  boxShadow:
+                    flash(c.name).mv === "up"
+                      ? "0 0 0 2px #161B24, 0 0 0 4px #4FD39A"
+                      : flash(c.name).mv === "down"
+                        ? "0 0 0 2px #161B24, 0 0 0 4px #FF7A92"
+                        : c.isSeat
+                          ? "0 0 0 2px #161B24, 0 0 0 4px var(--violet)"
+                          : "0 0 0 2px #161B24",
                 }}
               >
                 <Helmet color={c.color} size={s} seed={c.driverId ?? c.name} />
@@ -797,8 +845,10 @@ export function QrCard({ data }: { data: OverlayData }) {
 
 /** Top of the leaderboard for what's being driven right now, independent of challenges. */
 export function LeaderboardCard({ data }: { data: OverlayData }) {
+  const box = useRef<HTMLDivElement>(null);
+  const flash = useRankMotion(data.comboTop.map((r) => r.name), box, true, data.comboLabel ?? "");
   return (
-    <div style={{ ...card, borderRadius: 28, padding: "14px 16px", width: 260, display: "flex", flexDirection: "column" }}>
+    <div ref={box} style={{ ...card, borderRadius: 28, padding: "14px 16px", width: 260, display: "flex", flexDirection: "column" }}>
       <span style={{ font: "500 11px var(--font-mono)", letterSpacing: "0.08em", textTransform: "uppercase", color: "#2FA8FF", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {data.comboLabel ?? "Leaderboard"}
       </span>
@@ -809,7 +859,7 @@ export function LeaderboardCard({ data }: { data: OverlayData }) {
         {data.comboTop.map((r, i) => (
           <span key={`${r.position}-${r.name}`} style={{ display: "contents" }}>
             {i === 5 && <span style={{ height: 1, background: "var(--line)", margin: "4px 0" }} />}
-            <RankRow position={r.position} name={r.name} color={r.color} seed={r.driverId ?? r.name} right={lapTime(r.timeMs)} rightColor={r.position === 1 && !r.isSeat ? "var(--mint)" : undefined} isSeat={r.isSeat} />
+            <RankRow position={r.position} name={r.name} color={r.color} seed={r.driverId ?? r.name} right={lapTime(r.timeMs)} rightColor={r.position === 1 && !r.isSeat ? "var(--mint)" : undefined} isSeat={r.isSeat} flip={r.name} mv={flash(r.name)} />
           </span>
         ))}
       </span>

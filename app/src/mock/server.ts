@@ -94,6 +94,17 @@ function startTicker() {
   }, 200);
 }
 
+/** Dev console: `__mockLap(driverId, timeMs)` records a lap for that driver on the current track, to watch boards move. */
+(window as unknown as { __mockLap?: (driverId: number, timeMs: number) => void }).__mockLap = (driverId, timeMs) => {
+  const lap: Lap = {
+    id: nextId++, ...pick(session), driverId, sessionKind: "practice", lapNumber: laps.filter((l) => l.driverId === driverId).length + 1,
+    timeMs, valid: true, untimedReason: null, sectorsMs: [Math.round(timeMs * 0.31), Math.round(timeMs * 0.4), timeMs - Math.round(timeMs * 0.71)], recordedAt: Date.now(),
+  };
+  laps.push(lap);
+  emit({ type: "lapsChanged" });
+  emit({ type: "challengesChanged" });
+};
+
 function finishLap() {
   const timeMs = LAP_MS + Math.round((Math.random() - 0.4) * 1400);
   const own = settings.seat != null ? laps.filter((l) => l.driverId === settings.seat && key(l) === key(session) && l.valid) : [];
@@ -403,7 +414,28 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
   if ((r = m(/^\/challenges\/(\d+)\/replay$/))) return ok(replay(+r[1]));
   if ((r = m(/^\/challenges\/(\d+)\/end$/))) { const c = challenges.find((x) => x.id === +r![1]); if (c) c.endsAt = Date.now(); emit({ type: "challengesChanged" }); return ok(null); }
   if ((r = m(/^\/challenges\/(\d+)$/)) && method === "DELETE") { challenges.splice(challenges.findIndex((x) => x.id === +r![1]), 1); emit({ type: "challengesChanged" }); return ok(null); }
-  if (m(/^\/overlay\/layout\//)) return ok(null);
+  if ((r = m(/^\/overlay\/layout\/(\w+)$/))) {
+    // Layouts you save in the editor are kept in this browser, so they survive a reload.
+    const all: Record<string, unknown> = (() => {
+      try {
+        return JSON.parse(localStorage.getItem("tt.mock.layouts") ?? "{}");
+      } catch {
+        return {};
+      }
+    })();
+    if (method === "PUT" || method === "DELETE") {
+      if (method === "PUT") all[r[1]] = body;
+      else delete all[r[1]];
+      try {
+        localStorage.setItem("tt.mock.layouts", JSON.stringify(all));
+      } catch {
+        // Not kept; fine for a mock.
+      }
+      emit({ type: "overlayLayoutChanged", game: r[1] });
+      return ok(null);
+    }
+    return ok((all[r[1]] as T | undefined) ?? (null as T));
+  }
   if (p === "/overlay/enabled") { settings.overlayEnabled = !!body.enabled; emit({ type: "overlaySettings", enabled: settings.overlayEnabled, focusOnly: settings.overlayFocusOnly, show: settings.overlayShow }); return ok(settings.overlayEnabled); }
   if (p === "/overlay/show") { settings.overlayShow = body.mode; emit({ type: "overlaySettings", enabled: settings.overlayEnabled, focusOnly: settings.overlayFocusOnly, show: settings.overlayShow }); return ok(body.mode); }
   if (p === "/overlay/focus-only") { settings.overlayFocusOnly = !!body.enabled; emit({ type: "overlaySettings", enabled: settings.overlayEnabled, focusOnly: settings.overlayFocusOnly, show: settings.overlayShow }); return ok(settings.overlayFocusOnly); }
