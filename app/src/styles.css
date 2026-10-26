@@ -883,6 +883,7 @@ h2 { font-size: 22px; line-height: 1.2; }
 /* ---- overlay editor on touch screens ------------------------------------------------------- */
 
 .ed-tray { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.ed-hint { display: none; }
 .ed-card { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 14px; }
 .ed-preview { height: 92px; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 10px; background: #2B3138; }
 .ed-item { touch-action: none; }
@@ -894,13 +895,18 @@ h2 { font-size: 22px; line-height: 1.2; }
 .ed-positions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; max-width: 260px; }
 .ed-pos { min-height: 46px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text-2); font-weight: 700; font-size: 13px; display: grid; place-items: center; padding: 0; }
 .ed-pos span { width: 14px; height: 14px; border-radius: 4px; background: var(--line); display: block; }
-.ed-pos[aria-pressed="true"] { border-color: var(--violet); background: var(--tint); color: #fff; }
+.ed-pos[aria-pressed="true"] { border-color: var(--violet); background: var(--tint); color: var(--text); }
 .ed-pos[aria-pressed="true"] span { background: var(--peri-1); }
 .ed-pos.hide[aria-pressed="true"] { border-color: var(--red); background: rgba(255, 122, 146, 0.18); }
 @media (pointer: coarse) { .ed-handle { display: inline-block; } }
 @media (max-width: 640px) {
   .ed-handle { display: inline-block; }
-  .ed-tray { grid-template-columns: 1fr; }
+  .ed-tray { grid-template-columns: minmax(0, 1fr); }
+  .ed-card { min-width: 0; }
+  /* The preview keeps a readable size: it is wider than the screen and scrolls sideways. */
+  .ed-scroll { overflow-x: auto; margin: 0 -4px; border-radius: 18px; scrollbar-width: thin; }
+  .ed-frame { min-width: 780px; }
+  .ed-hint { display: block; font-size: 13px; margin-top: -4px; }
   .ed-preview { height: auto; min-height: 96px; padding: 12px 6px; overflow-x: auto; justify-content: flex-start; }
   .ed-positions { max-width: none; }
   .ed-pos { min-height: 52px; }

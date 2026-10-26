@@ -290,8 +290,10 @@ export function OverlayEditor() {
         </div>
       </div>
 
+      <div className="ed-scroll">
       <div
         ref={frame}
+        className="ed-frame"
         onDragOver={frameDragOver}
         onDragLeave={(e) => {
           if (!frame.current?.contains(e.relatedTarget as Node)) setTarget(null);
@@ -386,6 +388,8 @@ export function OverlayEditor() {
           />
         )}
       </div>
+      </div>
+      {compact && <span className="muted ed-hint">Swipe sideways to see the whole screen.</span>}
 
       <div
         ref={tray}
