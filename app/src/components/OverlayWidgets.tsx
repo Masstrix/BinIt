@@ -472,7 +472,7 @@ function WaveNumber({ text, switchKey, color, enabled }: { text: string; switchK
       </span>
     ));
   return (
-    <span className="mono" style={{ position: "relative", display: "inline-block", overflow: "hidden", padding: "4px 0", margin: "-4px 0", font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.08em", color }}>
+    <span className="mono" style={{ position: "relative", display: "inline-block", overflow: "hidden", padding: "4px 0", margin: "-4px 0", font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.03em", color }}>
       {leaving ? chars(text, "tt-in", WAVE_OUT_MS) : text}
       {leaving && (
         <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 4, pointerEvents: "none", whiteSpace: "pre" }}>
@@ -566,7 +566,7 @@ export function TimingCard({ data, mode }: { data: OverlayData; mode?: string })
         ) : (
           // First lap on this track: nothing to compare against yet, so show the lap clock.
           <>
-            <span className="mono" style={{ font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.08em" }}>{lapTime(data.lapMs)}</span>
+            <span className="mono" style={{ font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.03em" }}>{lapTime(data.lapMs)}</span>
             <span style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>FIRST {words(data.game).lap.toUpperCase()}</span>
           </>
         )}
