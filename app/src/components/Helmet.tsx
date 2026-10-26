@@ -131,12 +131,13 @@ function useAmbientMood(base: HelmetMood, seed: string): HelmetMood {
  * The eyes are alive: they blink, glance about and pull faces, on a rhythm unique to `seed`
  * (pass the driver's id; it defaults to the colour).
  */
-export function Helmet({ color, size = 48, tile = true, mood = "idle", seed, round = false, look }: { color: string; /** What is equipped (gradient shell, decal, stripe, number); without it the helmet is plain `color`. */ look?: Look; size?: number; tile?: boolean; mood?: HelmetMood; seed?: string | number; /** The tile is a circle instead of a rounded square. */ round?: boolean }) {
+export function Helmet({ color, size = 48, tile = true, mood = "idle", seed, round = false, look, moment = false }: { color: string; /** A one-off reaction (a level-up, a switch) that should show its own face instead of the driver's default. */ moment?: boolean; /** What is equipped (gradient shell, decal, stripe, number); without it the helmet is plain `color`. */ look?: Look; size?: number; tile?: boolean; mood?: HelmetMood; seed?: string | number; /** The tile is a circle instead of a rounded square. */ round?: boolean }) {
   const key = String(seed ?? color);
   const { vars } = useMemo(() => personality(key), [key]);
-  // The default face is the driver's own choice of how they look when idle; a real moment (a win, a binned lap) still overrides it.
-  const chosen = mood === "idle" ? (faceById(look?.face)?.mood as HelmetMood | undefined) : undefined;
-  const face = useAmbientMood(chosen && chosen !== "idle" ? chosen : mood, key);
+  // The default face is the driver's own choice of how they look: it stands in for the resting and "in the seat"
+  // faces wherever they appear. Only a binned lap and one-off reactions (`moment`) show something else.
+  const chosen = look?.face && mood !== "binned" && !moment ? (faceById(look.face)?.mood as HelmetMood | undefined) : undefined;
+  const face = useAmbientMood(chosen ?? mood, key);
   const blinks = face === "idle" || face === "focus" || face === "wide" || face === "angry";
   const gradId = `helmet-shell-${useId().replace(/:/g, "")}`;
   const shell = shellById(look?.shell);

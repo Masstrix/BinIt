@@ -389,7 +389,7 @@ export function CelebrationView({ c, layout, ahead = null }: { c: Celebration; l
             <span className="bg" style={{ background: `${c.from?.color ?? "#8f99b3"}38` }} />
             <span className="bg b" style={{ background: `${c.to.color}3d` }} />
             <span className="h old"><Helmet color={c.from?.color ?? "#8f99b3"} look={c.from?.look} size={56} seed={c.from?.name} tile={false} /></span>
-            <span className="h new"><Helmet color={c.to.color} look={c.to.look} size={56} seed={c.to.name} mood="happy" tile={false} /></span>
+            <span className="h new"><Helmet color={c.to.color} look={c.to.look} size={56} seed={c.to.name} mood="happy" tile={false} moment /></span>
             <span className="cel-swapbadge"><Swap /></span>
           </span>
           <span className="cel-txt">
@@ -424,7 +424,7 @@ export function CentreSwitch({ c }: { c: Extract<Celebration, { kind: "switch" }
             <Helmet color={old.color} look={old.look} size={170} seed={old.name} tile={false} />
           </span>
           <span className="cel-disc new" style={{ background: `${c.to.color}3d` }}>
-            <Helmet color={c.to.color} look={c.to.look} size={170} seed={c.to.name} mood="happy" tile={false} />
+            <Helmet color={c.to.color} look={c.to.look} size={170} seed={c.to.name} mood="happy" tile={false} moment />
           </span>
           <span className="cel-cswap"><Swap s={22} /></span>
         </div>
