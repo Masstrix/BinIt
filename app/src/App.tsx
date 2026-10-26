@@ -18,17 +18,19 @@ import { Overlay } from "./pages/Overlay";
 import { Updater } from "./pages/Updater";
 
 const ROUTES = [
-  { path: "/", label: "Home", icon: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" },
-  { path: "/leaderboard", label: "Leaderboards", icon: "M4 20v-6h5v6M9 20V9h6v11M15 20v-8h5v8" },
-  { path: "/challenges", label: "Challenges", icon: "M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3a3 3 0 0 1-3 4M7 5H4a3 3 0 0 0 3 4" },
-  { path: "/telemetry", label: "Telemetry", icon: "M3 12h4l3-8 4 16 3-8h4" },
-  { path: "/drivers", label: "Drivers", icon: "M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4 21a8 8 0 0 1 16 0" },
-  { path: "/games", label: "Games & overlay", icon: "M7 7h10a5 5 0 0 1 0 10H7A5 5 0 0 1 7 7zM7 11v4M5 13h4M16 12h.01M18 14h.01" },
+  { path: "/", group: "Play", label: "Home", icon: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" },
+  { path: "/telemetry", group: "Play", label: "Telemetry", icon: "M3 12h4l3-8 4 16 3-8h4" },
+  { path: "/leaderboard", group: "Compete", label: "Leaderboards", icon: "M4 20v-6h5v6M9 20V9h6v11M15 20v-8h5v8" },
+  { path: "/challenges", group: "Compete", label: "Challenges", icon: "M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3a3 3 0 0 1-3 4M7 5H4a3 3 0 0 0 3 4" },
+  { path: "/drivers", group: "Setup", label: "Drivers", icon: "M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4 21a8 8 0 0 1 16 0" },
+  { path: "/games", group: "Setup", label: "Games & overlay", icon: "M7 7h10a5 5 0 0 1 0 10H7A5 5 0 0 1 7 7zM7 11v4M5 13h4M16 12h.01M18 14h.01" },
   // Maintenance tools: only offered inside the desktop app, never on phones or other browsers.
   ...(isTauri
-    ? [{ path: "/advanced", label: "Advanced", icon: "M4 6h16M4 12h16M4 18h16M9 3v6M15 9v6M8 15v6" }]
+    ? [{ path: "/advanced", group: "Setup", label: "Advanced", icon: "M4 6h16M4 12h16M4 18h16M9 3v6M15 9v6M8 15v6" }]
     : []),
 ];
+
+const GROUPS = ["Play", "Compete", "Setup"] as const;
 
 function useHashPath() {
   const read = () => location.hash.replace(/^#/, "") || "/";
@@ -111,19 +113,24 @@ function Sidebar({ path }: { path: string }) {
       <UpdateButton />
       {!isTauri && <MeBar />}
       <nav className="nav" aria-label="Main">
-        {ROUTES.map((r) => {
-          const current = r.path === "/" ? path === "/" : path.startsWith(r.path);
-          // Another section: go back to where you were in it. The one you're in: its main page.
-          const remembered = current ? null : readStored<string | null>(lastPathKey(r.path), null, (v) => typeof v === "string" && v.startsWith(r.path));
-          return (
-            <a key={r.path} href={`#${remembered ?? r.path}`} aria-current={current ? "page" : undefined} title={r.label}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d={r.icon} />
-              </svg>
-              <span className="nav-label">{r.label}</span>
-            </a>
-          );
-        })}
+        {GROUPS.map((group) => (
+          <div className="nav-group" key={group}>
+            <div className="nav-group-label">{group}</div>
+            {ROUTES.filter((r) => r.group === group).map((r) => {
+              const current = r.path === "/" ? path === "/" : path.startsWith(r.path);
+              // Another section: go back to where you were in it. The one you're in: its main page.
+              const remembered = current ? null : readStored<string | null>(lastPathKey(r.path), null, (v) => typeof v === "string" && v.startsWith(r.path));
+              return (
+                <a key={r.path} href={`#${remembered ?? r.path}`} aria-current={current ? "page" : undefined} title={r.label}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d={r.icon} />
+                  </svg>
+                  <span className="nav-label">{r.label}</span>
+                </a>
+              );
+            })}
+          </div>
+        ))}
       </nav>
       {lanUrl && (
         <div className="lan-box">
