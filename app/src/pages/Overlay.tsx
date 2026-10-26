@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { api, isTauri, useAppEvent, useAppState, type AppEvent, type Driver } from "../api";
-import { CentreSwitch, isCentre, useCelebrations } from "../components/Celebrations";
+import { CelebrationView, CentreSwitch, isCentre, useCelebrations } from "../components/Celebrations";
 import { Helmet } from "../components/Helmet";
 import { MOCK_DATA, SectionWidgets, TOAST_KEYFRAMES, useLapToasts, useOverlayData } from "../components/OverlayWidgets";
 import { useDevOverlay } from "../devOverlay";
@@ -120,12 +120,19 @@ export function Overlay() {
   // Celebrations ride in the Pop-ups widget, wherever that sits. Taking the Pop-ups widget out turns them off.
   const hasPopups = ANCHORS.some((a) => layout.sections[a]?.includes("toasts"));
   const centre = showWidgets && hasPopups && isCentre(celebration) ? celebration : null;
-  const slotCelebration = showWidgets && hasPopups && celebration && !centre ? celebration : null;
+  // Taking the lead is its own moment, apart from the lap: it sits just above the middle, not in the Pop-ups slot.
+  const lead = showWidgets && hasPopups && celebration?.kind === "lead" ? celebration : null;
+  const slotCelebration = showWidgets && hasPopups && celebration && !centre && !lead ? celebration : null;
 
   return (
     <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", fontFamily: "var(--font-body)", userSelect: "none", WebkitUserSelect: "none", cursor: "default" }}>
       <canvas ref={fxCanvas} aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} />
       {centre && <CentreSwitch key={centre.id} c={centre} />}
+      {lead && (
+        <div style={{ position: "absolute", left: 0, right: 0, top: "30%", display: "flex", justifyContent: "center" }}>
+          <CelebrationView key={lead.id} c={lead} layout="pill" />
+        </div>
+      )}
       {showWidgets &&
         ANCHORS.map((a) => {
           const items = layout.sections[a];
