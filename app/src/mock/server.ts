@@ -72,7 +72,11 @@ function liveView(): LiveView {
       gear: 3 + Math.round(Math.abs(corner) * 3), speedKmh: Math.round(150 + 90 * corner), rpm: Math.round(6500 + 1500 * corner),
     },
     timing: {
-      deltaMs: Math.round(Math.sin(p * 6) * 380 - 82), reference: "Sam's best", currentSector: sector,
+      deltaMs: Math.round(Math.sin(p * 6) * 380 - 82), reference: "PB", currentSector: sector,
+      references: [
+        { kind: "pb", label: "PB", deltaMs: Math.round(Math.sin(p * 6) * 380 - 82) },
+        { kind: "best", label: "Best", deltaMs: Math.round(Math.sin(p * 6) * 380 + 204) },
+      ],
       sectors: [
         { timeMs: p > 0.31 ? 31_402 : null, deltaMs: p > 0.31 ? -40 : null, status: p > 0.31 ? "green" : "current" },
         { timeMs: p > 0.7 ? 40_118 : null, deltaMs: p > 0.7 ? -210 : null, status: p > 0.7 ? "purple" : p > 0.31 ? "current" : "pending" },

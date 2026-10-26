@@ -243,6 +243,8 @@ export type SectorStatus = "purple" | "green" | "yellow" | "current" | "pending"
 export interface LiveTiming {
   deltaMs: number | null;
   reference: string | null;
+  /** Every lap the delta can be against, the one above first: your PB, then the fastest lap anyone has set when different. */
+  references?: { kind: "pb" | "best"; label: string; deltaMs: number | null }[];
   currentSector: number;
   /** deltaMs: sector time minus the reference lap's (negative = faster). */
   sectors: { timeMs: number | null; deltaMs: number | null; status: SectorStatus }[];

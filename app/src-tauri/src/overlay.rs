@@ -140,6 +140,11 @@ fn switcher_keys() -> &'static HashMap<u32, (Shortcut, &'static str)> {
     })
 }
 
+/// Ctrl+Shift+T: tells the overlay to show live timing against the next reference lap (PB, then the fastest).
+pub fn next_timing_reference(app: &AppHandle) {
+    let _ = app.emit_to(LABEL, "timing-next", ());
+}
+
 /// Called from the global-shortcut handler. Returns true if the key belonged to the switcher.
 pub fn handle_switcher_key(app: &AppHandle, shortcut: &Shortcut) -> bool {
     if !SWITCHER_OPEN.load(Ordering::SeqCst) {

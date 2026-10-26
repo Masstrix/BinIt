@@ -64,6 +64,7 @@ export function GamesPage() {
           <div className="head"><span>Switch / add driver</span><span className="kbd" style={{ background: "var(--line)", color: "var(--text)" }}>F8</span></div>
           <div className="head"><span>Pick while open</span><span className="kbd" style={{ background: "var(--line)", color: "var(--text)" }}>1–9</span></div>
           <div className="head"><span>Hide overlay</span><span className="kbd" style={{ background: "var(--line)", color: "var(--text)" }}>Ctrl+Shift+H</span></div>
+          <div className="head"><span>Live timing: PB / leader</span><span className="kbd" style={{ background: "var(--line)", color: "var(--text)" }}>Ctrl+Shift+T</span></div>
         </div>
       </section>
 

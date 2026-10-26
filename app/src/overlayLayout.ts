@@ -37,6 +37,11 @@ export const WIDGETS: Record<WidgetId, { label: string; description: string; com
 
 /** The styles a widget comes in, first one the default. A widget not listed has just one. */
 export const WIDGET_STYLES: Partial<Record<WidgetId, { id: string; label: string; hint: string }[]>> = {
+  timing: [
+    { id: "pb", label: "PB", hint: "Always against your own best lap" },
+    { id: "best", label: "Leader", hint: "Always against the fastest lap anyone has set here" },
+    { id: "cycle", label: "Cycle", hint: "Switches between the two every few seconds. In game, Ctrl+Shift+T switches by hand." },
+  ],
   tower: [
     { id: "list", label: "List", hint: "Position, name and gap to the leader, one line each" },
     { id: "gaps", label: "Gaps", hint: "Drivers spaced by their gaps, with the gap between neighbours, like Gran Turismo's B-spec monitor" },

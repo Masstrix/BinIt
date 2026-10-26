@@ -1,8 +1,8 @@
 // Presentational overlay widgets. The real overlay feeds them live data; the layout
 // editor renders the same components, scaled down, as its preview.
 
-import { useCallback, useEffect, useState, type HTMLAttributes, type ReactNode } from "react";
-import { api, type LiveTiming, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
+import { useCallback, useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
+import { api, isTauri, type LiveTiming, useAppEvent, useAppState, useCurrentChallenge, useDriverMap, useFetch, type AppEvent, type LeaderboardEntry } from "../api";
 import { lapKind, lapTime, trackName } from "../format";
 import { words } from "../vocab";
 import { orientationFor, styleOf, WIDGETS, type Anchor, type Orientation, type OverlayLayout, type WidgetId } from "../overlayLayout";
@@ -117,6 +117,10 @@ export const MOCK_DATA: OverlayData = {
   timing: {
     deltaMs: -142,
     reference: "PB",
+    references: [
+      { kind: "pb", label: "PB", deltaMs: -142 },
+      { kind: "best", label: "Best", deltaMs: 61 },
+    ],
     currentSector: 2,
     sectors: [
       { timeMs: 33902, deltaMs: -215, status: "purple" },
@@ -258,9 +262,72 @@ export function StandingsCard({ data }: { data: OverlayData }) {
 
 const SECTOR_COLOURS = { purple: "#B79BFF", green: "#4FD39A", yellow: "#FFC93C", current: "#E8EBF4", pending: "#262D3B" };
 
+const CYCLE_MS = 6000;
+/** After a hand switch while cycling, how long it stays before cycling carries on. */
+const HOLD_MS = 15000;
+
+/**
+ * Which reference lap live timing is against. The style (PB, Leader or Cycle) is the starting point; clicking
+ * the widget or a pill, or Ctrl+Shift+T in game, switches by hand. In a fixed style that stays until the style
+ * changes; while cycling it holds for a while and then carries on.
+ */
+function useTimingReference(kinds: string[], mode: string | undefined): [string | undefined, () => void, (kind: string) => void] {
+  const [tick, setTick] = useState(0);
+  const [held, setHeld] = useState<string | null>(null);
+  const timer = useRef<number | undefined>(undefined);
+  const list = kinds.join();
+  useEffect(() => setHeld(null), [mode]);
+  useEffect(() => {
+    if (mode !== "cycle" || kinds.length < 2 || held) return;
+    const t = window.setInterval(() => setTick((n) => n + 1), CYCLE_MS);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, list, held]);
+  const base = mode === "cycle" && kinds.length > 1 ? kinds[tick % kinds.length] : mode === "best" && kinds.includes("best") ? "best" : kinds.includes("pb") ? "pb" : kinds[0];
+  const shown = held && kinds.includes(held) ? held : base;
+
+  const select = useCallback(
+    (kind: string) => {
+      setHeld(kind);
+      window.clearTimeout(timer.current);
+      if (mode === "cycle") timer.current = window.setTimeout(() => setHeld(null), HOLD_MS);
+    },
+    [mode],
+  );
+  const next = useCallback(() => {
+    if (kinds.length > 1) select(kinds[(kinds.indexOf(shown ?? "") + 1) % kinds.length]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list, shown, select]);
+
+  // Ctrl+Shift+T: the desktop app tells the overlay window (it cannot be clicked over a game).
+  const nextRef = useRef(next);
+  nextRef.current = next;
+  useEffect(() => {
+    if (!isTauri) return;
+    let off: (() => void) | undefined;
+    let gone = false;
+    import("@tauri-apps/api/event").then(({ listen }) =>
+      listen("timing-next", () => nextRef.current()).then((u) => {
+        if (gone) u();
+        else off = u;
+      }),
+    );
+    return () => {
+      gone = true;
+      off?.();
+    };
+  }, []);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+  return [shown, next, select];
+}
+
+const REF_NAME: Record<string, string> = { pb: "PB", best: "Leader" };
+
 /** Delta to the reference lap plus one bar per sector (purple / green / yellow). */
-export function TimingCard({ data }: { data: OverlayData }) {
+export function TimingCard({ data, mode }: { data: OverlayData; mode?: string }) {
   const t = data.timing;
+  const refs = t?.references ?? [];
+  const [shown, next, select] = useTimingReference(refs.map((r) => r.kind), mode);
   if (data.outLap || !t) {
     return data.outLap ? (
       <div style={{ ...card, padding: "14px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -269,25 +336,39 @@ export function TimingCard({ data }: { data: OverlayData }) {
       </div>
     ) : null;
   }
-  const d = t.deltaMs;
+  const current = refs.find((r) => r.kind === shown);
+  const d = current ? current.deltaMs : t.deltaMs;
   const cut = data.lapInvalid;
-  // The two things a delta can be against; the one in use is lit.
-  const againstLeader = !!t.reference && /leader|^p1$/i.test(t.reference);
-  const pills = ["PB", "Leader"];
+  const several = refs.length > 1;
   return (
-    <div style={{ ...card, borderRadius: 28, padding: "16px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 10, ...(cut ? { boxShadow: "inset 0 0 0 1.5px rgba(255,122,146,0.7), 0 8px 30px rgba(0,0,0,0.35)", background: "#2A1420" } : {}) }}>
+    <div
+      onClick={several ? next : undefined}
+      title={several ? "Click to switch between your PB and the fastest lap" : undefined}
+      style={{ ...card, borderRadius: 28, padding: "16px 18px", minWidth: 260, display: "flex", flexDirection: "column", gap: 10, ...(several ? { cursor: "pointer", pointerEvents: "auto" as const } : {}), ...(cut ? { boxShadow: "inset 0 0 0 1.5px rgba(255,122,146,0.7), 0 8px 30px rgba(0,0,0,0.35)", background: "#2A1420" } : {}) }}>
       {cut && (
         <span style={{ font: "500 11px var(--font-mono)", letterSpacing: "0.06em", color: "var(--red)" }}>
           {data.lapVoidReason === "driverChange" ? "DRIVER CHANGED" : `${words(data.game).lap.toUpperCase()} INVALID`} · WON'T COUNT
         </span>
       )}
-      {t.reference && !cut && (
+      {refs.length > 0 && !cut && (
         <span style={{ display: "flex", gap: 6 }}>
-          {pills.map((name) => {
-            const on = name === "Leader" ? againstLeader : !againstLeader;
+          {refs.map((r) => {
+            const on = r.kind === shown;
             return (
-              <span key={name} style={{ flex: 1, textAlign: "center", padding: "4px 0", borderRadius: 999, font: "500 11px var(--font-mono)", background: on ? "var(--tint)" : "var(--panel-2)", color: on ? "var(--peri-1)" : "var(--muted)" }}>
-                {name}
+              <span
+                key={r.kind}
+                role={several ? "button" : undefined}
+                onClick={
+                  several
+                    ? (e) => {
+                        e.stopPropagation();
+                        select(r.kind);
+                      }
+                    : undefined
+                }
+                style={{ flex: 1, textAlign: "center", padding: "4px 0", borderRadius: 999, font: "500 11px var(--font-mono)", background: on ? "var(--tint)" : "var(--panel-2)", color: on ? "var(--peri-1)" : "var(--muted)" }}
+              >
+                {REF_NAME[r.kind] ?? r.label}
               </span>
             );
           })}
@@ -695,7 +776,7 @@ export function SectionWidgets({
       {groups.map((g) => {
         if (Array.isArray(g)) return <StripCard key={g.join()} items={g} data={data} itemProps={itemProps} />;
         if (g === "standings") return wrap(g, <StandingsCard data={data} />);
-        if (g === "timing") return wrap(g, <TimingCard data={data} />);
+        if (g === "timing") return wrap(g, <TimingCard data={data} mode={styleOf({ styles }, "timing")} />);
         if (g === "leaderboard") return wrap(g, <LeaderboardCard data={data} />);
         if (g === "tower") {
           const Tower = styleOf({ styles }, "tower") === "gaps" ? GapMonitorCard : GapTowerCard;

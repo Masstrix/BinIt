@@ -1033,17 +1033,20 @@ impl BinIt {
                 },
                 None => None,
             };
-            let reference = match pb {
-                Some(r) => Some(r),
-                None => match store.best_profile(&combo, None)? {
-                    Some(p) => {
-                        let l = label(&p, store.best_valid_time(&combo, None, -1)?, "Best");
-                        Some((p, l))
-                    }
-                    None => None,
-                },
+            let best = match store.best_profile(&combo, None)? {
+                Some(p) => {
+                    let l = label(&p, store.best_valid_time(&combo, None, -1)?, "Best");
+                    Some((p, l))
+                }
+                None => None,
             };
-            TimingContext { boundaries, reference, best_overall, best_driver }
+            // The driver's own best leads; the fastest lap by anyone is offered too when it is a different lap.
+            let others: Vec<_> = match (&pb, &best) {
+                (Some((mine, _)), Some((fastest, _))) if mine.total_ms() != fastest.total_ms() => best.iter().cloned().collect(),
+                _ => Vec::new(),
+            };
+            let reference = pb.or(best);
+            TimingContext { boundaries, reference, others, best_overall, best_driver }
         };
         self.runtime.lock().expect("runtime mutex poisoned").timing.configure(ctx);
         Ok(())

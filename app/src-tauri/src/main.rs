@@ -31,6 +31,8 @@ fn message_box(title: &str, text: &str) {
 fn main() {
     let switch_driver = Shortcut::new(None, Code::F8);
     let hide_overlay = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyH);
+    // The overlay can't be clicked over a game, so this is how live timing switches between PB and the fastest lap.
+    let cycle_timing = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyT);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -45,7 +47,7 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_shortcuts([switch_driver, hide_overlay])
+                .with_shortcuts([switch_driver, hide_overlay, cycle_timing])
                 .expect("valid shortcuts")
                 .with_handler(move |app, shortcut, event| {
                     if event.state != ShortcutState::Pressed || overlay::handle_switcher_key(app, shortcut) {
@@ -55,6 +57,8 @@ fn main() {
                         overlay::toggle_switcher(app);
                     } else if *shortcut == hide_overlay {
                         overlay::toggle_enabled(app);
+                    } else if *shortcut == cycle_timing {
+                        overlay::next_timing_reference(app);
                     }
                 })
                 .build(),
