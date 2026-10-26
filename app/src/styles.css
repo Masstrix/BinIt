@@ -328,9 +328,10 @@ h2 { font-size: 22px; line-height: 1.2; }
 .driver-btn:hover { background: var(--panel-3); }
 .driver-btn[aria-pressed="true"] { background: var(--panel-3); }
 .driver-btn .name { font-weight: 700; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.add-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px; border-radius: 999px; background: var(--panel-2); }
+.add-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px; border-radius: 24px; background: var(--panel-2); }
 .add-bar label { padding-left: 16px; font-weight: 600; }
 .add-bar .input { border-radius: 999px; border-color: transparent; background: var(--panel); flex: 1 1 220px; width: auto; min-width: 0; }
+@media (max-width: 640px) { .add-bar { flex-direction: column; align-items: stretch; } .add-bar label { padding: 4px 6px 0; } .add-bar .input { flex: none; } .add-bar .btn { justify-content: center; } }
 
 /* ---- lists & boards --------------------------------------------------------------------- */
 

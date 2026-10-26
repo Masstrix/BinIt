@@ -145,8 +145,10 @@ function Switcher({ onClose, keyHandler }: { onClose: () => void; keyHandler: Re
 
   const add = useCallback(async () => {
     try {
-      await api.addDriver(titleCase(name.trim()), undefined, true);
-      onClose();
+      // Registering never takes the seat (someone may be mid-lap): the new driver lands first, Enter again to drive.
+      await api.addDriver(titleCase(name.trim()));
+      setName("");
+      setHighlight(0);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -176,55 +178,96 @@ function Switcher({ onClose, keyHandler }: { onClose: () => void; keyHandler: Re
   };
 
   const typed = titleCase(name);
+  const seated = list.find((d) => d.id === status?.seat);
 
   return (
-    <div style={{ position: "absolute", inset: 0, background: "rgba(8,10,20,0.55)", display: "grid", placeItems: "center", pointerEvents: "auto" }} onClick={onClose}>
-      <div role="dialog" aria-label="Who's driving" className="card" style={{ width: "min(760px, 92vw)", gap: 18 }} onClick={(e) => e.stopPropagation()}>
-        <div className="head">
-          <h2 style={{ fontSize: 26 }}>Who's driving?</h2>
-          <span className="muted" style={{ fontSize: 14 }}>Number to pick · type a new name · Esc to close</span>
+    <div style={{ position: "absolute", inset: 0, background: "rgba(8,10,20,0.6)", backdropFilter: "blur(6px)", display: "grid", placeItems: "center", pointerEvents: "auto", animation: "tt-fade 160ms ease-out" }} onClick={onClose}>
+      <div
+        role="dialog"
+        aria-label="Who's driving"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: "min(780px, 92vw)",
+          display: "flex",
+          flexDirection: "column",
+          gap: 20,
+          padding: 28,
+          borderRadius: 36,
+          background: "linear-gradient(180deg, color-mix(in srgb, var(--violet) 14%, var(--panel)) 0%, var(--panel) 120px)",
+          boxShadow: "0 30px 80px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.06)",
+          animation: "tt-pop 220ms cubic-bezier(.2,.9,.3,1.2)",
+          userSelect: "none",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <Helmet color={seated?.color ?? "#8f99b3"} size={56} seed={seated?.id} mood="happy" round />
+          <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ font: "800 30px/1.1 var(--font-display)", letterSpacing: "-0.03em" }}>Who's driving?</span>
+            <span className="muted" style={{ fontSize: 14 }}>{seated ? `${seated.name} has the seat right now` : "Nobody has the seat"}</span>
+          </span>
+          <span style={{ display: "flex", gap: 6, alignItems: "center", flex: "none", color: "var(--muted)", fontSize: 12 }}>
+            <span className="kbd">1-9</span> pick
+            <span className="kbd">Esc</span> close
+          </span>
         </div>
         {list.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 12 }}>
             {list.map((d, i) => {
               const active = d.id === status?.seat;
               const lit = i === highlight && !name;
               return (
                 <button
                   key={d.id}
-                  className="driver-btn"
+                  className="driver-btn tt-driver"
                   aria-pressed={active}
-                  style={{ position: "relative", borderColor: lit ? "var(--peri-1)" : active ? d.color : "transparent", background: lit ? "var(--panel-3)" : undefined }}
+                  style={{
+                    position: "relative",
+                    padding: "16px 8px 12px",
+                    gap: 8,
+                    borderRadius: 26,
+                    borderColor: lit ? "var(--peri-1)" : active ? d.color : "transparent",
+                    background: lit ? "var(--panel-3)" : active ? `color-mix(in srgb, ${d.color} 14%, var(--panel-2))` : undefined,
+                    boxShadow: lit ? "0 0 0 4px color-mix(in srgb, var(--peri-1) 22%, transparent)" : active ? `0 0 24px color-mix(in srgb, ${d.color} 30%, transparent)` : undefined,
+                    animation: `tt-pop 240ms ${i * 28}ms cubic-bezier(.2,.9,.3,1.2) backwards`,
+                  }}
                   onClick={() => pick(d)}
                 >
-                  <span className="mono" style={{ position: "absolute", left: 10, top: 8, fontSize: 12, color: "var(--muted)" }}>{i + 1}</span>
-                  <Helmet color={d.color} size={52} seed={d.id} />
-                  <span className="name">{d.name}</span>
+                  <span className="kbd" style={{ position: "absolute", left: 10, top: 10 }}>{i + 1}</span>
+                  {active && (
+                    <span style={{ position: "absolute", right: 10, top: 10, font: "800 9px var(--font-mono)", letterSpacing: "0.08em", padding: "3px 7px", borderRadius: 999, background: d.color, color: "#10121a" }}>DRIVING</span>
+                  )}
+                  <span style={{ marginTop: 14 }}>
+                    <Helmet color={d.color} size={68} seed={d.id} mood={active ? "happy" : lit ? "focus" : "idle"} round />
+                  </span>
+                  <span className="name" style={{ fontSize: 15 }}>{d.name}</span>
                 </button>
               );
             })}
           </div>
         )}
-        <div className="add-bar" style={{ gap: 12 }}>
-          <span style={{ paddingLeft: 8, fontWeight: 600, whiteSpace: "nowrap" }}>New driver</span>
-          <div
-            aria-live="polite"
-            style={{ flex: 1, minHeight: 48, display: "flex", alignItems: "center", padding: "0 16px", borderRadius: 14, border: `2px solid ${name ? "var(--violet)" : "var(--line)"}`, background: "var(--bg)", fontSize: 18, fontWeight: 700 }}
-          >
+        <div
+          style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 12px 10px 20px", borderRadius: 24, background: "var(--panel-2)", boxShadow: name ? "inset 0 0 0 2px var(--violet)" : "inset 0 0 0 1px var(--line)" }}
+        >
+          <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>New here?</span>
+          <div aria-live="polite" style={{ flex: 1, minWidth: 0, minHeight: 44, display: "flex", alignItems: "center", fontSize: 20, fontWeight: 800 }}>
             {typed ? (
               <>
                 {typed}
-                <span style={{ width: 2, height: 22, background: "var(--peri-1)", marginLeft: 2, animation: "tt-caret 1s steps(1) infinite" }} />
+                <span style={{ width: 2, height: 24, background: "var(--peri-1)", marginLeft: 2, animation: "tt-caret 1s steps(1) infinite" }} />
               </>
             ) : (
-              <span className="muted" style={{ fontWeight: 500, fontSize: 16 }}>Just start typing, then Enter</span>
+              <span className="muted" style={{ fontWeight: 500, fontSize: 16 }}>Just start typing your name</span>
             )}
           </div>
-          {name && <span className="kbd" style={{ background: "var(--violet)", color: "var(--violet-ink)" }}>Enter</span>}
+          {name ? (
+            <span className="kbd" style={{ background: "var(--violet)", color: "var(--violet-ink)", padding: "6px 10px" }}>Enter to add</span>
+          ) : (
+            <span className="muted" style={{ fontSize: 12 }}>Adding someone won't take the seat</span>
+          )}
         </div>
         {error && <span className="error">{error}</span>}
       </div>
-      <style>{`@keyframes tt-caret { 50% { opacity: 0; } }`}</style>
+      <style>{`@keyframes tt-caret { 50% { opacity: 0; } } @keyframes tt-pop { from { opacity: 0; transform: translateY(10px) scale(.94); } to { opacity: 1; transform: none; } } @keyframes tt-fade { from { opacity: 0; } to { opacity: 1; } } .tt-driver { transition: transform 120ms, background 120ms; } .tt-driver:hover { transform: translateY(-3px); }`}</style>
     </div>
   );
 }

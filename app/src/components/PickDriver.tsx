@@ -33,13 +33,17 @@ function PickDriver({ choose, onClose }: { choose: (d: Driver | null) => void; o
   const { status, drivers } = useAppState();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [added, setAdded] = useState<string | null>(null);
   const seatId = status?.seat ?? null;
 
   const add = async () => {
     if (!name.trim()) return;
     try {
-      await api.addDriver(name, undefined, true);
-      onClose();
+      // Registering never takes the seat: someone else may be mid-lap. They tap their helmet when it's their turn.
+      const d = await api.addDriver(name.trim());
+      setName("");
+      setError(null);
+      setAdded(d.name);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -66,7 +70,7 @@ function PickDriver({ choose, onClose }: { choose: (d: Driver | null) => void; o
                       onClose();
                     }}
                   >
-                    <Helmet color={d.color} size={60} seed={d.id} />
+                    <Helmet color={d.color} size={64} seed={d.id} mood={active ? "happy" : "idle"} round />
                     <span className="name">{d.name}</span>
                     <span className="muted" style={{ fontSize: 12 }}>{active ? "in the seat" : "tap to drive"}</span>
                   </button>
@@ -82,9 +86,10 @@ function PickDriver({ choose, onClose }: { choose: (d: Driver | null) => void; o
             }}
           >
             <label htmlFor="newname">New here?</label>
-            <input id="newname" className="input" value={name} maxLength={32} onChange={(e) => setName(e.target.value)} placeholder="Type your name and press Enter" autoComplete="off" />
-            <button className="btn" type="submit" disabled={!name.trim()}>Add + drive</button>
+            <input id="newname" className="input" value={name} maxLength={32} onChange={(e) => { setName(e.target.value); setAdded(null); }} placeholder="Type your name and press Enter" autoComplete="off" />
+            <button className="btn" type="submit" disabled={!name.trim()}>Add driver</button>
           </form>
+          {added && <span className="muted" style={{ fontSize: 14 }}>Added {added}. Tap their helmet when it is their turn to drive.</span>}
           {error && <span className="error">{error}</span>}
         </div>
       </Modal>

@@ -120,7 +120,7 @@ function NewDriverForm({ onDone }: { onDone: () => void }) {
       className="modal-form"
       onSubmit={(e) => {
         e.preventDefault();
-        submit(true);
+        submit(false);
       }}
     >
       <div className="modal-body" style={{ alignItems: "center", textAlign: "center", gap: 18 }}>
@@ -140,8 +140,8 @@ function NewDriverForm({ onDone }: { onDone: () => void }) {
         <span className="muted" style={{ fontSize: 13 }}>No passwords: anyone can pick any name. Play fair.</span>
       </div>
       <div className="modal-foot">
-        <button className="btn ghost" type="button" disabled={!name.trim() || busy} onClick={() => submit(false)}>Just add</button>
-        <button className="btn big" type="submit" disabled={!name.trim() || busy}>Let's race</button>
+        <button className="btn ghost" type="button" disabled={!name.trim() || busy} onClick={() => submit(true)}>Add and drive now</button>
+        <button className="btn big" type="submit" disabled={!name.trim() || busy}>Add driver</button>
       </div>
     </form>
   );
