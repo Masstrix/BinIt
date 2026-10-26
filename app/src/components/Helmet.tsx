@@ -76,6 +76,12 @@ function seeded(seed: string) {
   };
 }
 
+/** Where the galaxy shell's stars sit (x, y, size, twinkle delay). Size under 0.8 is a pin-prick; bigger is a four-point star. */
+const STARS: [number, number, number, number][] = [
+  [16, 14, 0.4, 0], [22, 10, 0.4, 1.1], [30, 9, 0.9, 0.4], [37, 11, 0.4, 1.7], [14, 22, 0.4, 0.7], [19, 27, 1.1, 1.3], [26, 32, 0.4, 0.2],
+  [33, 35, 0.4, 1.9], [41, 33, 0.9, 0.9], [44, 27, 0.4, 1.5], [21, 19, 0.4, 0.5], [12, 30, 0.4, 2.1], [28, 14, 0.4, 1.2], [35, 38, 0.4, 0.6],
+];
+
 const AMBIENT: HelmetMood[] = ["happy", "wink", "focus"];
 
 /** A driver's personality: how often they blink and glance, and the face they pull most when idle. */
@@ -142,6 +148,9 @@ export function Helmet({ color, size = 48, tile = true, mood = "idle", seed, rou
       {/* Full-face shell: the straight underside rises from the chin to the nape, as on a race helmet. */}
       {shell && (
         <defs>
+          <clipPath id={`${gradId}-clip`}>
+            <path d="M11.2 34C7.4 26.4 8 15.6 15.6 10.2C21.6 6 31.6 5.6 38 9C43 11.8 46.2 17 46.6 23L46.6 31.4C46.6 36.4 44.6 39.6 40.8 40L13.4 35.6C12.4 35.4 11.6 34.8 11.2 34Z" />
+          </clipPath>
           <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
             {shell.stops.map((c, i) => (
               <stop key={i} offset={shell.stops.length === 1 ? 0 : i / (shell.stops.length - 1)} stopColor={c} />
@@ -151,10 +160,21 @@ export function Helmet({ color, size = 48, tile = true, mood = "idle", seed, rou
       )}
       <path d="M11.2 34C7.4 26.4 8 15.6 15.6 10.2C21.6 6 31.6 5.6 38 9C43 11.8 46.2 17 46.6 23L46.6 31.4C46.6 36.4 44.6 39.6 40.8 40L13.4 35.6C12.4 35.4 11.6 34.8 11.2 34Z" fill={shell ? `url(#${gradId})` : color} />
       <path d="M11.2 34L13.4 35.6L40.8 40C43 39.8 44.6 38.6 45.6 36.8L11.6 31.4Z" fill="#0e1117" opacity="0.25" />
+      {shell?.stars && (
+        <g clipPath={`url(#${gradId}-clip)`}>
+          {STARS.map(([x, y, r, delay], i) =>
+            r >= 0.8 ? (
+              <path key={i} className="helmet-star" style={{ animationDelay: `${delay}s` }} d={`M${x} ${y - r * 2}L${x + r * 0.5} ${y - r * 0.5}L${x + r * 2} ${y}L${x + r * 0.5} ${y + r * 0.5}L${x} ${y + r * 2}L${x - r * 0.5} ${y + r * 0.5}L${x - r * 2} ${y}L${x - r * 0.5} ${y - r * 0.5}Z`} fill="#fff" />
+            ) : (
+              <circle key={i} className="helmet-star" style={{ animationDelay: `${delay}s` }} cx={x} cy={y} r={0.55} fill="#fff" />
+            ),
+          )}
+        </g>
+      )}
       {stripe && stripe.paths.map((d, i) => <path key={i} d={d} fill="none" stroke="#fff" strokeWidth={stripe.width} strokeLinecap="round" strokeDasharray={stripe.dash} />)}
       {decal && (
         <g transform={`translate(${at.x} ${at.y}) scale(${at.s})`}>
-          <path d={decal.path} fill="#fff" />
+          <path d={decal.path} fill={look?.decalColor ?? "#fff"} />
         </g>
       )}
       {look?.number != null && (

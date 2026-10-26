@@ -1245,3 +1245,15 @@ fn default_eyes_are_a_shop_slot_with_free_starters() {
     assert_eq!(d.look.face.as_deref(), Some("cheeky"));
     assert_eq!(tt.shop(id).unwrap().coins, 80);
 }
+
+#[test]
+fn a_decal_can_be_painted_one_of_the_preset_colours() {
+    let tt = BinIt::in_memory().unwrap();
+    let id = rich_driver(&tt, 0, 0);
+    let flame = |c: &str| Look { decal: Some("flame".into()), decal_color: Some(c.into()), ..Look::default() };
+    assert_eq!(tt.set_look(id, &flame("#ff5d5d")).unwrap().look.decal_color.as_deref(), Some("#FF5D5D"));
+    assert!(tt.set_look(id, &flame("#123456")).is_err());
+    // No decal, no colour.
+    let bare = tt.set_look(id, &Look { decal_color: Some("#FF5D5D".into()), ..Look::default() }).unwrap();
+    assert_eq!(bare.look.decal_color, None);
+}

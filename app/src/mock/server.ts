@@ -432,9 +432,10 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
       if (v && !item) throw new ApiError(`no such ${slot}: ${v}`, undefined, 400);
       if (item && item.price > 0 && !st.owned.includes(`${slot}:${v}`)) throw new ApiError(`you do not own ${v} yet`, undefined, 400);
     }
+    if (body.decalColor && !["#FFFFFF", "#14162B", "#FF5D5D", "#FF9F6B", "#FFC93C", "#4FD39A", "#4FC3FF", "#B79BFF", "#FF7AC6"].includes(String(body.decalColor).toUpperCase())) throw new ApiError(`${body.decalColor} is not one of the decal colours`, undefined, 400);
     if (body.number != null && !(body.number >= 1 && body.number <= 99)) throw new ApiError("the race number is 1 to 99", undefined, 400);
     const d = drivers.find((x) => x.id === id)!;
-    d.look = { ...body, decalAt: body.decal ? (body.decalAt ?? "side") : undefined };
+    d.look = { ...body, decalAt: body.decal ? (body.decalAt ?? "side") : undefined, decalColor: body.decal && body.decalColor ? String(body.decalColor).toUpperCase() : undefined };
     emit({ type: "driversChanged" });
     return ok(d);
   }

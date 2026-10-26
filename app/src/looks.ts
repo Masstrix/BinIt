@@ -10,6 +10,8 @@ export interface Look {
   /** A decal (`DECALS` id) and where it sits. */
   decal?: string;
   decalAt?: "side" | "top" | "chin";
+  /** One of `DECAL_COLOURS`; white when absent. */
+  decalColor?: string;
   /** A stripe over the crown (`STRIPES` id). */
   stripe?: string;
   /** Race number, 1 to 99, printed on the side. */
@@ -24,6 +26,8 @@ export interface Shell {
   rarity: Rarity;
   /** Two or three gradient stops, top-left to bottom-right. */
   stops: string[];
+  /** Twinkling stars drawn over the shell. */
+  stars?: boolean;
 }
 
 export interface Decal {
@@ -59,6 +63,7 @@ export const SHELLS: Shell[] = [
   { id: "inferno", name: "Inferno", rarity: "legendary", stops: ["#FFE48A", "#FF8A1F", "#E4231F", "#6B0F1A"] },
   { id: "nebula", name: "Nebula", rarity: "legendary", stops: ["#2A1B6B", "#C2409B", "#FF8A4C", "#FFE48A"] },
   { id: "glacier", name: "Glacier", rarity: "legendary", stops: ["#E8F7FF", "#8BE9FF", "#4DA3FF", "#2A3F8F"] },
+  { id: "galaxy", name: "Galaxy", rarity: "legendary", stops: ["#04020D", "#150A33", "#3B1B8C", "#7A3FD6"], stars: true },
 ];
 
 export const DECALS: Decal[] = [
@@ -103,6 +108,12 @@ export const STRIPES: Stripe[] = [
   { id: "chequer", name: "Chequer", rarity: "rare", paths: ["M17.5 13 C23 10 31 9.8 37.5 12.6"], width: 3.6, dash: "2 2" },
 ];
 
+/** The colours a decal can be painted (free); the first is the default. Same list as the server's. */
+export const DECAL_COLOURS: [string, string][] = [
+  ["#FFFFFF", "White"], ["#14162B", "Black"], ["#FF5D5D", "Red"], ["#FF9F6B", "Orange"], ["#FFC93C", "Yellow"],
+  ["#4FD39A", "Green"], ["#4FC3FF", "Sky"], ["#B79BFF", "Violet"], ["#FF7AC6", "Pink"],
+];
+
 export const shellById = (id?: string) => SHELLS.find((s) => s.id === id);
 export const decalById = (id?: string) => DECALS.find((d) => d.id === id);
 export const faceById = (id?: string) => FACES.find((f) => f.id === id);
@@ -116,4 +127,10 @@ export const DECAL_AT: Record<NonNullable<Look["decalAt"]>, { x: number; y: numb
 };
 
 /** CSS for a shell as a swatch: the same stops the helmet uses. */
-export const shellCss = (stops: string[]) => `linear-gradient(135deg, ${stops.join(", ")})`;
+export const shellCss = (stops: string[], stars = false) => {
+  const gradient = `linear-gradient(135deg, ${stops.join(", ")})`;
+  if (!stars) return gradient;
+  // Fixed pin-pricks of light over the gradient, for swatches (the helmet twinkles them for real).
+  const dots = [[18, 22, 1.4], [62, 14, 1], [80, 40, 1.6], [30, 58, 1], [52, 72, 1.4], [84, 82, 1], [12, 84, 1.2], [70, 60, 0.9]];
+  return `${dots.map(([x, y, r]) => `radial-gradient(circle at ${x}% ${y}%, #fff 0, #fff ${r}px, transparent ${r + 1}px)`).join(", ")}, ${gradient}`;
+};

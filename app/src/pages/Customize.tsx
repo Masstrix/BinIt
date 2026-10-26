@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { api, type Driver, type ShopState } from "../api";
 import { Helmet } from "../components/Helmet";
 import { ItemArt, MoreInShop, ShopHeader } from "../components/ShopParts";
-import type { Look } from "../looks";
+import { DECAL_COLOURS, type Look } from "../looks";
 import { offers, useShop, useShopDriver, type Offer, type Slot } from "../shopModel";
 import { PALETTE } from "./Drivers";
 
@@ -46,7 +46,7 @@ function Workbench({ driver, shop, refresh }: { driver: Driver; shop: ShopState;
 
   const clean = (l: Look): Look => ({
     ...(l.shell ? { shell: l.shell } : {}),
-    ...(l.decal ? { decal: l.decal, decalAt: l.decalAt ?? "side" } : {}),
+    ...(l.decal ? { decal: l.decal, decalAt: l.decalAt ?? "side", ...(l.decalColor && l.decalColor !== "#FFFFFF" ? { decalColor: l.decalColor } : {}) } : {}),
     ...(l.stripe ? { stripe: l.stripe } : {}),
     ...(l.face ? { face: l.face } : {}),
     ...(l.number != null ? { number: l.number } : {}),
@@ -124,6 +124,13 @@ function Workbench({ driver, shop, refresh }: { driver: Driver; shop: ShopState;
               </button>
             ))}
           </div>
+          {look.decal && (
+            <div className="garage-colours" role="group" aria-label="Decal colour">
+              {DECAL_COLOURS.map(([hex, name]) => (
+                <button key={hex} type="button" aria-label={`${name} decal`} aria-pressed={(look.decalColor ?? "#FFFFFF").toUpperCase() === hex} onClick={() => set({ decalColor: hex })} className="garage-dot" style={{ background: hex }} />
+              ))}
+            </div>
+          )}
           {look.decal && (
             <div className="garage-row" aria-label="Placement">
               <span className="grow">Placement</span>

@@ -10,6 +10,9 @@ pub const DECAL: &str = "decal";
 pub const STRIPE: &str = "stripe";
 pub const FACE: &str = "face";
 
+/// The preset colours a decal can be painted (free). Upper case `#RRGGBB`; white is the default.
+pub const DECAL_COLOURS: &[&str] = &["#FFFFFF", "#14162B", "#FF5D5D", "#FF9F6B", "#FFC93C", "#4FD39A", "#4FC3FF", "#B79BFF", "#FF7AC6"];
+
 pub struct Entry {
     pub slot: &'static str,
     pub id: &'static str,
@@ -34,6 +37,7 @@ pub const CATALOGUE: &[Entry] = &[
     e(SHELL, "inferno", 1500, 5),
     e(SHELL, "nebula", 1800, 7),
     e(SHELL, "glacier", 1200, 5),
+    e(SHELL, "galaxy", 1600, 6),
     e(DECAL, "flame", 0, 1),
     e(DECAL, "bolt", 0, 1),
     e(DECAL, "star", 40, 1),
@@ -104,11 +108,18 @@ pub fn check_look(owned: &[String], look: &Look) -> Result<Look, String> {
     {
         return Err("the race number is 1 to 99".into());
     }
+    let decal_color = match (&look.decal, look.decal_color.as_deref()) {
+        (None, _) | (_, None) => None,
+        (Some(_), Some(c)) => match DECAL_COLOURS.iter().find(|p| p.eq_ignore_ascii_case(c)) {
+            Some(p) => Some((*p).to_string()),
+            None => return Err(format!("{c} is not one of the decal colours")),
+        },
+    };
     let decal_at = match (&look.decal, look.decal_at.as_deref()) {
         (None, _) => None,
         (Some(_), None) => Some("side".to_string()),
         (Some(_), Some(at @ ("side" | "top" | "chin"))) => Some(at.to_string()),
         (Some(_), Some(other)) => return Err(format!("a decal cannot go on the {other}")),
     };
-    Ok(Look { decal_at, ..look.clone() })
+    Ok(Look { decal_at, decal_color, ..look.clone() })
 }

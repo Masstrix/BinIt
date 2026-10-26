@@ -58,8 +58,8 @@ export function DecalGlyph({ id, size = 28 }: { id: string; size?: number }) {
  */
 export function ItemArt({ slot, id, driver, size = 64 }: { slot: Slot; id: string | null; driver: Driver; size?: number }) {
   if (slot === "shell") {
-    const stops = SHELLS.find((s) => s.id === id)?.stops ?? [driver.color, driver.color];
-    return <span className="art-swatch" style={{ width: size, height: size, background: shellCss(stops) }} />;
+    const shell = SHELLS.find((s) => s.id === id);
+    return <span className="art-swatch" style={{ width: size, height: size, background: shellCss(shell?.stops ?? [driver.color, driver.color], shell?.stars) }} />;
   }
   if (slot === "decal") {
     return (

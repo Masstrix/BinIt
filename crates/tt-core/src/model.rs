@@ -43,6 +43,9 @@ pub struct Look {
     /// `side`, `top` or `chin`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decal_at: Option<String>,
+    /// One of `shop::DECAL_COLOURS`; white when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decal_color: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stripe: Option<String>,
     /// Race number, 1 to 99.
