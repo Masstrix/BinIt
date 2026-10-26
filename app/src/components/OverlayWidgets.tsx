@@ -977,7 +977,7 @@ export function SectionWidgets({
         if (g === "qr") return wrap(g, <QrCard data={data} />);
         if (celebration) return wrap(g, <CelebrationView key={celebration.id} c={celebration} layout={orientationFor(anchor) === "horizontal" ? "pill" : "card"} />);
         const shown = toast ?? (preview ? MOCK_TOAST : null);
-        return shown ? wrap(g, <ToastCard toast={shown} animate={!preview} />) : null;
+        return shown ? wrap(g, <ToastCard toast={shown} animate={!preview || shown !== MOCK_TOAST} />) : null;
       })}
     </>
   );

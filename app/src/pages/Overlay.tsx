@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from "react"
 import { api, isTauri, useAppEvent, useAppState, type AppEvent, type Driver } from "../api";
 import { CentreSwitch, isCentre, useCelebrations } from "../components/Celebrations";
 import { Helmet } from "../components/Helmet";
-import { MOCK_DATA, MOCK_TOAST, SectionWidgets, TOAST_KEYFRAMES, useLapToasts, useOverlayData } from "../components/OverlayWidgets";
+import { MOCK_DATA, SectionWidgets, TOAST_KEYFRAMES, useLapToasts, useOverlayData } from "../components/OverlayWidgets";
 import { useDevOverlay } from "../devOverlay";
 import { fx } from "../fx";
 import { ANCHORS, anchorStyle, useOverlayLayout } from "../overlayLayout";
@@ -15,8 +15,8 @@ export function Overlay() {
   const { layout, profile } = useOverlayLayout(game);
   const live = useOverlayData();
   const data = devGame ? MOCK_DATA : live;
-  const liveToast = useLapToasts(live.pbMs);
-  const toast = devGame ? MOCK_TOAST : liveToast;
+  // In the dev overlay a quiet pop-up played from the editor shows over the example one.
+  const toast = useLapToasts(live.pbMs);
   const celebration = useCelebrations();
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const fxCanvas = useRef<HTMLCanvasElement>(null);
