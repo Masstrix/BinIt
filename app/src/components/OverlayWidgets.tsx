@@ -374,9 +374,15 @@ function useTimingReference(
       setHeld(kind);
       setSeq((n) => n + 1);
       window.clearTimeout(timer.current);
-      if (mode === "cycle") timer.current = window.setTimeout(() => setHeld(null), HOLD_MS);
+      if (mode === "cycle") {
+        // The lap picked becomes the cycle's place, so when the hold ends it carries on from there rather than
+        // jumping back to wherever the cycle had got to.
+        setTick(Math.max(0, kinds.indexOf(kind)));
+        timer.current = window.setTimeout(() => setHeld(null), HOLD_MS);
+      }
     },
-    [mode],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mode, list],
   );
   const next = useCallback(() => {
     if (kinds.length > 1) select(kinds[(kinds.indexOf(shown ?? "") + 1) % kinds.length]);
