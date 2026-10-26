@@ -199,8 +199,6 @@ function ChallengeView({ challenge: c }: { challenge: Challenge }) {
       <Podium
         entries={board}
         drivers={drivers}
-        scale={230}
-        big
         prizes={[1, 2, 3].map((p) => prizeFor(c, p, board.length))}
       />
 

@@ -3,7 +3,6 @@ import { api, isTauri, openDownload, useAppState, useCurrentChallenge, useDriver
 import { Helmet } from "../components/Helmet";
 import { LiveMap } from "../components/LiveMap";
 import { useSeatSwitcher } from "../components/SeatSwitcher";
-import { Podium } from "../components/Podium";
 import { cap, words } from "../vocab";
 import { ago, carName, countdown, gap, LAP_BADGE, lapKind, lapTime, trackName } from "../format";
 
@@ -117,7 +116,20 @@ export function Home() {
                 </div>
                 {challenge.endsAt && <span className="chip plain mono">{countdown(challenge.endsAt)}</span>}
               </div>
-              <Podium entries={board} drivers={driverMap} scale={110} helmets={false} />
+              <ol className="rank-list">
+                {board.slice(0, 3).map((e) => {
+                  const d = e.driverId != null ? driverMap.get(e.driverId) : undefined;
+                  return (
+                    <li key={e.lapId} className={`rank-row${seat && e.driverId === seat.id ? " me" : ""}`}>
+                      <span className="rank-pos">{e.position}</span>
+                      <Helmet color={d?.color ?? "#5b6578"} size={36} seed={d?.id} />
+                      <span className="rank-name">{d?.name ?? "Guest"}</span>
+                      <span className="mono">{lapTime(e.timeMs)}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+              {board.length === 0 && <div className="empty">No {w.laps} yet. First one to set a time takes the crown.</div>}
               <a href={`#/challenges/${challenge.id}`} style={{ fontWeight: 600 }}>See full standings →</a>
             </>
           ) : (
