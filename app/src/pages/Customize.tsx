@@ -31,10 +31,12 @@ function Workbench({ driver, shop, refresh }: { driver: Driver; shop: ShopState;
   const all = useMemo(() => offers(shop), [shop]);
   const [draft, setDraft] = useState<Look | null>(null);
   const [color, setColor] = useState<string | null>(null);
+  const [name, setName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const look = draft ?? shop.look;
   const shownColor = color ?? driver.color;
+  const shownName = name ?? driver.name;
 
   const mine = (slot: Slot) => all.filter((o) => o.slot === slot && o.owned);
   const unowned = (slot: Slot) => all.filter((o) => o.slot === slot && !o.owned).length;
@@ -51,16 +53,20 @@ function Workbench({ driver, shop, refresh }: { driver: Driver; shop: ShopState;
     ...(l.face ? { face: l.face } : {}),
     ...(l.number != null ? { number: l.number } : {}),
   });
-  const changed = (draft != null && JSON.stringify(clean(draft)) !== JSON.stringify(clean(shop.look))) || (color != null && color !== driver.color);
+  const changed = (draft != null && JSON.stringify(clean(draft)) !== JSON.stringify(clean(shop.look))) || (color != null && color !== driver.color) || (name != null && name.trim() !== driver.name);
+  const nameOk = shownName.trim().length > 0;
 
   const save = async () => {
     setBusy(true);
     setError(null);
     try {
-      if (color != null && color !== driver.color) await api.updateDriver(driver.id, driver.name, color);
+      if ((color != null && color !== driver.color) || (name != null && name.trim() !== driver.name)) {
+        await api.updateDriver(driver.id, shownName.trim(), shownColor);
+      }
       await api.setLook(driver.id, clean(look));
       setDraft(null);
       setColor(null);
+      setName(null);
       refresh();
     } catch (e) {
       setError((e as Error).message);
@@ -71,6 +77,7 @@ function Workbench({ driver, shop, refresh }: { driver: Driver; shop: ShopState;
   const reset = () => {
     setDraft(null);
     setColor(null);
+    setName(null);
     setError(null);
   };
 
@@ -84,13 +91,18 @@ function Workbench({ driver, shop, refresh }: { driver: Driver; shop: ShopState;
           <Helmet color={shownColor} look={previewLook} size={168} seed={driver.id} mood="idle" />
         </div>
         <div className="garage-name">
-          <span>{driver.name}</span>
+          <span>{shownName.trim() || driver.name}</span>
           {number != null && <span className="garage-num">#{number}</span>}
         </div>
         <span className="muted" style={{ fontSize: 13 }}>Shown on the leaderboard, the overlay and your phone</span>
       </section>
 
       <div className="garage-main">
+        <section className="garage-section" aria-label="Name">
+          <div className="garage-section-head"><h2>Name</h2></div>
+          <input className="input" aria-label="Name" value={shownName} maxLength={32} onChange={(e) => { setName(e.target.value); setError(null); }} style={{ minHeight: 52, fontSize: 18, fontWeight: 700 }} />
+        </section>
+
         <section className="garage-section" aria-label="Shell">
           <div className="garage-section-head"><h2>Shell</h2><MoreInShop count={unowned("shell")} /></div>
           <div className="garage-colours" role="group" aria-label="Solid colours">
@@ -189,7 +201,7 @@ function Workbench({ driver, shop, refresh }: { driver: Driver; shop: ShopState;
       <footer className="garage-bar">
         <span className="grow garage-total muted">{changed ? "Unsaved changes" : "Looking good"}</span>
         <button className="btn ghost" disabled={!changed || busy} onClick={reset}>Reset</button>
-        <button className="btn big" disabled={!changed || busy} onClick={save}>Save kit</button>
+        <button className="btn big" disabled={!changed || busy || !nameOk} onClick={save}>Save kit</button>
       </footer>
     </div>
   );

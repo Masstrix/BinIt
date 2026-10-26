@@ -7,7 +7,7 @@ import { carName, lapTime, trackName, ago } from "../format";
 import { GameIcon } from "../components/GameIcon";
 import { Modal } from "../components/Modal";
 import { useSeatSwitcher } from "../components/SeatSwitcher";
-import { ColorPicker, PhonesDialog } from "./Drivers";
+import { PhonesDialog } from "./Drivers";
 
 /** Why a ledger row paid out, in words. */
 const KIND: Record<string, string> = { lap: "Clean lap", first: "First lap here", pb: "Personal best", record: "Track record" };
@@ -126,7 +126,6 @@ function ManageRow({ icon, title, sub, onClick, href, trailing }: { icon: string
 function ManageDriver({ driver }: { driver: Driver }) {
   const { status } = useAppState();
   const seat = useSeatSwitcher();
-  const [editing, setEditing] = useState(false);
   const [connections, setConnections] = useState(false);
   const devices = useFetch(isTauri ? () => api.driverDevices(driver.id) : null, [driver.id, connections]);
   const seated = status?.seat === driver.id;
@@ -135,58 +134,17 @@ function ManageDriver({ driver }: { driver: Driver }) {
       <h2>Manage {driver.name}</h2>
       <div className="manage-list">
         <ManageRow icon="M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4 21a8 8 0 0 1 16 0" title={seated ? "In the seat" : "Put in seat"} sub={seated ? "Laps are going to them now" : "Laps will go to them"} onClick={seated ? undefined : () => seat.choose(driver)} trailing={seated ? "Now" : undefined} />
-        <ManageRow icon="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" title="Name and colour" sub="Change how they appear everywhere" onClick={() => setEditing(true)} />
-        <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Progress over time" sub="Bests and speed score on every track" href={`#/you/${driver.id}/progress`} />
         {isTauri && (
           <ManageRow icon="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM11 18h2" title="Connections" sub="Phones and browsers signed in as them" trailing={devices ? String(devices.length) : undefined} onClick={() => setConnections(true)} />
         )}
       </div>
       {seat.dialog}
-      {editing && (
-        <Modal title={`Edit ${driver.name}`} narrow onClose={() => setEditing(false)}>
-          <EditDriverForm driver={driver} onDone={() => setEditing(false)} />
-        </Modal>
-      )}
       {connections && (
         <Modal title={`${driver.name}'s connections`} narrow onClose={() => setConnections(false)}>
           <PhonesDialog driver={driver} />
         </Modal>
       )}
     </section>
-  );
-}
-
-function EditDriverForm({ driver, onDone }: { driver: Driver; onDone: () => void }) {
-  const [name, setName] = useState(driver.name);
-  const [color, setColor] = useState(driver.color);
-  const [error, setError] = useState<string | null>(null);
-  const save = async () => {
-    try {
-      await api.updateDriver(driver.id, name, color);
-      onDone();
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-  return (
-    <form
-      className="modal-form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        save();
-      }}
-    >
-      <div className="modal-body" style={{ alignItems: "center", textAlign: "center", gap: 18 }}>
-        <Helmet color={color} look={driver.look} size={84} seed={driver.id} />
-        <input className="input" data-autofocus aria-label="Name" value={name} maxLength={32} onChange={(e) => setName(e.target.value)} style={{ minHeight: 56, fontSize: 20, fontWeight: 700, textAlign: "center", width: "100%" }} />
-        <ColorPicker value={color} onChange={setColor} />
-        {error && <span className="error">{error}</span>}
-      </div>
-      <div className="modal-foot">
-        <button className="btn ghost" type="button" onClick={onDone}>Cancel</button>
-        <button className="btn big" type="submit" disabled={!name.trim()}>Save</button>
-      </div>
-    </form>
   );
 }
 
@@ -226,11 +184,15 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
         <div className="stat-tile"><span className="mono">{p.tracks}</span><span className="label">Tracks</span></div>
       </div>
 
+      <div className="manage-list">
+        <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Progress over time" sub="Bests and speed score on every track" href={`#/you/${p.driver.id}/progress`} />
+      </div>
+
       {(mine || (manage && status?.seat === p.driver.id)) && (
         <div className="you-switch">
           <a className="btn" href="#/customize">Customize</a>
           <a className="btn ghost" href="#/shop">Shop</a>
-          <span className="grow muted" style={{ fontSize: 13 }}>Spend coins on shells, decals, stripes and eyes.</span>
+          <span className="grow muted" style={{ fontSize: 13 }}>Your name, colours, decals, eyes and number.</span>
         </div>
       )}
 
