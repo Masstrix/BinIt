@@ -1070,14 +1070,21 @@ h2 { font-size: 22px; line-height: 1.2; }
 
 /* ---- drivers: a card per driver --------------------------------------------------------------- */
 
-.driver-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
-.driver-card { display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; border-radius: 24px; background: var(--panel-2); border: 1.5px solid transparent; min-width: 0; }
-.driver-card[data-seated] { background: var(--tint); }
-.driver-card.editing { grid-column: 1 / -1; }
-.dc-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.dc-name { flex: 1 1 0; min-width: 0; }
-.dc-sub { font-size: 13px; }
-.driver-card .driver-actions { margin-left: 0; }
+.driver-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; }
+.driver-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px 14px 16px; border-radius: 28px; background: var(--panel-2); border: 1.5px solid transparent; min-width: 0; color: var(--text); text-decoration: none; text-align: center; transition: transform 140ms, background 140ms, border-color 140ms; }
+.driver-card:hover { transform: translateY(-2px); background: var(--panel-3); }
+.driver-card:focus-visible { outline: 2px solid var(--peri-1); outline-offset: 2px; }
+.driver-card[data-seated] { background: var(--tint); border-color: var(--violet); }
+.dc-tile { width: 84px; height: 84px; border-radius: 28px; display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
+.dc-title { font: 700 18px var(--font-display); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dc-seat { display: inline-flex; align-items: center; gap: 6px; font: 500 11px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--mint); }
+.dc-seat i { width: 8px; height: 8px; border-radius: 50%; background: var(--mint); }
+.dc-score { display: flex; align-items: baseline; gap: 6px; }
+.dc-score .mono { font: 800 28px/1 var(--font-display); letter-spacing: -0.03em; color: var(--mint); }
+.dc-score .label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+.dc-fast { font-size: 12px; }
+.you-manage { display: flex; flex-wrap: wrap; gap: 10px; }
+.you-manage .btn { min-height: 44px; }
 @media (max-width: 640px) { .driver-cards { grid-template-columns: 1fr; } }
 
 /* ---- game badges ------------------------------------------------------------------------------- */
@@ -1319,3 +1326,15 @@ img.game-icon { object-fit: cover; display: inline-block; }
 /* gap tower, live: the seated driver is about to pass the car ahead */
 [data-range] { box-shadow: inset 0 0 0 1.5px rgba(255, 201, 60, .8); }
 .range-tag { position: absolute; right: 6px; top: -9px; z-index: 4; padding: 1px 8px; border-radius: 999px; background: #FFC93C; color: #2A1D00; font: 800 10px var(--font-display); letter-spacing: .04em; white-space: nowrap; pointer-events: none; }
+
+/* the way to the Drivers page from Home on a phone (on the desktop it is in the sidebar) */
+.home-drivers { display: none; text-decoration: none; color: var(--text); }
+@media (max-width: 640px) {
+  .home-drivers { display: flex; flex-direction: row; align-items: center; gap: 12px; }
+  .hd-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .hd-text .muted { font-size: 13px; }
+  .hd-faces { display: flex; }
+  .hd-faces > * { margin-left: -12px; box-shadow: 0 0 0 3px var(--panel); border-radius: 12px; }
+  .hd-faces > *:first-child { margin-left: 0; }
+  .hd-go { flex: none; color: var(--muted); }
+}

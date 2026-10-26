@@ -140,10 +140,31 @@ export function Home() {
           )}
         </section>
 
+        <DriversLink />
       </div>
 
       {isTauri && <GetLatest />}
     </>
+  );
+}
+
+/** On a phone the Drivers page sits behind the Rig tab; this card is the way to it from Home. */
+function DriversLink() {
+  const { drivers } = useAppState();
+  if (drivers.length === 0) return null;
+  return (
+    <a className="card home-drivers" href="#/drivers" aria-label={`Drivers: ${drivers.length}`}>
+      <span className="hd-text">
+        <h2>Drivers</h2>
+        <span className="muted">{drivers.length} {drivers.length === 1 ? "driver" : "drivers"} · speed scores and profiles</span>
+      </span>
+      <span className="hd-faces" aria-hidden="true">
+        {drivers.slice(0, 5).map((d) => (
+          <Helmet key={d.id} color={d.color} size={36} seed={d.id} />
+        ))}
+      </span>
+      <svg className="hd-go" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+    </a>
   );
 }
 

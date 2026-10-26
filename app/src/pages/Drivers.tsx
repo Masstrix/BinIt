@@ -4,7 +4,6 @@ import { ago } from "../format";
 import { TIER_ORDER, tierByKey, tierOf } from "../driverStats";
 import { Helmet } from "../components/Helmet";
 import { Modal } from "../components/Modal";
-import { useSeatSwitcher } from "../components/SeatSwitcher";
 import { DriverProgress } from "./DriverProgress";
 
 export const PALETTE = [
@@ -47,7 +46,7 @@ export function DriversPage({ path = "/drivers" }: { path?: string }) {
         )}
         {drivers.length > 0 && (
           <span className="muted" style={{ fontSize: 13 }}>
-            Grouped by speed score: 100 means quickest on every track and car you share with others, and each point below is about 1% slower.
+            Grouped by speed score: 100 means quickest on every track and car you share with others, and each point below is about 1% slower. Open a driver for their profile.
           </span>
         )}
         {TIER_ORDER.map((key) => {
@@ -79,7 +78,7 @@ export function DriversPage({ path = "/drivers" }: { path?: string }) {
   );
 }
 
-function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+export function ColorPicker({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 10 }} role="group" aria-label="Helmet colour">
       {PALETTE.map(([hex, label]) => (
@@ -148,78 +147,34 @@ function NewDriverForm({ onDone }: { onDone: () => void }) {
 }
 
 function DriverCard({ driver, seated, rating }: { driver: Driver; seated: boolean; rating?: DriverRating }) {
-  const seat = useSeatSwitcher();
-  const [editing, setEditing] = useState(false);
-  const [phones, setPhones] = useState(false);
-  const [name, setName] = useState(driver.name);
-  const [color, setColor] = useState(driver.color);
-  const [error, setError] = useState<string | null>(null);
-
-  if (editing) {
-    return (
-      <div className="driver-card editing">
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" maxLength={32} />
-        <ColorPicker value={color} onChange={setColor} />
-        {error && <span className="error">{error}</span>}
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            className="btn"
-            onClick={async () => {
-              try {
-                await api.updateDriver(driver.id, name, color);
-                setEditing(false);
-              } catch (e) {
-                setError((e as Error).message);
-              }
-            }}
-          >
-            Save
-          </button>
-          <button className="btn ghost" onClick={() => setEditing(false)}>Cancel</button>
-        </div>
-      </div>
-    );
-  }
-
   const fastestOn = rating?.fastestOn ?? 0;
+  // The whole card opens their profile: the level, bests and stickers, and (from this PC) editing and phones.
   return (
-    <div className="driver-card" data-seated={seated || undefined}>
-      <div className="dc-top">
-        <Helmet color={driver.color} size={52} seed={driver.id} />
-        <a className="dc-name driver-link" href={`#/drivers/${driver.id}`} title={`See how ${driver.name} has improved`}>
-          <span style={{ fontWeight: 700, fontSize: 17, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{driver.name}</span>
-          <span className="dc-sub">
-            {seated && <span style={{ color: "var(--peach)" }}>in the seat</span>}
-            {seated && fastestOn > 0 && " · "}
-            {fastestOn > 0 && <span className="muted">fastest on {fastestOn}</span>}
-          </span>
-        </a>
-        {rating?.score != null && (
-          <span className="speed-score" title={`Speed score from ${rating.combos} shared ${rating.combos === 1 ? "track and car" : "tracks and cars"}`}>
-            <span className="mono">{rating.score.toFixed(1)}</span>
-            <span className="label">speed</span>
-          </span>
-        )}
-      </div>
-      <span className="driver-actions">
-        <a className="chip plain" href={`#/you/${driver.id}`}>Profile</a>
-        <a className="chip plain" href={`#/drivers/${driver.id}`}>Progress</a>
-        {!seated && <button className="chip plain" onClick={() => seat.choose(driver)}>Drive</button>}
-        <button className="chip plain" onClick={() => setEditing(true)}>Edit</button>
-        <button className="chip plain" onClick={() => setPhones(true)}>Phones</button>
+    <a className="driver-card" href={`#/you/${driver.id}`} data-seated={seated || undefined} title={`Open ${driver.name}'s profile`}>
+      <span className="dc-tile" style={{ background: `${driver.color}2E` }}>
+        <Helmet color={driver.color} size={60} tile={false} seed={driver.id} mood={seated ? "happy" : "idle"} />
       </span>
-      {seat.dialog}
-      {phones && (
-        <Modal title={`${driver.name}'s phones`} narrow onClose={() => setPhones(false)}>
-          <PhonesDialog driver={driver} />
-        </Modal>
+      <span className="dc-title">{driver.name}</span>
+      {seated && (
+        <span className="dc-seat">
+          <i /> in the seat
+        </span>
       )}
-    </div>
+      {rating?.score != null ? (
+        <span className="dc-score" title={`Speed score from ${rating.combos} shared ${rating.combos === 1 ? "track and car" : "tracks and cars"}`}>
+          <span className="mono">{rating.score.toFixed(1)}</span>
+          <span className="label">speed</span>
+        </span>
+      ) : (
+        <span className="muted" style={{ fontSize: 14 }}>Not rated yet</span>
+      )}
+      {fastestOn > 0 && <span className="muted dc-fast">Fastest on {fastestOn} {fastestOn === 1 ? "track" : "tracks"}</span>}
+    </a>
   );
 }
 
 /** The phones paired to a driver: pair one more, sign one out, or sign them all out (a lost phone). */
-function PhonesDialog({ driver }: { driver: Driver }) {
+export function PhonesDialog({ driver }: { driver: Driver }) {
   const [tick, setTick] = useState(0);
   const list = useFetch<Device[]>(() => api.driverDevices(driver.id), [driver.id, tick]);
   const [share, setShare] = useState<{ code: string; expiresAt: number } | null>(null);

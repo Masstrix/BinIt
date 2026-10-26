@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { api, useAppState, useFetch, type Profile } from "../api";
+import { api, useAppState, useFetch, type Driver, type Profile } from "../api";
 import { WhoAreYou } from "../components/MeBar";
 import { Helmet } from "../components/Helmet";
 import { carName, lapTime, trackName, ago } from "../format";
 import { GameIcon } from "../components/GameIcon";
+import { Modal } from "../components/Modal";
+import { useSeatSwitcher } from "../components/SeatSwitcher";
+import { ColorPicker, PhonesDialog } from "./Drivers";
 
 /** Why a ledger row paid out, in words. */
 const KIND: Record<string, string> = { lap: "Clean lap", first: "First lap here", pb: "Personal best", record: "Track record" };
@@ -58,7 +61,7 @@ export function YouPage({ path = "/you" }: { path?: string }) {
         </section>
       )}
 
-      {viewId != null && profile && <ProfileView profile={profile} mine={mine} onSwitch={() => setSwitching(true)} />}
+      {viewId != null && profile && <ProfileView profile={profile} mine={mine} manage={!!info?.local} onSwitch={() => setSwitching(true)} />}
       {viewId != null && !profile && <div className="empty">Loading…</div>}
 
       {info?.local && drivers.length > 0 && (
@@ -87,7 +90,73 @@ export function YouPage({ path = "/you" }: { path?: string }) {
   );
 }
 
-function ProfileView({ profile: p, mine, onSwitch }: { profile: Profile; mine: boolean; onSwitch: () => void }) {
+/** From the PC: put them in the seat, change their name and colour, see how they have improved, manage their phones. */
+function ManageDriver({ driver }: { driver: Driver }) {
+  const { status } = useAppState();
+  const seat = useSeatSwitcher();
+  const [editing, setEditing] = useState(false);
+  const [phones, setPhones] = useState(false);
+  const seated = status?.seat === driver.id;
+  return (
+    <div className="you-manage" role="group" aria-label={`Manage ${driver.name}`}>
+      {seated ? (
+        <span className="chip plain" style={{ color: "var(--peach)" }}>In the seat</span>
+      ) : (
+        <button className="btn" onClick={() => seat.choose(driver)}>Put in seat</button>
+      )}
+      <button className="btn ghost" onClick={() => setEditing(true)}>Edit name and colour</button>
+      <a className="btn ghost" href={`#/drivers/${driver.id}`}>Progress</a>
+      <button className="btn ghost" onClick={() => setPhones(true)}>Phones</button>
+      {seat.dialog}
+      {editing && (
+        <Modal title={`Edit ${driver.name}`} narrow onClose={() => setEditing(false)}>
+          <EditDriverForm driver={driver} onDone={() => setEditing(false)} />
+        </Modal>
+      )}
+      {phones && (
+        <Modal title={`${driver.name}'s phones`} narrow onClose={() => setPhones(false)}>
+          <PhonesDialog driver={driver} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function EditDriverForm({ driver, onDone }: { driver: Driver; onDone: () => void }) {
+  const [name, setName] = useState(driver.name);
+  const [color, setColor] = useState(driver.color);
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    try {
+      await api.updateDriver(driver.id, name, color);
+      onDone();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+  return (
+    <form
+      className="modal-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save();
+      }}
+    >
+      <div className="modal-body" style={{ alignItems: "center", textAlign: "center", gap: 18 }}>
+        <Helmet color={color} size={84} seed={driver.id} />
+        <input className="input" data-autofocus aria-label="Name" value={name} maxLength={32} onChange={(e) => setName(e.target.value)} style={{ minHeight: 56, fontSize: 20, fontWeight: 700, textAlign: "center", width: "100%" }} />
+        <ColorPicker value={color} onChange={setColor} />
+        {error && <span className="error">{error}</span>}
+      </div>
+      <div className="modal-foot">
+        <button className="btn ghost" type="button" onClick={onDone}>Cancel</button>
+        <button className="btn big" type="submit" disabled={!name.trim()}>Save</button>
+      </div>
+    </form>
+  );
+}
+
+function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile; mine: boolean; manage: boolean; onSwitch: () => void }) {
   const into = p.xp - p.levelStartXp;
   const span = Math.max(1, p.nextLevelXp - p.levelStartXp);
   const earned = p.stickers.filter((s) => s.earned).length;
@@ -121,6 +190,8 @@ function ProfileView({ profile: p, mine, onSwitch }: { profile: Profile; mine: b
         <div className="stat-tile"><span className="mono">{p.cleanPercent}%</span><span className="label">Clean</span></div>
         <div className="stat-tile"><span className="mono">{p.tracks}</span><span className="label">Tracks</span></div>
       </div>
+
+      {manage && <ManageDriver driver={p.driver} />}
 
       {mine && (
         <div className="you-switch">
