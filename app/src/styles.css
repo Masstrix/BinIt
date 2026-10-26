@@ -518,9 +518,10 @@ h2 { font-size: 22px; line-height: 1.2; }
 /* Overlay live timing: the lit pill slides between laps and the delta rolls in when the lap changes. */
 .tt-slide { transition: left 0.3s cubic-bezier(0.3, 0.8, 0.3, 1); }
 .tt-in { animation: tt-in 0.38s cubic-bezier(0.2, 0.8, 0.3, 1) backwards; }
-.tt-out { animation: tt-out 0.3s cubic-bezier(0.5, 0, 0.8, 0.4) forwards; }
+.tt-out { animation: tt-out 0.28s cubic-bezier(0.4, 0, 0.8, 0.5) forwards; }
 @keyframes tt-in { from { opacity: 0; transform: translateY(75%); } to { opacity: 1; transform: none; } }
-@keyframes tt-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(-75%); } }
+/* Gone by 60% of the way, so the next digit can take its place without overlapping. */
+@keyframes tt-out { 0% { opacity: 1; transform: none; } 60% { opacity: 0; } 100% { opacity: 0; transform: translateY(-75%); } }
 @media (prefers-reduced-motion: reduce) { .tt-slide { transition: none; } .tt-in, .tt-out { animation: none; } .tt-out { opacity: 0; } }
 .sticker-name { font-size: 12px; font-weight: 500; text-align: center; color: var(--muted); }
 .sticker[data-earned] .sticker-name { color: var(--text); }

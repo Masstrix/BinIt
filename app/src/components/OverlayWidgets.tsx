@@ -410,6 +410,15 @@ function useTimingReference(
 const REF_NAME: Record<string, string> = { pb: "PB", best: "Leader" };
 
 const WAVE_STEP_MS = 45;
+/** The old digit has fully faded by this point, so the digit that replaces it never shares its place. */
+const WAVE_OUT_MS = 170;
+const WAVE_IN_MS = 380;
+
+/** Your best is green and the fastest lap anyone has set is purple, as everywhere else in the app. */
+const REF_COLOUR: Record<string, { fg: string; bg: string }> = {
+  pb: { fg: "var(--mint)", bg: "rgba(79, 211, 154, 0.2)" },
+  best: { fg: "var(--fast)", bg: "rgba(183, 155, 255, 0.2)" },
+};
 
 /**
  * A number that changes in a wave when `switchKey` changes (the lap it is measured against): the old digits lift
@@ -426,22 +435,22 @@ function WaveNumber({ text, switchKey, color, enabled }: { text: string; switchK
     lastKey.current = switchKey;
     if (!enabled) return;
     setLeaving(lastText.current);
-    const t = window.setTimeout(() => setLeaving(null), 380 + WAVE_STEP_MS * Math.max(text.length, lastText.current.length));
+    const t = window.setTimeout(() => setLeaving(null), WAVE_OUT_MS + WAVE_IN_MS + 60 + WAVE_STEP_MS * Math.max(text.length, lastText.current.length));
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [switchKey]);
   useEffect(() => {
     lastText.current = text;
   });
-  const chars = (t: string, cls: string) =>
+  const chars = (t: string, cls: string, after = 0) =>
     [...t].map((c, i) => (
-      <span key={i} className={cls} style={{ display: "inline-block", whiteSpace: "pre", animationDelay: `${i * WAVE_STEP_MS}ms` }}>
+      <span key={i} className={cls} style={{ display: "inline-block", whiteSpace: "pre", animationDelay: `${after + i * WAVE_STEP_MS}ms` }}>
         {c}
       </span>
     ));
   return (
     <span className="mono" style={{ position: "relative", display: "inline-block", overflow: "hidden", padding: "4px 0", margin: "-4px 0", font: "500 40px/1 var(--font-mono)", letterSpacing: "-0.08em", color }}>
-      {leaving ? chars(text, "tt-in") : text}
+      {leaving ? chars(text, "tt-in", WAVE_OUT_MS) : text}
       {leaving && (
         <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 4, pointerEvents: "none", whiteSpace: "pre" }}>
           {chars(leaving, "tt-out")}
@@ -452,13 +461,13 @@ function WaveNumber({ text, switchKey, color, enabled }: { text: string; switchK
 }
 
 /** A small ring that empties over `ms`: how long until live timing switches to the other lap (muted while a hand switch is held). */
-function CountdownRing({ ms, held }: { ms: number; held: boolean }) {
+function CountdownRing({ ms, held, colour }: { ms: number; held: boolean; colour: string }) {
   const r = 6;
   const c = 2 * Math.PI * r;
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" role="img" aria-label={held ? "Holding your choice" : "Switching soon"} style={{ flex: "none", alignSelf: "center" }}>
       <circle cx="9" cy="9" r={r} fill="none" stroke="var(--panel-3)" strokeWidth="2.5" />
-      <circle cx="9" cy="9" r={r} fill="none" stroke={held ? "var(--muted)" : "var(--peri-1)"} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={c} strokeDashoffset="0" transform="rotate(-90 9 9)">
+      <circle cx="9" cy="9" r={r} fill="none" stroke={held ? "var(--muted)" : colour} strokeWidth="2.5" strokeLinecap="round" strokeDasharray={c} strokeDashoffset="0" transform="rotate(-90 9 9)">
         <animate attributeName="stroke-dashoffset" from="0" to={c} dur={`${ms / 1000}s`} fill="freeze" />
       </circle>
     </svg>
@@ -497,11 +506,11 @@ export function TimingCard({ data, mode }: { data: OverlayData; mode?: string })
           <span
             aria-hidden="true"
             className="tt-slide"
-            style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 999, background: "var(--tint)", width: "calc((100% - 6px * (var(--n) - 1)) / var(--n))", left: "calc(var(--i) * ((100% - 6px * (var(--n) - 1)) / var(--n) + 6px))" }}
+            style={{ position: "absolute", top: 0, bottom: 0, borderRadius: 999, background: (REF_COLOUR[shown ?? "pb"] ?? REF_COLOUR.pb).bg, transition: "left 0.3s cubic-bezier(0.3, 0.8, 0.3, 1), background 0.3s", width: "calc((100% - 6px * (var(--n) - 1)) / var(--n))", left: "calc(var(--i) * ((100% - 6px * (var(--n) - 1)) / var(--n) + 6px))" }}
           />
           {refs.map((r) => {
             const on = r.kind === shown;
-            const look = { position: "relative" as const, flex: 1, textAlign: "center" as const, padding: "4px 0", borderRadius: 999, font: "500 11px var(--font-mono)", background: on ? "transparent" : "var(--panel-2)", color: on ? "var(--peri-1)" : "var(--muted)", transition: "color 0.25s, background 0.25s" };
+            const look = { position: "relative" as const, flex: 1, textAlign: "center" as const, padding: "4px 0", borderRadius: 999, font: "500 11px var(--font-mono)", background: on ? "transparent" : "var(--panel-2)", color: on ? (REF_COLOUR[r.kind] ?? REF_COLOUR.pb).fg : "var(--muted)", transition: "color 0.25s, background 0.25s" };
             // Only the pills can be clicked (and only when there is more than one lap to choose between).
             return several ? (
               <button
@@ -525,7 +534,7 @@ export function TimingCard({ data, mode }: { data: OverlayData; mode?: string })
             );
           })}
          </span>
-          {wait && <CountdownRing key={wait.key} ms={wait.ms} held={wait.held} />}
+          {wait && <CountdownRing key={wait.key} ms={wait.ms} held={wait.held} colour={(REF_COLOUR[shown ?? "pb"] ?? REF_COLOUR.pb).fg} />}
         </span>
       )}
       <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, ...(cut ? { opacity: 0.55, textDecoration: "line-through" } : {}) }}>
