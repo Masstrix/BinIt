@@ -289,6 +289,9 @@ h2 { font-size: 22px; line-height: 1.2; }
 .chip.pb { background: var(--mint); color: var(--panel); }
 .chip.cut { background: var(--red); color: var(--panel); }
 .chip.rec { background: var(--fast); color: var(--panel); }
+.chip.you { background: var(--violet); color: var(--violet-ink); margin-left: 8px; vertical-align: middle; }
+.sector-pill { display: inline-block; padding: 3px 9px; border-radius: 8px; background: var(--fast); color: var(--panel); }
+.lb-row[data-me] { background: var(--tint); }
 .chip.plain { background: var(--panel-2); color: var(--text); font: 600 13px var(--font-body); letter-spacing: 0; padding: 6px 14px; min-height: 32px; border: none; }
 .chip.plain:hover { background: var(--panel-3); }
 

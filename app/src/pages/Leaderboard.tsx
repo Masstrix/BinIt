@@ -204,16 +204,18 @@ export function LeaderboardPage() {
                           className={`lb-grid lb-row lb-btn${top ? " top" : podium ? " lb-podium" : ""}`}
                           style={{
                             gridTemplateColumns: cols,
-                            ...(me && !top ? { background: `${color}1F`, borderColor: `${color}73` } : {}),
                           }}
+                          data-me={me || undefined}
                         >
                           <span className="lb-pos">{e.position}</span>
                           <span className="lb-c-driver" style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
                             <Helmet color={color} size={top ? 60 : podium ? 52 : 44} seed={d?.id} mood={e.position === 1 ? "happy" : "idle"} />
                             <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-                              <span className="lb-name">{d?.name ?? "Guest"}</span>
-                              <span className="lb-meta" style={{ color: me ? color : "var(--muted)" }}>
-                                {me ? "In the seat · " : ""}
+                              <span className="lb-name">
+                                {d?.name ?? "Guest"}
+                                {me && <span className="chip you">YOU</span>}
+                              </span>
+                              <span className="lb-meta" style={{ color: "var(--muted)" }}>
                                 {car ? ago(e.setAt) : `${carName(e.car)} · ${ago(e.setAt)}`}
                               </span>
                             </span>
@@ -223,9 +225,13 @@ export function LeaderboardPage() {
                   <span className="mono r lb-small lb-c-stat" data-label="GAP" style={{ color: "var(--muted)" }}>{top ? "—" : gap(e.gapMs)}</span>
                           {bestSectors.map((best, i) => {
                             const t = e.sectorsMs[i];
+                            const col = sectorColor(t, best, e.bestSectorsMs[i]);
+                            const fastest = col === PURPLE;
                             return (
-                              <span key={i} className="mono r lb-small lb-c-stat" data-label={`S${i + 1}`} style={{ color: sectorColor(t, best, e.bestSectorsMs[i]) }}>
-                                {t > 0 ? (t / 1000).toFixed(3) : "—"}
+                              <span key={i} className="mono r lb-small lb-c-stat" data-label={`S${i + 1}`}>
+                                <span className={fastest ? "sector-pill" : undefined} style={fastest ? undefined : { color: col }}>
+                                  {t > 0 ? (t / 1000).toFixed(3) : "—"}
+                                </span>
                               </span>
                             );
                           })}
