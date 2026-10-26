@@ -3,10 +3,11 @@
 
 import { ApiError } from "../api";
 import type {
+  ShopState,
   About, AppEvent, Awards, Challenge, Combo, Device, Driver, Lap, LapResult, LeaderboardEntry, LeaderboardQuery, LiveView, OverlayShow, Profile, ProfileBest,
   ReplayEntry, ServerInfo, SessionView, Status, UpdateStatus,
 } from "../api";
-import { CHALLENGES, DRIVERS, LAPS, MAPS, NOW, TRACKS, catalogue, key } from "./data";
+import { CHALLENGES, DRIVERS, LAPS, MAPS, NOW, SHOP_ITEMS, TRACKS, catalogue, key } from "./data";
 
 const drivers: Driver[] = DRIVERS.map((d) => ({ ...d }));
 const laps: Lap[] = LAPS.map((l) => ({ ...l }));
@@ -237,6 +238,17 @@ const levelOf = (xp: number) => {
 const TITLES = ["Rookie", "Qualifier", "Regular", "Podium Regular", "Contender", "Veteran", "Veteran", "Ace", "Ace"];
 const titleFor = (l: number) => TITLES[l - 1] ?? "Legend";
 
+/** What each mock driver bought (`shell:aurora`), starting with whatever their look wears, and every spend since. */
+const owned = new Map<number, string[]>(DRIVERS.map((d) => [d.id, [["shell", d.look?.shell], ["decal", d.look?.decal], ["stripe", d.look?.stripe]].flatMap(([slot, id]) => (id && SHOP_ITEMS.find((i) => i.slot === slot && i.id === id && i.price > 0) ? [`${slot}:${id}`] : []))]));
+const spends: { driverId: number; item: string; price: number; at: number }[] = [];
+/** Mock drivers start with some spare coins so there is something to buy. */
+const MOCK_COINS = 700;
+
+function shopState(id: number): ShopState {
+  const p = driverProfile(id);
+  return { coins: p.coins, level: p.level, owned: owned.get(id) ?? [], look: drivers.find((d) => d.id === id)!.look ?? {}, items: SHOP_ITEMS };
+}
+
 function driverProfile(id: number): Profile {
   const driver = drivers.find((d) => d.id === id)!;
   const mine = laps.filter((l) => l.driverId === id).sort((a, b) => a.recordedAt - b.recordedAt);
@@ -257,6 +269,11 @@ function driverProfile(id: number): Profile {
     give("lap", 10, 1, l);
     if (prev != null && l.timeMs < prev) give("pb", 50, 5, l);
     bestSoFar.set(k, Math.min(prev ?? Infinity, l.timeMs));
+  }
+  coins += MOCK_COINS;
+  for (const sp of spends.filter((x) => x.driverId === id)) {
+    coins -= sp.price;
+    events.push({ id: events.length + 1, driverId: id, kind: `buy:${sp.item}`, xp: 0, coins: -sp.price, lapId: null, at: sp.at });
   }
   const valid = mine.filter((l) => l.valid);
   const attempts = mine.filter((l) => l.valid || l.untimedReason == null || l.untimedReason === "cut").length;
@@ -386,6 +403,39 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
     if (body.seat) settings.seat = d.id;
     emit({ type: "driversChanged" });
     if (body.seat) emit({ type: "seatChanged", driverId: d.id });
+    return ok(d);
+  }
+  if ((r = m(/^\/drivers\/(\d+)\/shop$/))) return ok(shopState(+r[1]));
+  if ((r = m(/^\/drivers\/(\d+)\/shop\/buy$/))) {
+    const id = +r[1];
+    if (claimed(id)) mayManage(id, token);
+    const item = SHOP_ITEMS.find((i) => i.slot === body.slot && i.id === body.id);
+    const st = shopState(id);
+    const k = `${body.slot}:${body.id}`;
+    if (!item) throw new ApiError("no such item", undefined, 400);
+    if (item.price === 0) throw new ApiError("that one is free", undefined, 400);
+    if (st.owned.includes(k)) throw new ApiError("you already own that", undefined, 400);
+    if (st.level < item.minLevel) throw new ApiError(`that needs level ${item.minLevel}`, undefined, 400);
+    if (st.coins < item.price) throw new ApiError(`not enough coins: ${item.price} needed, you have ${st.coins}`, undefined, 400);
+    owned.set(id, [...st.owned, k]);
+    spends.push({ driverId: id, item: k, price: item.price, at: Date.now() });
+    emit({ type: "driversChanged" });
+    return ok(shopState(id));
+  }
+  if ((r = m(/^\/drivers\/(\d+)\/look$/)) && method === "PUT") {
+    const id = +r[1];
+    if (claimed(id)) mayManage(id, token);
+    const st = shopState(id);
+    for (const slot of ["shell", "decal", "stripe"] as const) {
+      const v = body[slot];
+      const item = v && SHOP_ITEMS.find((i) => i.slot === slot && i.id === v);
+      if (v && !item) throw new ApiError(`no such ${slot}: ${v}`, undefined, 400);
+      if (item && item.price > 0 && !st.owned.includes(`${slot}:${v}`)) throw new ApiError(`you do not own ${v} yet`, undefined, 400);
+    }
+    if (body.number != null && !(body.number >= 1 && body.number <= 99)) throw new ApiError("the race number is 1 to 99", undefined, 400);
+    const d = drivers.find((x) => x.id === id)!;
+    d.look = { ...body, decalAt: body.decal ? (body.decalAt ?? "side") : undefined };
+    emit({ type: "driversChanged" });
     return ok(d);
   }
   if ((r = m(/^\/drivers\/(\d+)\/laps$/))) return ok(laps.filter((l) => l.driverId === +r![1]));

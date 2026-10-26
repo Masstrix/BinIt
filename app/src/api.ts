@@ -313,6 +313,23 @@ export interface PointEvent {
   at: number;
 }
 
+/** One thing the shop sells. Free items (price 0) belong to everyone. */
+export interface ShopItem {
+  id: string;
+  slot: "shell" | "decal" | "stripe";
+  price: number;
+  minLevel: number;
+}
+
+/** The shop as one driver sees it. `owned` holds keys like `shell:aurora`. */
+export interface ShopState {
+  coins: number;
+  level: number;
+  owned: string[];
+  look: Look;
+  items: ShopItem[];
+}
+
 export interface ProfileBest extends Combo {
   timeMs: number;
   position: number;
@@ -451,6 +468,9 @@ export const api = {
   updateDriver: (id: DriverId, name: string, color: string) =>
     request<Driver>("PUT", `/drivers/${id}`, { name, color }),
   profile: (id: DriverId) => request<Profile>("GET", `/drivers/${id}/profile`),
+  shop: (id: DriverId) => request<ShopState>("GET", `/drivers/${id}/shop`),
+  buy: (id: DriverId, slot: string, item: string) => request<ShopState>("POST", `/drivers/${id}/shop/buy`, { slot, id: item }),
+  setLook: (id: DriverId, look: Look) => request<Driver>("PUT", `/drivers/${id}/look`, look),
   me: () => request<Me>("GET", "/me"),
   /** Pairs this phone with a driver. A driver who already has a phone needs a `code` from the PC or that phone. */
   pair: (driverId: DriverId, code?: string) => request<{ token: string; driver: Driver }>("POST", "/me/pair", { driverId, code }),

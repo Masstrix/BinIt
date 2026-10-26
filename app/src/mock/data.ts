@@ -150,3 +150,10 @@ export function catalogue(game: string): Catalogue {
     cars: cars.map((c) => ({ name: c, brand: c.split(" ")[0], class: c.includes("GT3") ? "GT3" : "Rally", aliases: [], seen: true })),
   };
 }
+
+/** The shop's prices, copied from crates/tt-core/src/shop.rs so the mock server can sell things. */
+export const SHOP_ITEMS: { slot: "shell" | "decal" | "stripe"; id: string; price: number; minLevel: number }[] = [
+  ...[["sunset", 150, 1], ["ocean", 150, 1], ["ember", 150, 1], ["lagoon", 180, 1], ["aurora", 320, 3], ["rally", 420, 3], ["holo", 1500, 5], ["gold", 2000, 9], ["nightsky", 1200, 5], ["inferno", 1500, 5], ["nebula", 1800, 7], ["glacier", 1200, 5]].map(([id, price, minLevel]) => ({ slot: "shell" as const, id: id as string, price: price as number, minLevel: minLevel as number })),
+  ...[["flame", 0, 1], ["bolt", 0, 1], ["star", 40, 1], ["chequer", 40, 1], ["heart", 60, 1], ["flag", 80, 1], ["moon", 80, 1], ["wing", 160, 2], ["crown", 250, 6], ["skull", 300, 3]].map(([id, price, minLevel]) => ({ slot: "decal" as const, id: id as string, price: price as number, minLevel: minLevel as number })),
+  ...[["centre", 0, 1], ["twin", 20, 1], ["band", 20, 1], ["chequer", 100, 2]].map(([id, price, minLevel]) => ({ slot: "stripe" as const, id: id as string, price: price as number, minLevel: minLevel as number })),
+];

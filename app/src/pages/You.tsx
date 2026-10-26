@@ -12,6 +12,12 @@ import { ColorPicker, PhonesDialog } from "./Drivers";
 /** Why a ledger row paid out, in words. */
 const KIND: Record<string, string> = { lap: "Clean lap", first: "First lap here", pb: "Personal best", record: "Track record" };
 
+/** Ledger rows for a purchase carry the item: `buy:shell:aurora`. */
+function kindLabel(kind: string) {
+  if (kind.startsWith("buy:")) return `Bought ${kind.split(":")[2] ?? "an item"}`;
+  return KIND[kind] ?? kind;
+}
+
 const STICKER_ICON: Record<string, string> = {
   "first-lap": "M5 21V4M5 4h11l-2 4 2 4H5",
   "ten-clean": "M5 12l5 5L20 7",
@@ -156,6 +162,7 @@ function EditDriverForm({ driver, onDone }: { driver: Driver; onDone: () => void
 }
 
 function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile; mine: boolean; manage: boolean; onSwitch: () => void }) {
+  const { status } = useAppState();
   const into = p.xp - p.levelStartXp;
   const span = Math.max(1, p.nextLevelXp - p.levelStartXp);
   const earned = p.stickers.filter((s) => s.earned).length;
@@ -189,6 +196,14 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
         <div className="stat-tile"><span className="mono">{p.cleanPercent}%</span><span className="label">Clean</span></div>
         <div className="stat-tile"><span className="mono">{p.tracks}</span><span className="label">Tracks</span></div>
       </div>
+
+      {(mine || (manage && status?.seat === p.driver.id)) && (
+        <div className="you-switch">
+          <a className="btn" href="#/garage">Garage</a>
+          <a className="btn ghost" href="#/shop">Shop</a>
+          <span className="grow muted" style={{ fontSize: 13 }}>Spend coins on shells, decals and stripes.</span>
+        </div>
+      )}
 
       {manage && <ManageDriver driver={p.driver} />}
 
@@ -234,18 +249,18 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
         </div>
       </section>
 
-      <section className="you-section" aria-label="Recent XP">
-        <div className="head"><h2>Recent XP</h2></div>
+      <section className="you-section" aria-label="Recent">
+        <div className="head"><h2>Recent</h2></div>
         {p.recent.length === 0 && <div className="empty">XP shows up here as you set clean laps.</div>}
         <div className="list">
           {p.recent.map((e) => (
             <div className="list-row" key={e.id}>
               <span className="grow">
-                <span>{KIND[e.kind] ?? e.kind}</span>
+                <span>{kindLabel(e.kind)}</span>
                 <span className="muted" style={{ fontSize: 13 }}>{ago(e.at)}</span>
               </span>
-              <span className="mono" style={{ color: "var(--peri-1)" }}>+{e.xp} XP</span>
-              <span className="mono you-coin-gain"><Coin size={16} />+{e.coins}</span>
+              {e.xp !== 0 && <span className="mono" style={{ color: "var(--peri-1)" }}>+{e.xp} XP</span>}
+              <span className="mono you-coin-gain" data-spend={e.coins < 0 || undefined}><Coin size={16} />{e.coins > 0 ? "+" : "−"}{Math.abs(e.coins)}</span>
             </div>
           ))}
         </div>
