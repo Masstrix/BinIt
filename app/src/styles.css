@@ -27,8 +27,8 @@
   --radius: 28px;
   --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
   --font-body: "Plus Jakarta Sans", system-ui, sans-serif;
-  /* Numbers and captions: DM Mono, a true monospace with a plain zero. */
-  --font-mono: "DM Mono", ui-monospace, monospace;
+  /* Numbers and captions: Chivo Mono, a true monospace with an empty zero. */
+  --font-mono: "Chivo Mono", ui-monospace, monospace;
   --font-num: "Archivo", system-ui, sans-serif;
   color-scheme: dark;
 }
@@ -53,7 +53,7 @@ h1 { font-size: clamp(28px, 3vw, 34px); line-height: 1.1; }
 h2 { font-size: 22px; line-height: 1.2; }
 /* The font shorthand resets this, so force it: digits keep a fixed width so timers do not jitter. */
 * { font-variant-numeric: tabular-nums !important; }
-.mono { font-family: var(--font-mono); font-weight: 500; letter-spacing: -0.06em; }
+.mono { font-family: var(--font-mono); font-weight: 500; letter-spacing: -0.1em; }
 .muted { color: var(--muted); }
 
 /* ---- layout ------------------------------------------------------------- */
@@ -192,7 +192,7 @@ h2 { font-size: 22px; line-height: 1.2; }
 .home-bottom > .card:not(#pick) { flex: 1 1 380px; min-width: 0; }
 .now-lap { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; background: var(--panel-2); border-radius: 26px; padding: 20px 24px; }
 .now-lap-main { display: flex; flex-direction: column; }
-.now-lap-time { font-size: clamp(44px, 5vw, 76px); line-height: 1.1; font-weight: 500; letter-spacing: -0.08em; white-space: nowrap; }
+.now-lap-time { font-size: clamp(44px, 5vw, 76px); line-height: 1.1; font-weight: 500; letter-spacing: -0.12em; white-space: nowrap; }
 .now-lap.invalid { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--red) 70%, transparent); }
 .now-lap.invalid .now-lap-time { text-decoration: line-through; color: var(--red); }
 .delta-pill { padding: 8px 16px; border-radius: 999px; background: var(--mint); color: var(--panel); font: 500 22px var(--font-mono); }
@@ -203,7 +203,7 @@ h2 { font-size: 22px; line-height: 1.2; }
 .stat .label { font-size: 14px; font-weight: 500; }
 .stat.invalid { background: rgba(255, 122, 146, 0.28); box-shadow: inset 0 0 0 2px rgba(255, 122, 146, 0.75); }
 .stat.invalid .mono { text-decoration: line-through; color: #ffc2cd; }
-.stat .mono { font-size: clamp(20px, 2vw, 26px); margin-top: 4px; display: block; white-space: nowrap; letter-spacing: -0.05em; }
+.stat .mono { font-size: clamp(20px, 2vw, 26px); margin-top: 4px; display: block; white-space: nowrap; letter-spacing: -0.08em; }
 
 .banner {
   display: flex; align-items: center; gap: 16px; min-height: 68px; padding: 10px 18px; border-radius: 24px;
@@ -490,7 +490,7 @@ h2 { font-size: 22px; line-height: 1.2; }
 .me-face { position: relative; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; }
 .me-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
 .me-name { font: 700 17px var(--font-display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.me-time { font-size: 22px; line-height: 1.1; font-weight: 500; letter-spacing: -0.06em; }
+.me-time { font-size: 22px; line-height: 1.1; font-weight: 500; letter-spacing: -0.1em; }
 .me-sub { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .me-good { color: var(--mint); }
 .me-go { flex: none; min-height: 48px; padding: 0 18px; border-radius: 16px; }
