@@ -186,6 +186,12 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
             {p.coins.toLocaleString()}
           </span>
         </div>
+        {canDress && (
+          <a className="you-customize" href="#/customize">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" /></svg>
+            Customize
+          </a>
+        )}
       </section>
 
       <div className="you-stats">
@@ -197,12 +203,6 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
       <div className="manage-list">
         <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Progress over time" sub="Bests and speed score on every track" href={`#/you/${p.driver.id}/progress`} />
       </div>
-
-      {canDress && (
-        <div className="you-switch">
-          <a className="btn" href="#/customize">Customize</a>
-        </div>
-      )}
 
       {manage && <ManageDriver driver={p.driver} />}
 

@@ -547,19 +547,29 @@ h2 { font-size: 22px; line-height: 1.2; }
 .you-bar > div { height: 100%; border-radius: inherit; transition: width 0.4s ease; }
 .you-bar-labels { width: 100%; display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); }
 .you-wallet { display: flex; align-self: stretch; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 20px 4px 4px; border-radius: 999px; background: color-mix(in srgb, var(--gold) 14%, var(--panel-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 30%, transparent); }
+.you-customize { display: flex; align-self: stretch; align-items: center; justify-content: center; gap: 8px; min-height: 48px; border-radius: 999px; background: var(--violet); color: var(--violet-ink); font: 700 15px var(--font-body); text-decoration: none; }
+.you-customize:hover { filter: brightness(1.08); color: var(--violet-ink); }
 .you-shop { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 20px; border-radius: 999px; background: color-mix(in srgb, var(--gold) 26%, transparent); color: var(--gold); font: 700 15px var(--font-body); text-decoration: none; }
 .you-shop:hover { background: color-mix(in srgb, var(--gold) 36%, transparent); color: var(--gold); }
 .you-wallet-coins { display: inline-flex; align-items: center; gap: 8px; color: var(--gold); font: 700 20px var(--font-mono); }
 .you-coin-gain { display: inline-flex; align-items: center; gap: 4px; color: var(--gold); }
 .coin { flex: none; }
-/* A slow flip every few seconds, with a glint as it comes round. */
-.coin-spin { animation: coin-flip 5s ease-in-out infinite; filter: drop-shadow(0 0 0 rgba(255, 201, 60, 0)); }
-@keyframes coin-flip {
-  0%, 62%, 100% { transform: perspective(160px) rotateY(0); filter: drop-shadow(0 0 0 rgba(255, 201, 60, 0)); }
-  80% { transform: perspective(160px) rotateY(180deg); filter: drop-shadow(0 0 7px rgba(255, 201, 60, 0.75)); }
-  98% { transform: perspective(160px) rotateY(360deg); filter: drop-shadow(0 0 0 rgba(255, 201, 60, 0)); }
+/* The profile's coin is solid: two faces with a stack of slices between them, turned in 3D every few seconds. The glow sits on
+   the outer box because a filter would flatten the 3D box inside it. */
+.coin3d-glow { position: relative; display: inline-block; flex: none; animation: coin-glow 5s ease-in-out infinite; }
+.coin3d { position: absolute; inset: 0; transform-style: preserve-3d; animation: coin-turn 5s ease-in-out infinite; }
+.coin3d-slice, .coin3d-face { position: absolute; inset: 0; }
+.coin3d-face { backface-visibility: hidden; }
+@keyframes coin-turn {
+  0%, 55%, 100% { transform: perspective(220px) rotateY(0); }
+  80% { transform: perspective(220px) rotateY(180deg); }
+  98% { transform: perspective(220px) rotateY(360deg); }
 }
-@media (prefers-reduced-motion: reduce) { .coin-spin { animation: none; } }
+@keyframes coin-glow {
+  0%, 55%, 100% { filter: drop-shadow(0 0 0 rgba(255, 201, 60, 0)); }
+  78% { filter: drop-shadow(0 0 6px rgba(255, 201, 60, 0.7)); }
+}
+@media (prefers-reduced-motion: reduce) { .coin3d, .coin3d-glow { animation: none; } }
 .you-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .you-stats .stat-tile { text-align: center; align-items: center; padding: 14px; }
 .you-stats .stat-tile .mono { font: 700 26px var(--font-display); letter-spacing: -0.02em; }
