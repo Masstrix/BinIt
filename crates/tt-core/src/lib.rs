@@ -932,6 +932,14 @@ impl BinIt {
                     let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
                     // The lap's result can arrive a moment after the car crossed the line: by then a new
                     // lap has begun, and a swap made in that gap belongs to the new lap, not this one.
+                    // A crossing whose result never came (the lap was abandoned, or a stage restarted) lapses once the
+                    // car is well past the line: a void is for the lap it was made in and never rolls onto the next.
+                    let stale = rt.wrap_waiting && rt.last_progress >= 0.5;
+                    if stale {
+                        rt.wrap_waiting = false;
+                        rt.void_pending = false;
+                        rt.wrap_driver = None;
+                    }
                     if std::mem::take(&mut rt.wrap_waiting) {
                         (std::mem::take(&mut rt.void_pending), rt.wrap_driver.take())
                     } else {

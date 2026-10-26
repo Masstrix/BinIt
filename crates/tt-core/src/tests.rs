@@ -787,6 +787,22 @@ fn a_result_that_arrives_before_the_line_is_seen_still_voids_the_right_lap() {
 }
 
 #[test]
+fn a_void_never_rolls_onto_the_next_lap_when_the_voided_lap_reports_nothing() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Jess", None).unwrap();
+    let sam = tt.add_driver("Sam", None).unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
+    tt.handle_game_event(driving(0.4)).unwrap();
+    tt.set_seat(Some(sam.id)).unwrap();
+    tt.handle_game_event(driving(0.97)).unwrap();
+    tt.handle_game_event(driving(0.01)).unwrap(); // over the line, but the game never publishes that lap
+    tt.handle_game_event(driving(0.6)).unwrap();
+    tt.handle_game_event(GameEvent::LapCompleted(lap(88_000, true))).unwrap();
+    let next = &tt.recent_laps(1).unwrap()[0];
+    assert_eq!((next.valid, next.untimed_reason.as_deref(), next.driver_id), (true, None, Some(sam.id)));
+}
+
+#[test]
 fn a_swap_just_after_the_line_leaves_both_laps_alone() {
     let tt = BinIt::in_memory().unwrap();
     let jess = tt.add_and_seat("Jess", None).unwrap();
