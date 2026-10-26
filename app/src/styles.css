@@ -190,8 +190,7 @@ h2 { font-size: 22px; line-height: 1.2; }
 .home-top > .hero { flex: 2 1 580px; min-width: 0; }
 .home-side { flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
 .home-bottom { display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch; }
-.home-bottom > #pick { flex: 2 1 580px; min-width: 0; }
-.home-bottom > .card:not(#pick) { flex: 1 1 380px; min-width: 0; }
+.home-bottom > .card { flex: 1 1 380px; min-width: 0; }
 .now-lap { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; background: var(--panel-2); border-radius: 26px; padding: 20px 24px; }
 .now-lap-main { display: flex; flex-direction: column; }
 .now-lap-time { font-size: clamp(44px, 5vw, 76px); line-height: 1.1; font-weight: 500; letter-spacing: -0.04em; white-space: nowrap; }

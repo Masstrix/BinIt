@@ -18,6 +18,7 @@ import { TelemetryPage } from "./pages/Telemetry";
 import { Overlay } from "./pages/Overlay";
 import { YouPage } from "./pages/You";
 import { Updater } from "./pages/Updater";
+import { openPickDriver, PickDriverHost } from "./components/PickDriver";
 
 const ROUTES = [
   { path: "/", group: "Play", label: "Home", icon: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" },
@@ -129,6 +130,7 @@ export function App() {
         </main>
       </div>
       <ConnectionGate />
+      <PickDriverHost />
     </div>
   );
 }
@@ -155,11 +157,7 @@ function Sidebar({ path, collapsed, onToggle }: { path: string; collapsed: boole
 
   const driver = status?.seat != null ? drivers.find((d) => d.id === status.seat) : undefined;
   const driving = !!driver && status?.live?.phase === "driving";
-  // The picker lives on Home: go there and bring it into view.
-  const switchDriver = () => {
-    if (location.hash.replace(/^#/, "") !== "/") location.hash = "/";
-    setTimeout(() => document.getElementById("pick")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
-  };
+  const switchDriver = openPickDriver;
   const gameLabel = !online ? "Offline" : status?.connected ? status.gameName : "No game running";
 
   return (

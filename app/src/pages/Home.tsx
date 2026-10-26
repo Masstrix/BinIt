@@ -1,14 +1,13 @@
-import { useState } from "react";
-import { api, isTauri, openDownload, useAppState, useCurrentChallenge, useDriverMap, useFetch, type Driver } from "../api";
+import { api, isTauri, openDownload, useAppState, useCurrentChallenge, useDriverMap, useFetch } from "../api";
 import { Helmet } from "../components/Helmet";
 import { LiveMap } from "../components/LiveMap";
-import { useSeatSwitcher } from "../components/SeatSwitcher";
 import { cap, words } from "../vocab";
 import { ago, carName, countdown, gap, LAP_BADGE, lapKind, lapTime, trackName } from "../format";
 import { Signed } from "../components/Signed";
+import { openPickDriver } from "../components/PickDriver";
 
 export function Home() {
-  const { status, drivers, recentLaps } = useAppState();
+  const { status, recentLaps } = useAppState();
   const driverMap = useDriverMap();
   const seat = status?.seat != null ? driverMap.get(status.seat) : undefined;
   const session = status?.session ?? null;
@@ -51,7 +50,7 @@ export function Home() {
               {seat ? `Every ${w.lap} is saved to ${seat.name}` : `${cap(w.laps)} are saved as guest ${w.laps} and can be claimed later`}
             </div>
           </div>
-          <button className="btn white hero-switch" onClick={() => document.getElementById("pick")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+          <button className="btn white hero-switch" onClick={openPickDriver}>
             <span className="long">Switch driver</span>
             <span className="short">Switch</span> <span className="kbd">F8</span>
           </button>
@@ -106,7 +105,6 @@ export function Home() {
       </div>
 
       <div className="home-bottom">
-        <DriverPicker drivers={drivers} seatId={status?.seat ?? null} />
         <section className="card" aria-label="Active challenge">
           {challenge ? (
             <>
@@ -235,73 +233,6 @@ function GetLatest() {
         <button className="chip plain" onClick={() => openDownload("portable")}>Portable exe</button>
         <button className="chip plain" onClick={() => openDownload("release")}>What's new</button>
       </span>
-    </section>
-  );
-}
-
-export function DriverPicker({ drivers, seatId }: { drivers: Driver[]; seatId: number | null }) {
-  const seat = useSeatSwitcher();
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  const add = async () => {
-    if (!name.trim()) return;
-    try {
-      await api.addDriver(name, undefined, true);
-      setName("");
-      setError(null);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  };
-
-  return (
-    <section id="pick" className="card" aria-label="Pick a driver">
-      <div className="head">
-        <h2>Tap your helmet</h2>
-        <span className="muted" style={{ fontSize: 14 }}>Times go to whoever is picked. No passwords, play fair.</span>
-      </div>
-      {drivers.length > 0 && (
-        <div className="driver-grid">
-          {drivers.map((d) => {
-            const active = d.id === seatId;
-            return (
-              <button
-                key={d.id}
-                className="driver-btn"
-                aria-pressed={active}
-                style={{ borderColor: active ? d.color : "transparent" }}
-                onClick={() => seat.choose(active ? null : d)}
-              >
-                <Helmet color={d.color} size={60} seed={d.id} />
-                <span className="name">{d.name}</span>
-                <span className="muted" style={{ fontSize: 12 }}>{active ? "in the seat" : "tap to drive"}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-      <form
-        className="add-bar"
-        onSubmit={(e) => {
-          e.preventDefault();
-          add();
-        }}
-      >
-        <label htmlFor="newname">New here?</label>
-        <input
-          id="newname"
-          className="input"
-          value={name}
-          maxLength={32}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Type your name and press Enter"
-          autoComplete="off"
-        />
-        <button className="btn" type="submit" disabled={!name.trim()}>Add + drive</button>
-      </form>
-      {error && <span className="error">{error}</span>}
-      {seat.dialog}
     </section>
   );
 }
