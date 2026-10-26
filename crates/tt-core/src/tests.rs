@@ -760,6 +760,33 @@ fn a_handover_in_the_pits_does_not_spoil_the_first_flying_lap() {
 }
 
 #[test]
+fn a_result_that_arrives_before_the_line_is_seen_still_voids_the_right_lap() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Jess", None).unwrap();
+    let sam = tt.add_driver("Sam", None).unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
+    // A clean lap whose result comes in just before the readings show the car over the line.
+    tt.handle_game_event(driving(0.5)).unwrap();
+    tt.handle_game_event(driving(0.97)).unwrap();
+    tt.handle_game_event(GameEvent::LapCompleted(lap(90_000, true))).unwrap();
+    tt.handle_game_event(driving(0.01)).unwrap();
+    assert!(tt.recent_laps(1).unwrap()[0].valid);
+    // Sam takes over mid-lap: that lap is voided, the one after it is not.
+    tt.handle_game_event(driving(0.4)).unwrap();
+    tt.set_seat(Some(sam.id)).unwrap();
+    tt.handle_game_event(driving(0.97)).unwrap();
+    tt.handle_game_event(GameEvent::LapCompleted(lap(101_000, true))).unwrap();
+    tt.handle_game_event(driving(0.01)).unwrap();
+    assert_eq!(tt.recent_laps(1).unwrap()[0].untimed_reason.as_deref(), Some("driverChange"));
+    tt.handle_game_event(driving(0.5)).unwrap();
+    tt.handle_game_event(driving(0.97)).unwrap();
+    tt.handle_game_event(GameEvent::LapCompleted(lap(87_000, true))).unwrap();
+    tt.handle_game_event(driving(0.01)).unwrap();
+    let next = &tt.recent_laps(1).unwrap()[0];
+    assert_eq!((next.valid, next.driver_id), (true, Some(sam.id)));
+}
+
+#[test]
 fn a_swap_just_after_the_line_leaves_both_laps_alone() {
     let tt = BinIt::in_memory().unwrap();
     let jess = tt.add_and_seat("Jess", None).unwrap();

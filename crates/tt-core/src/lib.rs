@@ -142,6 +142,9 @@ struct Runtime {
     void_pending: bool,
     /// The car has crossed the line on a lap that should be reported shortly (out laps aren't reported by the game).
     wrap_waiting: bool,
+    /// The game published a lap's result before the live readings showed the car crossing the line: that
+    /// crossing is already accounted for.
+    wrap_skip: bool,
     /// Who was in the seat as the car crossed the line, for the result that arrives after it.
     wrap_driver: Option<Option<DriverId>>,
     last_progress: f32,
@@ -536,7 +539,7 @@ impl BinIt {
             let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
             // A swap in the moment between the car crossing the line and the game publishing the lap that
             // just ended is a swap at the line: the new driver has the whole new lap, so it isn't voided.
-            let at_the_line = rt.wrap_waiting;
+            let at_the_line = rt.wrap_waiting || rt.wrap_skip;
             let on_track = rt.session_info.is_some() && rt.live.as_ref().is_some_and(|l| l.phase == "driving" || l.phase == "paused");
             if on_track && !at_the_line {
                 rt.lap_driver_changed = true;
@@ -932,6 +935,9 @@ impl BinIt {
                     if std::mem::take(&mut rt.wrap_waiting) {
                         (std::mem::take(&mut rt.void_pending), rt.wrap_driver.take())
                     } else {
+                        // The result came first: the car is still just short of the line in the live readings,
+                        // and the crossing they are about to show is this lap's, not a new one to wait on.
+                        rt.wrap_skip = rt.last_progress > 0.9;
                         (std::mem::take(&mut rt.lap_driver_changed), None)
                     }
                 };
@@ -972,7 +978,9 @@ impl BinIt {
                 // Crossing the line starts a new lap. A swap during an out lap (a handover in the pits) is
                 // fine: that lap isn't timed. A swap during a timed lap voids it when its result arrives.
                 if rt.last_progress > 0.9 && lap_progress < 0.1 {
-                    if rt.last_out_lap {
+                    if std::mem::take(&mut rt.wrap_skip) {
+                        // Its result has already been dealt with.
+                    } else if rt.last_out_lap {
                         rt.lap_driver_changed = false;
                     } else {
                         rt.void_pending = std::mem::take(&mut rt.lap_driver_changed);
