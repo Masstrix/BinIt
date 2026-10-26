@@ -136,7 +136,7 @@ function ManageDriver({ driver }: { driver: Driver }) {
       <div className="manage-list">
         <ManageRow icon="M12 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM4 21a8 8 0 0 1 16 0" title={seated ? "In the seat" : "Put in seat"} sub={seated ? "Laps are going to them now" : "Laps will go to them"} onClick={seated ? undefined : () => seat.choose(driver)} trailing={seated ? "Now" : undefined} />
         <ManageRow icon="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" title="Name and colour" sub="Change how they appear everywhere" onClick={() => setEditing(true)} />
-        <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Progress over time" sub="Bests and speed score on every track" href={`#/drivers/${driver.id}`} />
+        <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Progress over time" sub="Bests and speed score on every track" href={`#/you/${driver.id}/progress`} />
         {isTauri && (
           <ManageRow icon="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM11 18h2" title="Connections" sub="Phones and browsers signed in as them" trailing={devices ? String(devices.length) : undefined} onClick={() => setConnections(true)} />
         )}

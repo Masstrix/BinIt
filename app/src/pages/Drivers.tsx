@@ -4,7 +4,6 @@ import { ago } from "../format";
 import { TIER_ORDER, tierByKey, tierOf } from "../driverStats";
 import { Helmet } from "../components/Helmet";
 import { Modal } from "../components/Modal";
-import { DriverProgress } from "./DriverProgress";
 
 export const PALETTE = [
   ["#FF9F6B", "Peach"],
@@ -17,15 +16,12 @@ export const PALETTE = [
   ["#e8ebf4", "White"],
 ] as const;
 
-export function DriversPage({ path = "/drivers" }: { path?: string }) {
+export function DriversPage() {
   const { drivers, status } = useAppState();
   const [adding, setAdding] = useState(false);
   // Speed scores change whenever laps do (useFetch refetches then).
   const ratings = useFetch(() => api.driverRatings(), []) ?? [];
   const ratingOf = new Map(ratings.map((r) => [r.driverId, r]));
-  // #/drivers/<id>: one driver's progress over time.
-  const open = path.match(/^\/drivers\/(\d+)/);
-  if (open) return <DriverProgress id={Number(open[1])} />;
   return (
     <>
       <div className="page-head" style={{ alignItems: "center" }}>
