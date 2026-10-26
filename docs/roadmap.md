@@ -2,6 +2,12 @@
 
 Planned work that is researched but not started. Newest ideas at the bottom of each section.
 
+## UI refresh and driver profiles (2026-10-26)
+
+The UI is being moved to the "Mist Kit" design (Design Refresh page of the Bin It design canvas): borderless window with its own title bar, grouped collapsible sidebar, spotlight-stage podium, restyled overlay widgets, and on phones a banner plus four tabs (Home, Tracks, Challenges, Rig). `?mock` on the dev URL serves fake data for UI work (see [building.md](building.md)).
+
+Not started: driver profiles, points and customisation. Notes and open questions are in [profiles-and-points.md](profiles-and-points.md).
+
 ## Track & car catalogue and searchable pickers
 
 **Status (2026-10-11):** first slices built. Decisions below were made while the owner was away; change any of them if you disagree.

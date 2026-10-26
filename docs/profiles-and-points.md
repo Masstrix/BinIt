@@ -1,0 +1,102 @@
+# Driver profiles, points and customisation: starting notes
+
+Not built yet. This is a place to think before building, written while the UI refresh was being done, so
+the designs are what it is based on. Everything here is a proposal for the owner to push back on.
+
+## What the designs already assume
+
+The Mist Kit boards (Design Refresh page) show things the app has no data for today:
+
+* A **level** with an XP ring on the phone banner ("760 XP to level 5") and a level badge on the helmet.
+* A **Garage**: helmet colour, stripe, race number, stickers. "Personal liveries."
+* A **You** page behind the banner: level, XP and stickers, my laps, my bests per track, Garage, "Not you? Switch driver".
+* Race numbers (`#7`) next to names on the picker, leaderboards, podium and overlay strip.
+
+None of that is stored. A driver is `id, name, color, created_at` (`crates/tt-core/src/store.rs`).
+
+## The decision that shapes the rest: how does a phone know who you are?
+
+Today: **"Who are you?"** is remembered by the phone's own browser storage (`me`), the app knows nothing
+about it, and anyone can pick anyone. That fits the product rule "no sign-in, no PINs, drivers are just
+names" (see memory / roadmap). Customisation and points make this more sensitive, because spending
+someone's points or changing their helmet from another phone is now a (small) harm.
+
+Options, lightest first:
+
+1. **Keep it as is.** Trust model. Anyone can edit any driver's Garage. Simple, and in an office that may be fine.
+2. **Device pairing, no passwords.** The first time a phone picks "I'm Sam", the server issues a random device
+   token and stores `driver_id <-> device token`. From then on that phone is Sam without asking, and only a
+   paired device can spend Sam's points or change Sam's Garage. Picking someone else's name still works for
+   *seat* and *viewing*, just not for changes. Losing the phone just means re-pairing from the PC.
+3. **Optional PIN per driver** guarding only spending and Garage edits, not driving. Cheap to add on top of 2.
+4. A real login (email, password, accounts). Conflicts with "local only, no auth" and I would not start here.
+
+Recommendation: **2**, with the desktop app acting as the admin that can re-pair or reset anyone. It keeps
+the "type a name and go" feel, while giving a phone a stable identity that "my profile" can hang on.
+
+## Points: two separate things
+
+Keep **XP** and **coins** apart so spending never drops your level.
+
+* **XP**: only goes up. Level is derived from total XP. Drives the ring and badge.
+* **Coins**: earned alongside XP, spent in the Garage.
+
+Store them as an **append-only ledger** (`point_events`: driver, kind, xp, coins, reference such as lap id or
+challenge id, time). Balances are sums, so nothing can drift, a deleted lap can be reversed, and the UI can
+show "why did I get that".
+
+Possible earning rules (all numbers placeholders):
+
+| Event | XP | Coins |
+|---|---|---|
+| Valid timed lap | 10 | 1 |
+| Personal best on a combo | 50 | 5 |
+| Track record | 150 | 20 |
+| Challenge: finishing 1st / 2nd / 3rd | 300 / 200 / 100 | 40 / 25 / 10 |
+| First lap on a new track or car | 25 | 2 |
+
+Guard rails: only **valid** laps (the lap timing already separates cut, out and in laps, see
+`docs/lap-timing.md`), a per-day cap per track and car so the rig cannot be farmed by lapping a corner,
+and guest laps earn nothing until claimed. Points are awarded when a lap is recorded (the `lapRecorded`
+path), never by the client.
+
+## Customisation
+
+* A static **catalogue in code**: helmet colours, stripes, visors, race number styles, stickers. Each has an
+  id, a name, a price in coins and optionally a level requirement.
+* `driver_items` (what a driver owns) and a **loadout** (what is equipped: colour, stripe, number, sticker).
+* The loadout is what the existing `Helmet` component, the podium, the overlay strip and the leaderboard
+  render. Today `Helmet` takes only a `color`; it would take a loadout.
+* Free starter set so nobody is locked out; the driver's current `color` becomes the starting helmet colour.
+* Race number: unique per driver is nicer (no two #7s) but needs a rule for clashes.
+* The server checks ownership and price when equipping or buying. The phone only asks.
+
+## Money
+
+The message said "money". I have assumed that means an **in-app currency** (coins), not real payments. Real
+money would need accounts, payment handling and a very different product, and "local only, office fun" is
+the stated direction. Worth confirming.
+
+## Where it would show up in the UI
+
+* **Banner (phone):** ring plus level badge, "760 XP to level 5" (already designed).
+* **You page** (from the banner): level, coins, recent earnings, my laps, bests per track, Garage, switch driver.
+* **Desktop:** the seat card and Drivers page; a profile view per driver (the existing Driver progress page is
+  the closest starting point).
+* **Pop-ups in the overlay:** "+50 XP", "Level up", reusing the pop-up widget.
+
+## Suggested order
+
+1. Decide identity (option 2 above is the proposal) and whether coins are in-app only.
+2. Add the ledger and levels (XP only, no spending), show the ring and badge. Valuable on its own.
+3. Add the Garage: catalogue, ownership, loadout, rendering in `Helmet`, the shared podium and the overlay.
+4. Add coins and buying.
+5. Device pairing and the You page, if option 2 is chosen.
+
+## Questions for the owner
+
+* Trust model or device pairing? Is a PIN wanted?
+* Coins in-app only? Should anything reset (weekly or seasonal)?
+* Should challenge winners get something special (a trophy sticker) rather than only coins?
+* Should coins and XP be visible to everyone on the leaderboard, or only on your own profile?
+* Is it fine that XP and coins from before this feature starts at zero, or should existing laps be back-filled?
