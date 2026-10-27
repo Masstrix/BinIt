@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { api, useAppState, useFetch, useTrackMaps, type Driver, type Lap } from "../api";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
+import { api, useAppState, useFetch, useTrackMaps, type AidsMax, type Driver, type Lap, type LapSlides, type LiveAids, type TraceRow } from "../api";
+import { ElectronicsGauges } from "./ElectronicsGauges";
 import { findMap } from "../catalogueItems";
 import { usePersistedState } from "../persist";
 import { ago, carName, lapKind, lapTime } from "../format";
@@ -25,6 +26,20 @@ interface Pt {
   brake: number;
   steer: number;
   gear: number;
+  /** World position (metres) and heading (degrees), when the lap's trace recorded them. */
+  x: number | null;
+  z: number | null;
+  heading: number | null;
+  /** Heading minus the direction of travel, degrees: positive = the nose is turned right of where the car is going. */
+  slip: number | null;
+  /** What the aids and brake balance were set to, and the turbo boost, when the lap's trace recorded them. */
+  tc: number | null;
+  abs: number | null;
+  bias: number | null;
+  diffP: number | null;
+  diffC: number | null;
+  limiter: boolean | null;
+  boost: number | null;
 }
 
 /** What the page shows about a lap, from the recent-laps list or the leaderboard. */
@@ -42,15 +57,23 @@ interface LapInfo {
  * lap; samples from before the line (still reading ~100% from the previous lap) or glitches that
  * step backwards are dropped.
  */
-function parseTrace(rows: number[][] | undefined): Pt[] {
+/** "3 drifts · 12.4 s (longest 5.1 s, up to 34°) · 1 spin" */
+function slidesText(s: LapSlides): string {
+  const parts: string[] = [];
+  if (s.drifts > 0) parts.push(`${s.drifts} ${s.drifts === 1 ? "drift" : "drifts"} · ${(s.driftMs / 1000).toFixed(1)} s (longest ${(s.longestMs / 1000).toFixed(1)} s, up to ${Math.round(s.peakSlipDeg)}°)`);
+  if (s.spins > 0) parts.push(`${s.spins} ${s.spins === 1 ? "spin" : "spins"}`);
+  return parts.join(" · ");
+}
+
+function parseTrace(rows: TraceRow[] | undefined): Pt[] {
   if (!rows) return [];
   const out: Pt[] = [];
   let max = -1;
-  for (const [p, t, speed, throttle, brake, , steer, gear] of rows) {
+  for (const [p, t, speed, throttle, brake, , steer, gear, x, z, heading, slip, tc, abs, bias, diffP, diffC, limiter, boost] of rows) {
     if (out.length === 0 && p > 0.5) continue;
     if (p < max) continue;
     max = p;
-    out.push({ p, t, speed, throttle, brake, steer, gear });
+    out.push({ p, t, speed, throttle, brake, steer, gear, x, z, heading, slip, tc: tc ?? null, abs: abs ?? null, bias: bias ?? null, diffP: diffP ?? null, diffC: diffC ?? null, limiter: limiter ?? null, boost: boost ?? null });
   }
   return smoothProgress(out);
 }
@@ -98,6 +121,35 @@ function smoothProgress(pts: Pt[]): Pt[] {
     out[i] = { ...pts[i], p };
   }
   return out;
+}
+
+/**
+ * Where a lap's car was `clockMs` into it, and which way it faced, from the trace's own readings (null when the lap
+ * was recorded without them). The heading is blended the short way round, so it doesn't swing through 360 degrees.
+ */
+function carAt(pts: Pt[], clockMs: number): { position: [number, number]; heading: number | null } | null {
+  if (pts.length === 0) return null;
+  let lo = 0;
+  let hi = pts.length - 1;
+  if (clockMs <= pts[0].t) hi = lo;
+  else if (clockMs >= pts[hi].t) lo = hi;
+  else {
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (pts[mid].t <= clockMs) lo = mid;
+      else hi = mid;
+    }
+  }
+  const a = pts[lo];
+  const b = pts[hi];
+  if (a.x === null || a.z === null || b.x === null || b.z === null) return null;
+  const f = b.t === a.t ? 0 : Math.min(1, Math.max(0, (clockMs - a.t) / (b.t - a.t)));
+  let heading: number | null = null;
+  if (a.heading !== null && b.heading !== null) {
+    const turn = ((((b.heading - a.heading) % 360) + 540) % 360) - 180;
+    heading = a.heading + turn * f;
+  }
+  return { position: [a.x + (b.x - a.x) * f, a.z + (b.z - a.z) * f], heading };
 }
 
 /** Linear lookup of `key` → `val` over points sorted by `key`. */
@@ -281,6 +333,15 @@ export function LapAnalysis({ lapId }: { lapId: number | null }) {
   ];
   const sectorsCard =
     lap && other && lap.sectorsMs.length > 0 && other.sectorsMs.length === lap.sectorsMs.length ? <Sectors a={lap} b={other} rally={w.rally} /> : null;
+  // What each lap slid: at the bottom of the page, above the replay dock, where it reads as a summary of the laps above.
+  const slidesNote =
+    lap && (traceA?.slides || (other && traceB?.slides)) ? (
+      <section className="card la-slides" aria-label="Sliding">
+        <span className="label">Sliding</span>
+        {traceA?.slides && <span><b style={{ color: LAP_A }}>●</b> {name(lap.driverId)}: {slidesText(traceA.slides)}</span>}
+        {other && traceB?.slides && <span><b style={{ color: LAP_B }}>●</b> {name(other.driverId)}: {slidesText(traceB.slides)}</span>}
+      </section>
+    ) : null;
   const go = (id: number) => {
     location.hash = `#/telemetry/lap/${id}`;
   };
@@ -332,12 +393,13 @@ export function LapAnalysis({ lapId }: { lapId: number | null }) {
           {traceA === null ? (
             <div className="empty">This {w.lap} has no input recording (the game didn't send it, or it was recorded before Bin It kept them).</div>
           ) : (
-            <Traces a={a} b={other && traceB ? b : []} lapA={lap} lapB={other} w={w} where={selected!}>
+            <Traces a={a} b={other && traceB ? b : []} lapA={lap} lapB={other} nameA={name(lap.driverId)} nameB={other ? name(other.driverId) : ""} maxA={traceA ? traceA.aidsMax : null} maxB={other && traceB ? traceB.aidsMax : null} w={w} where={selected!} after={slidesNote}>
               {sectorsCard}
             </Traces>
           )}
 
           {traceA === null && sectorsCard}
+          {traceA === null && slidesNote}
         </>
       )}
     </>
@@ -507,18 +569,31 @@ function Traces({
   b: rawB,
   lapA,
   lapB,
+  nameA,
+  nameB,
+  maxA,
+  maxB,
   w,
   where,
   children,
+  after,
 }: {
   a: Pt[];
   b: Pt[];
   lapA: LapInfo;
   lapB: LapInfo | null;
+  /** Who drove each lap, for telling them apart on the charts. */
+  nameA: string;
+  nameB: string;
+  /** How far each aid goes on the car each lap was driven in. */
+  maxA: AidsMax | null;
+  maxB: AidsMax | null;
   w: Words;
   where: { game: string; track: string; layout: string };
   /** More of the page (the sector times), shown above the dock so the dock stays the page's last thing. */
   children?: ReactNode;
+  /** What goes under those and the live cards, still above the dock (the sliding summary). */
+  after?: ReactNode;
 }) {
   const [a, b] = useMemo(() => fit(rawA, lapA.timeMs, rawB, lapB?.timeMs ?? 0), [rawA, rawB, lapA.timeMs, lapB?.timeMs]);
   const touch = useMemo(() => !!window.matchMedia?.("(pointer: coarse)").matches, []);
@@ -526,6 +601,8 @@ function Traces({
   const [span, setSpanRaw] = useState<Span>(WHOLE);
   const box = useRef<HTMLDivElement>(null);
   const hasB = b.length > 0;
+  // Older laps, and games that don't give the car's heading, have no slip to show.
+  const hasSlip = a.some((q) => q.slip !== null) || b.some((q) => q.slip !== null);
   const width = span.hi - span.lo;
   const zoomed = width < 0.999;
   const centre = (span.lo + span.hi) / 2;
@@ -737,12 +814,21 @@ function Traces({
   // Lap B at the same point of the lap (the charts compare the same corner).
   const atB = shown !== null && hasB ? nearest(b, shown) : null;
   const atDelta = shown !== null && delta.length ? lookup(delta as unknown as Pt[], "p", shown, (q) => q.t) : null;
+  // The electronics at the reading point, or as the lap started when nothing is being read, so the panels don't come and go.
+  const hasAids = a.some((q) => q.tc !== null) || b.some((q) => q.tc !== null);
+  const refA = atA ?? a[0] ?? null;
+  const refB = hasB ? (atB ?? b[0] ?? null) : null;
+  const aidsA = aidsOf(refA, maxA);
+  const aidsB = aidsOf(refB, maxB);
 
   // The lines are drawn once for the whole lap (x = how far through it × W) and the view slides and
   // stretches them as one piece (`onLap`). Redrawing them from the first point in view each time made
   // dashed lines' dashes crawl as the view moved: a dash pattern starts where its line starts.
+  // With two laps the pedals get a chart each (their height), so they never lie over one another.
+  const ph = hasB ? 56 : 80;
   const lines = useMemo(() => {
     const L = (p: number) => p * W;
+    const py = (v: number) => ph - 2 - v * (ph - 6);
     const gy = (d: number) => 35 - Math.max(-1, Math.min(1, d / 1000 / deltaScale)) * 33;
     const gap = delta.map((x, i) => `${i ? "L" : "M"}${L(x.p).toFixed(2)} ${gy(x.t).toFixed(1)}`).join("");
     return {
@@ -750,16 +836,16 @@ function Traces({
       gapFill: delta.length ? `${gap}L${W} 35L0 35Z` : "",
       speedA: path(a, L, (q) => 128 - (q.speed / speedMax) * 124),
       speedB: path(b, L, (q) => 128 - (q.speed / speedMax) * 124),
-      thrA: path(a, L, (q) => 78 - q.throttle * 74),
-      thrB: path(b, L, (q) => 78 - q.throttle * 74),
-      brkA: path(a, L, (q) => 78 - q.brake * 74),
-      brkB: path(b, L, (q) => 78 - q.brake * 74),
+      thrA: path(a, L, (q) => py(q.throttle)),
+      thrB: path(b, L, (q) => py(q.throttle)),
+      brkA: path(a, L, (q) => py(q.brake)),
+      brkB: path(b, L, (q) => py(q.brake)),
       steerA: path(a, L, (q) => 30 + q.steer * 28),
       steerB: path(b, L, (q) => 30 + q.steer * 28),
       gearA: path(a, L, (q) => 48 - (Math.max(0, q.gear) / gearMax) * 44, true),
       gearB: path(b, L, (q) => 48 - (Math.max(0, q.gear) / gearMax) * 44, true),
     };
-  }, [a, b, delta, deltaScale, speedMax, gearMax]);
+  }, [a, b, delta, deltaScale, speedMax, gearMax, ph]);
   // Whole-lap drawing → the view: stretch by 1 / width, slide so the view's start is at the left edge.
   const onLap = (children: ReactNode) => <g transform={`translate(${(-span.lo / width) * W} 0) scale(${1 / width} 1)`}>{children}</g>;
 
@@ -804,6 +890,7 @@ function Traces({
           <Read label="Throttle" pair a={atA && `${Math.round(atA.throttle * 100)}`} b={hasB ? atB && `${Math.round(atB.throttle * 100)}` : undefined} chars={3} unit="%" />
           <Read label="Brake" pair a={atA && `${Math.round(atA.brake * 100)}`} b={hasB ? atB && `${Math.round(atB.brake * 100)}` : undefined} chars={3} unit="%" />
           <Read label="Gear" pair a={atA && gearText(atA.gear)} b={hasB ? atB && gearText(atB.gear) : undefined} chars={1} />
+          {hasSlip && <Read label="Slip" pair a={atA && slipText(atA.slip)} b={hasB ? atB && slipText(atB.slip) : undefined} chars={4} unit="°" />}
           {hasB && (
             <Read
               label="Gap"
@@ -856,17 +943,24 @@ function Traces({
             )}
             {marks(130)}
           </Chart>
-          <Chart label="Throttle & brake" hint="0–100%" h={80} what={w.lap}>
-            {onLap(
-              <>
-                {hasB && line(lines.thrB, THROTTLE, true, 1.2)}
-                {hasB && line(lines.brkB, BRAKE, true, 1.2)}
-                {line(lines.thrA, THROTTLE)}
-                {line(lines.brkA, BRAKE)}
-              </>,
-            )}
-            {marks(80)}
-          </Chart>
+          {hasB ? (
+            <>
+              {/* One chart per lap, each tagged with whose it is, rather than two laps' pedals lying over each other. */}
+              <Chart label="Throttle & brake" hint="0–100%" h={ph} what={w.lap} tag={{ color: LAP_A, text: `This ${w.lap} · ${nameA}` }}>
+                {onLap(<>{line(lines.thrA, THROTTLE)}{line(lines.brkA, BRAKE)}</>)}
+                {marks(ph)}
+              </Chart>
+              <Chart label="Throttle & brake" hint="0–100%" h={ph} what={w.lap} tag={{ color: LAP_B, text: `Comparison · ${nameB}` }}>
+                {onLap(<>{line(lines.thrB, THROTTLE)}{line(lines.brkB, BRAKE)}</>)}
+                {marks(ph)}
+              </Chart>
+            </>
+          ) : (
+            <Chart label="Throttle & brake" hint="0–100%" h={ph} what={w.lap}>
+              {onLap(<>{line(lines.thrA, THROTTLE)}{line(lines.brkA, BRAKE)}</>)}
+              {marks(ph)}
+            </Chart>
+          )}
           <Chart label="Steering" hint="left ↑ · right ↓" h={60} what={w.lap}>
             <line x1={0} x2={W} y1={30} y2={30} stroke="var(--line)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
             {onLap(
@@ -895,8 +989,8 @@ function Traces({
         </div>
 
         <div className="trace-key">
-          <span><i style={{ background: LAP_A }} />This {w.lap}</span>
-          {hasB && <span><i style={{ background: LAP_B }} />Comparison (dashed pedals)</span>}
+          <span><i style={{ background: LAP_A }} />This {w.lap} · {nameA}</span>
+          {hasB && <span><i style={{ background: LAP_B }} />Comparison · {nameB}</span>}
           <span><i style={{ background: THROTTLE }} />Throttle</span>
           <span><i style={{ background: BRAKE }} />Brake</span>
         </div>
@@ -904,6 +998,23 @@ function Traces({
       </section>
 
       {children}
+
+      {/* How each car points against where it is going, and its electronics, at the point being read on the charts. Down
+          here under the sector times, so the charts and the map above keep the screen. */}
+      {(hasSlip || hasAids) && (
+        <section className="card la-live" aria-label="Slip and electronics at this point of the lap">
+          <span className="label">At the point you're reading</span>
+          {hasSlip && <SlipDial a={atA ? atA.slip : null} b={hasB ? (atB ? atB.slip : null) : undefined} nameA={nameA} nameB={nameB} />}
+          {hasAids && (
+            <div className="la-aids" aria-label="Electronics at this point of the lap">
+              {aidsA && <ElectronicsGauges aids={aidsA} boost={refA ? refA.boost : null} tag={hasB ? { color: LAP_A, text: `This ${w.lap} · ${nameA}` } : undefined} />}
+              {hasB && aidsB && <ElectronicsGauges aids={aidsB} boost={refB ? refB.boost : null} tag={{ color: LAP_B, text: `Comparison · ${nameB}` }} />}
+            </div>
+          )}
+        </section>
+      )}
+
+      {after}
 
       {/* The dock: replay controls, zoom and the timeline strip. It's the page's last element and sticks
           to the bottom of the screen, so it's in reach from the map, the charts and the sector times. */}
@@ -1089,7 +1200,11 @@ function MiniMap({
 
   // Zoom and turn the map as the viewer chose, following this lap's car.
   const mapView = useMapView();
-  const camera = map ? cameraAt(map.points, map.closed, pA, mapView) : undefined;
+  const carA = carAt(a, clockMs);
+  const carB = b ? carAt(b, clockMs) : null;
+  const outlineCamera = map ? cameraAt(map.points, map.closed, pA, mapView) : undefined;
+  // Following the car means following where it really was, when the lap recorded that.
+  const camera = outlineCamera && carA ? { ...outlineCamera, at: carA.position } : outlineCamera;
 
   return (
     <section className="card la-map" aria-label={`${cap(w.track)} map`}>
@@ -1117,9 +1232,9 @@ function MiniMap({
               label={`${cap(w.track)} map`}
               sectors={outline}
               markers={[
-                { at: b && pB !== null ? pointAlong(map.points, map.closed, pB) : null, color: LAP_B },
-                { at: pointAlong(map.points, map.closed, pA), color: LAP_A },
-              ].flatMap((m) => (m.at ? [{ position: m.at, color: m.color }] : []))}
+                { at: carB?.position ?? (b && pB !== null ? pointAlong(map.points, map.closed, pB) : null), heading: carB?.heading, color: LAP_B },
+                { at: carA?.position ?? pointAlong(map.points, map.closed, pA), heading: carA?.heading, color: LAP_A },
+              ].flatMap((m) => (m.at ? [{ position: m.at, heading: m.heading, color: m.color }] : []))}
             />
           </div>
         </div>
@@ -1130,11 +1245,12 @@ function MiniMap({
   );
 }
 
-function Chart({ label, hint, h, what, children }: { label: string; hint: string; h: number; what: string; children: ReactNode }) {
+function Chart({ label, hint, h, what, tag, children }: { label: string; hint: string; h: number; what: string; /** Whose lap this chart shows, when two charts show the same thing for two laps. */ tag?: { color: string; text: string }; children: ReactNode }) {
   return (
-    <div className="la-chart">
+    <div className={`la-chart${tag ? " tagged" : ""}`} style={tag ? ({ "--tag": tag.color } as CSSProperties) : undefined}>
       <div className="la-chart-head">
         <span className="label">{label}</span>
+        {tag && <span className="la-tag" style={{ color: tag.color }}><i style={{ background: tag.color }} />{tag.text}</span>}
         <span className="muted">{hint}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${h}`} preserveAspectRatio="none" width="100%" height={h} role="img" aria-label={`${label} through the ${what}`}>
@@ -1177,6 +1293,80 @@ function Read({ label, value, a, b, chars, unit, color, pair = false }: { label:
 
 function gearText(g: number): string {
   return g < 0 ? "R" : g === 0 ? "N" : String(g);
+}
+
+/** The aids a lap had set at one of its samples, with how far each goes on that car; null when the lap didn't record them. */
+function aidsOf(pt: Pt | null, max: AidsMax | null): LiveAids | null {
+  if (!pt || !max || pt.tc === null || pt.abs === null || pt.bias === null || pt.diffP === null || pt.diffC === null) return null;
+  return {
+    tcLevel: pt.tc,
+    tcMax: max.tcMax,
+    absLevel: pt.abs,
+    absMax: max.absMax,
+    brakeBias: pt.bias,
+    biasMin: max.biasMin,
+    biasMax: max.biasMax,
+    diffPowerLevel: pt.diffP,
+    diffPowerMax: max.diffPowerMax,
+    diffCoastLevel: pt.diffC,
+    diffCoastMax: max.diffCoastMax,
+    pitLimiter: !!pt.limiter,
+  };
+}
+
+/** A slip angle for a readout: signed whole degrees, or nothing when the lap has none. */
+function slipText(slip: number | null): string | null {
+  if (slip === null) return null;
+  const n = Math.round(slip);
+  return n > 0 ? `+${n}` : String(n);
+}
+
+/** "23° right", "4° left", "0°". */
+function slipWords(slip: number | null | undefined): string {
+  if (slip === null || slip === undefined) return "–";
+  const n = Math.round(slip);
+  return `${Math.abs(n)}°${n === 0 ? "" : n > 0 ? " right" : " left"}`;
+}
+
+/**
+ * How each car points against where it is going. Up is the direction of travel, so a car going where it points has its arrow
+ * straight up; one with its nose turned to the right of its path (the tail stepping out the other way) has its arrow turned
+ * right, and left the other way. Round the full circle for a spin. The comparison's arrow is the smaller one.
+ */
+function SlipDial({ a, b, nameA, nameB }: { a: number | null; b?: number | null; nameA: string; nameB: string }) {
+  const arrow = (slip: number | null, color: string, len: number) =>
+    slip === null ? null : (
+      <g transform={`translate(50 50) rotate(${Math.max(-180, Math.min(180, slip))})`}>
+        <polygon
+          points={`0,${-len} ${len * 0.28},${len * 0.32} 0,${len * 0.12} ${-len * 0.28},${len * 0.32}`}
+          fill={color}
+          stroke="#fff"
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </g>
+    );
+  return (
+    <div className="la-slip" role="group" aria-label="Slip angle against the direction of travel">
+      <svg viewBox="0 0 100 100" width="104" height="104" aria-hidden="true">
+        <circle cx="50" cy="50" r="44" fill="none" stroke="var(--line)" strokeWidth="2" />
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((d) => (
+          <line key={d} x1="50" y1="7" x2="50" y2={d % 90 === 0 ? 14 : 11} stroke="var(--line)" strokeWidth="2" transform={`rotate(${d} 50 50)`} />
+        ))}
+        {/* The direction of travel: straight up. */}
+        <line x1="50" y1="50" x2="50" y2="12" stroke="var(--muted)" strokeWidth="1.5" strokeDasharray="3 3" />
+        {arrow(a, LAP_A, 36)}
+        {b !== undefined && arrow(b, LAP_B, 27)}
+      </svg>
+      <div className="la-slip-text">
+        <span className="label">Slip against the direction of travel</span>
+        <span><b style={{ color: LAP_A }}>●</b> {nameA} <span className="mono">{slipWords(a)}</span></span>
+        {b !== undefined && <span><b style={{ color: LAP_B }}>●</b> {nameB} <span className="mono">{slipWords(b)}</span></span>}
+        <span className="muted" style={{ fontSize: 12 }}>Up is the way the car is going. An arrow turned right has its nose pointing right of that.</span>
+      </div>
+    </div>
+  );
 }
 
 /** Each sector of the two laps side by side. */

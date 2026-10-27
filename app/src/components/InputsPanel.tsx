@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { LiveInputs } from "../api";
 import { useAppState } from "../api";
+import { ElectronicsGauges } from "./ElectronicsGauges";
 
 const WINDOW_MS = 10_000;
 const THROTTLE = "#4fd39a";
@@ -49,7 +50,13 @@ export function InputsPanel() {
     <section className="card inputs" aria-label="Driver inputs">
       <div className="head" style={{ alignItems: "center" }}>
         <h2>Inputs</h2>
-        <span className="muted" style={{ fontSize: 13 }}>last 10 seconds</span>
+        {live?.slide && live.slide !== "none" && inputs?.dynamics ? (
+          <span className="chip plain mono" role="status" style={{ background: live.slide === "spin" ? "rgba(255,107,138,0.18)" : live.slide === "slide" ? "rgba(139,139,245,0.18)" : "rgba(255,159,107,0.18)", color: live.slide === "spin" ? "#ff7a92" : live.slide === "slide" ? "var(--violet)" : "var(--peach)", fontSize: 15 }}>
+            {live.slide === "spin" ? "SPIN" : live.slide === "slide" ? "SLIDE" : "DRIFT"} {Math.abs(inputs.dynamics.slipDeg).toFixed(0)}°
+          </span>
+        ) : (
+          <span className="muted" style={{ fontSize: 13 }}>last 10 seconds</span>
+        )}
       </div>
 
       {!inputs ? (
@@ -70,6 +77,47 @@ export function InputsPanel() {
               <span className="mono">{inputs.rpm}</span>
             </div>
           </div>
+
+          {inputs.dynamics && (
+            <div className="inputs-top" aria-label="How the car is sliding">
+              <div className="inputs-stat">
+                <span className="label">SLIP</span>
+                <span className="mono">
+                  {Math.abs(inputs.dynamics.slipDeg).toFixed(0)}<small>°</small>
+                  {live?.slide && live.slide !== "none" && <small style={{ marginLeft: 6, color: live.slide === "spin" ? "var(--red, #ff7a92)" : live.slide === "slide" ? "var(--violet)" : "var(--peach)" }}>{live.slide}</small>}
+                </span>
+              </div>
+              <div className="inputs-stat">
+                <span className="label">YAW</span>
+                <span className="mono">{Math.round(inputs.dynamics.yawRateDps)}<small> °/s</small></span>
+              </div>
+              {inputs.dynamics.turboBoost > 0.01 && !inputs.aids && (
+                <div className="inputs-stat">
+                  <span className="label">BOOST</span>
+                  <span className="mono">{inputs.dynamics.turboBoost.toFixed(2)}<small> bar</small></span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {inputs.dynamics && live && (live.slideStats.drifts > 0 || live.slideStats.spins > 0) && (
+            <div className="muted" style={{ fontSize: 13, margin: "-4px 0 10px" }} aria-label="Sliding this lap">
+              This lap:{" "}
+              {live.slideStats.drifts > 0 && (
+                <>
+                  {live.slideStats.drifts} {live.slideStats.drifts === 1 ? "drift" : "drifts"} · {(live.slideStats.driftMs / 1000).toFixed(1)} s
+                  {" "}(longest {(live.slideStats.longestMs / 1000).toFixed(1)} s, up to {Math.round(live.slideStats.peakSlipDeg)}°)
+                </>
+              )}
+              {live.slideStats.spins > 0 && <>{live.slideStats.drifts > 0 ? " · " : ""}{live.slideStats.spins} {live.slideStats.spins === 1 ? "spin" : "spins"}</>}
+            </div>
+          )}
+
+          {inputs.aids && (
+            <div style={{ margin: "0 0 12px" }}>
+              <ElectronicsGauges aids={inputs.aids} boost={inputs.dynamics ? inputs.dynamics.turboBoost : null} />
+            </div>
+          )}
 
           <div className="pedals">
             {(

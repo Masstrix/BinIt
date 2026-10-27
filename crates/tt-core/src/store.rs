@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 11;
+const SCHEMA_VERSION: i32 = 12;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -240,6 +240,10 @@ impl Store {
         if version < 11 {
             // How big a challenge's coin and XP rewards are: low, medium or high.
             conn.execute_batch("ALTER TABLE challenges ADD COLUMN reward_size TEXT NOT NULL DEFAULT 'medium';")?;
+        }
+        if version < 12 {
+            // What a lap's driver drifted and spun (JSON, see `LiveSlideStats`). NULL = nothing, or not known.
+            conn.execute_batch("ALTER TABLE laps ADD COLUMN slides TEXT;")?;
         }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         let store = Self { conn };
@@ -534,6 +538,15 @@ impl Store {
             .optional()?
             .flatten();
         Ok(bytes.and_then(|b| TimingProfile::from_bytes(&b)))
+    }
+
+    pub fn set_lap_slides(&self, id: LapId, json: &str) -> Result<()> {
+        self.conn.execute("UPDATE laps SET slides = ?1 WHERE id = ?2", params![json, id])?;
+        Ok(())
+    }
+
+    pub fn lap_slides(&self, id: LapId) -> Result<Option<String>> {
+        Ok(self.conn.query_row("SELECT slides FROM laps WHERE id = ?1", [id], |r| r.get(0)).optional()?.flatten())
     }
 
     /// A lap's recorded driver inputs, if it has them.
@@ -1015,7 +1028,7 @@ mod repair_tests {
     fn trace(real_ms: u32, stored_ms: u32) -> LapTrace {
         LapTrace(
             (1..200)
-                .map(|i| TracePoint { progress: i as f32 / 200.0, elapsed_ms: real_ms * i / 200, speed_kmh: 150.0, throttle: 1.0, brake: 0.0, clutch: 0.0, steering: 0.0, gear: 4 })
+                .map(|i| TracePoint { progress: i as f32 / 200.0, elapsed_ms: real_ms * i / 200, speed_kmh: 150.0, throttle: 1.0, brake: 0.0, clutch: 0.0, steering: 0.0, gear: 4, ..Default::default() })
                 .filter(|p| p.elapsed_ms <= stored_ms)
                 .collect(),
         )

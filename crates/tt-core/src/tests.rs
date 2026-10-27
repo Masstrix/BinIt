@@ -540,7 +540,7 @@ fn a_laps_input_trace_is_stored_with_it() {
     let tt = BinIt::in_memory().unwrap();
     tt.add_and_seat("Sam", None).unwrap();
     let points = (0..120)
-        .map(|i| TracePoint { progress: i as f32 / 120.0, elapsed_ms: i * 800, speed_kmh: 150.0, throttle: 1.0, brake: 0.0, clutch: 0.0, steering: 0.25, gear: 4 })
+        .map(|i| TracePoint { progress: i as f32 / 120.0, elapsed_ms: i * 800, speed_kmh: 150.0, throttle: 1.0, brake: 0.0, clutch: 0.0, steering: 0.25, gear: 4, ..Default::default() })
         .collect();
     let with_trace = CompletedLap { trace: Some(LapTrace(points)), ..lap(96_000, true) };
     let id = tt.record_lap(&with_trace).unwrap().lap.id;
@@ -1223,7 +1223,7 @@ fn a_database_from_before_the_garage_gains_looks_and_keeps_its_drivers() {
     // Pretend it was saved before schema 10: no look column, no items table.
     {
         let conn = rusqlite::Connection::open(&path).unwrap();
-        conn.execute_batch("ALTER TABLE drivers DROP COLUMN look; DROP TABLE driver_items; ALTER TABLE challenges DROP COLUMN reward_size; PRAGMA user_version = 9;").unwrap();
+        conn.execute_batch("ALTER TABLE drivers DROP COLUMN look; DROP TABLE driver_items; ALTER TABLE challenges DROP COLUMN reward_size; ALTER TABLE laps DROP COLUMN slides; PRAGMA user_version = 9;").unwrap();
     }
     let tt = BinIt::open(&path).unwrap();
     let sam = tt.drivers().unwrap().remove(0);
@@ -1305,7 +1305,7 @@ fn a_finished_challenge_pays_once_and_old_ones_are_left_alone() {
     // A contest that ended before rewards existed: marked, never paid.
     let old = tt.create_challenge(&new("Old", now - 9000, now - 8000)).unwrap();
     for (i, id) in ids.iter().enumerate() {
-        tt.record_lap_for(&lap(100_000 + i as u32 * 1000, true), now - 8500, Some(Some(*id))).unwrap();
+        tt.record_lap_for(&lap(100_000 + i as u32 * 1000, true), now - 8500, Some(Some(*id)), None).unwrap();
     }
     assert_eq!(tt.settle_challenges().unwrap(), 0, "the first run only marks what had already ended");
     assert_eq!(tt.profile(ids[0]).unwrap().recent.iter().filter(|e| e.kind.starts_with("challenge:")).count(), 0);
@@ -1314,7 +1314,7 @@ fn a_finished_challenge_pays_once_and_old_ones_are_left_alone() {
     // One that ends later is paid, once.
     tt.create_challenge(&new("Hot Lap", now - 5000, now - 1000)).unwrap();
     for (i, id) in ids.iter().enumerate() {
-        tt.record_lap_for(&lap(100_000 + i as u32 * 1000, true), now - 3000, Some(Some(*id))).unwrap();
+        tt.record_lap_for(&lap(100_000 + i as u32 * 1000, true), now - 3000, Some(Some(*id)), None).unwrap();
     }
     let before: Vec<i64> = ids.iter().map(|id| tt.profile(*id).unwrap().coins).collect();
     assert_eq!(tt.settle_challenges().unwrap(), 3);
@@ -1338,4 +1338,132 @@ fn a_challenge_remembers_its_reward_size_and_refuses_a_made_up_one() {
     assert_eq!(tt.create_challenge(&new(None)).unwrap().reward_size, "medium");
     assert_eq!(tt.create_challenge(&new(Some("high"))).unwrap().reward_size, "high");
     assert!(tt.create_challenge(&new(Some("enormous"))).is_err());
+}
+
+#[test]
+fn a_reset_is_counted_but_a_pause_and_crossing_the_line_are_not() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
+    let live = |phase: tt_games::GamePhase, p: f32, t: u32| {
+        GameEvent::Live(tt_games::LiveState { driving: phase == tt_games::GamePhase::Driving, phase, current_lap_ms: t, lap_valid: true, out_lap: false, lap_progress: p, position: None, inputs: None })
+    };
+    let resets = |tt: &BinIt| tt.status().unwrap().live.expect("live").resets;
+    use tt_games::GamePhase::{Driving, Paused};
+    tt.handle_game_event(live(Driving, 0.60, 90_000)).unwrap();
+    // Paused with the clock where it was: nothing happened.
+    tt.handle_game_event(live(Paused, 0.60, 90_000)).unwrap();
+    tt.handle_game_event(live(Driving, 0.61, 91_000)).unwrap();
+    assert_eq!(resets(&tt), 0);
+    // Crossing the line: progress wraps and the clock restarts, which is a new lap.
+    tt.handle_game_event(live(Driving, 0.99, 150_000)).unwrap();
+    tt.handle_game_event(live(Driving, 0.01, 800)).unwrap();
+    assert_eq!(resets(&tt), 0);
+    // A reset to the pits mid-lap: progress and the clock jump back.
+    tt.handle_game_event(live(Driving, 0.65, 116_000)).unwrap();
+    tt.handle_game_event(live(Paused, 0.10, 16_000)).unwrap();
+    assert_eq!(resets(&tt), 1);
+}
+
+#[test]
+fn a_car_sliding_sideways_shows_as_a_drift_and_a_spin_in_the_live_state() {
+    use tt_games::dynamics::Dynamics;
+    use tt_games::GamePhase::Driving;
+    let tt = BinIt::in_memory().unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
+    let slipping = |deg: f32, progress: f32| {
+        let inputs = tt_games::Inputs { speed_kmh: 90.0, dynamics: Some(Dynamics { slip_deg: deg, ..Dynamics::default() }), ..Default::default() };
+        GameEvent::Live(tt_games::LiveState { driving: true, phase: Driving, current_lap_ms: 30_000, lap_valid: true, out_lap: false, lap_progress: progress, position: None, inputs: Some(inputs) })
+    };
+    let live = |tt: &BinIt| tt.status().unwrap().live.expect("live");
+    tt.handle_game_event(slipping(2.0, 0.30)).unwrap();
+    assert_eq!(live(&tt).slide, "none");
+    tt.handle_game_event(slipping(24.0, 0.31)).unwrap();
+    assert_eq!(live(&tt).slide, "drift");
+    assert_eq!(live(&tt).slide_stats.drifts, 1);
+    assert_eq!(live(&tt).slide_stats.peak_slip_deg, 24.0);
+    tt.handle_game_event(slipping(110.0, 0.32)).unwrap();
+    assert_eq!(live(&tt).slide, "spin");
+    assert_eq!(live(&tt).slide_stats.spins, 1);
+    // Crossing the line starts the lap's totals again.
+    tt.handle_game_event(slipping(2.0, 0.99)).unwrap();
+    tt.handle_game_event(slipping(2.0, 0.01)).unwrap();
+    assert_eq!(live(&tt).slide_stats.spins, 0);
+}
+
+#[test]
+fn a_lap_keeps_what_its_driver_drifted_and_spun_and_a_clean_lap_keeps_nothing() {
+    use tt_games::dynamics::Dynamics;
+    use tt_games::GamePhase::Driving;
+    let tt = BinIt::in_memory().unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    let at = |progress: f32, slip: f32| {
+        let inputs = tt_games::Inputs { speed_kmh: 90.0, dynamics: Some(Dynamics { slip_deg: slip, ..Dynamics::default() }), ..Default::default() };
+        GameEvent::Live(tt_games::LiveState { driving: true, phase: Driving, current_lap_ms: 30_000, lap_valid: true, out_lap: false, lap_progress: progress, position: None, inputs: Some(inputs) })
+    };
+    // Lap one: a drift, then a spin, then across the line and the game publishes the lap.
+    tt.handle_game_event(at(0.30, 2.0)).unwrap();
+    tt.handle_game_event(at(0.40, 25.0)).unwrap();
+    tt.handle_game_event(at(0.50, 120.0)).unwrap();
+    tt.handle_game_event(at(0.99, 2.0)).unwrap();
+    tt.handle_game_event(at(0.01, 2.0)).unwrap();
+    tt.handle_game_event(GameEvent::LapCompleted(lap(96_000, true))).unwrap();
+    let first = tt.recent_laps(1).unwrap().remove(0);
+    let slides = tt.lap_slides(first.id).unwrap().expect("the lap had a drift and a spin");
+    assert_eq!((slides.drifts, slides.spins), (1, 1));
+    assert_eq!(slides.peak_slip_deg, 25.0);
+
+    // Lap two: clean. Nothing from lap one carries over, and nothing is stored.
+    tt.handle_game_event(at(0.30, 1.0)).unwrap();
+    tt.handle_game_event(at(0.99, 1.0)).unwrap();
+    tt.handle_game_event(at(0.01, 1.0)).unwrap();
+    tt.handle_game_event(GameEvent::LapCompleted(lap(97_000, true))).unwrap();
+    let second = tt.recent_laps(1).unwrap().remove(0);
+    assert_ne!(first.id, second.id);
+    assert_eq!(tt.lap_slides(second.id).unwrap(), None);
+}
+
+#[test]
+fn a_trace_with_the_cars_position_and_heading_comes_back_out_of_the_database() {
+    use tt_games::timing::{LapTrace, TracePoint};
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    let points = (0..120)
+        .map(|i| TracePoint {
+            progress: i as f32 / 120.0,
+            elapsed_ms: i * 800,
+            speed_kmh: 150.0,
+            throttle: 1.0,
+            gear: 4,
+            position: Some([i as f32 * 5.0, -(i as f32) * 2.0]),
+            heading_deg: Some(i as f32),
+            slip_deg: Some(-3.5),
+            ..Default::default()
+        })
+        .collect();
+    let id = tt.record_lap(&CompletedLap { trace: Some(LapTrace(points)), ..lap(96_000, true) }).unwrap().lap.id;
+    let back = tt.lap_trace(id).unwrap().expect("a trace");
+    assert_eq!(back.0.len(), 120);
+    assert_eq!(back.0[10].position, Some([50.0, -20.0]));
+    assert_eq!(back.0[10].slip_deg, Some(-3.5));
+}
+
+#[test]
+fn a_database_from_before_slides_gains_the_column_and_keeps_its_laps() {
+    let dir = std::env::temp_dir().join(format!("binit-slides-{}", now_ms()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("old.db");
+    let id = {
+        let tt = BinIt::open(&path).unwrap();
+        tt.add_and_seat("Sam", None).unwrap();
+        tt.record_lap(&lap(96_000, true)).unwrap().lap.id
+    };
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("ALTER TABLE laps DROP COLUMN slides; PRAGMA user_version = 11;").unwrap();
+    }
+    let tt = BinIt::open(&path).unwrap();
+    assert_eq!(tt.recent_laps(5).unwrap().len(), 1);
+    assert_eq!(tt.lap_slides(id).unwrap(), None);
+    let _ = std::fs::remove_dir_all(dir);
 }

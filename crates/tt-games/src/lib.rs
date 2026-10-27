@@ -11,6 +11,7 @@ pub mod acpmf;
 pub mod acr;
 pub mod catalogue;
 pub mod dr2;
+pub mod dynamics;
 pub mod stage;
 pub mod timing;
 mod process;
@@ -149,6 +150,27 @@ impl UntimedReason {
     }
 }
 
+/// What the driver has the car's aids and brake balance set to, and how far each can go, for games that publish them
+/// (AC EVO so far). Levels are what the car's menus show; the `_max` of each is the car's own limit. Only settings that
+/// have been seen to follow the menus in the running game are here.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Aids {
+    pub tc_level: u8,
+    pub tc_max: u8,
+    pub abs_level: u8,
+    pub abs_max: u8,
+    /// The front share of the braking (0..1), and the range it can be set across.
+    pub brake_bias: f32,
+    pub bias_min: f32,
+    pub bias_max: f32,
+    pub diff_power_level: u8,
+    pub diff_power_max: u8,
+    pub diff_coast_level: u8,
+    pub diff_coast_max: u8,
+    /// The pit-speed limiter is on.
+    pub pit_limiter: bool,
+}
+
 /// What the driver is doing with the car right now. Pedals and steering are as the game reports
 /// them (normalised in the adapter), gear 0 is neutral and negative is reverse.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -163,6 +185,12 @@ pub struct Inputs {
     pub gear: i16,
     pub speed_kmh: f32,
     pub rpm: u16,
+    /// Heading, slip, yaw rate and turbo, for games whose physics page has been checked (AC EVO so far).
+    pub dynamics: Option<dynamics::Dynamics>,
+    /// Where the car is in the world, metres (x, z), when the game says.
+    pub position: Option<[f32; 2]>,
+    /// The driver aids and brake balance, when the game says (AC EVO so far).
+    pub aids: Option<Aids>,
 }
 
 /// What the game is doing, as far as the player can tell.

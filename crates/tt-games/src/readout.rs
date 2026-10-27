@@ -7,7 +7,7 @@
 use serde_json::{Value, json};
 
 use crate::{acpmf, acevo};
-use crate::acevo::layout::{Graphics, Static};
+use crate::acevo::layout::{Electronics, Graphics, Static, TyreState};
 use crate::shm::SharedMemory;
 
 /// A field Bin It knows: where it sits, how big it is and what its elements are.
@@ -39,16 +39,59 @@ macro_rules! fields {
     }};
 }
 
+/// The four electronics blocks, named block by block: current, then each setting's min, max and step.
+fn evo_electronics_fields() -> Vec<Field> {
+    let base = std::mem::offset_of!(Graphics, electronics);
+    let block = fields!(Electronics;
+        tc_level: i8, tc_cut_level: i8, abs_level: i8, esc_level: i8, ebb_level: i8, brake_bias: f32,
+        engine_map_level: i8, turbo_level: f32, ers_deployment_map: i8, ers_recharge_map: f32,
+        is_ers_heat_charging_on: u8, is_ers_overtake_mode_on: u8, is_drs_open: u8, diff_power_level: i8,
+        diff_coast_level: i8, front_bump_damper_level: i8, front_rebound_damper_level: i8,
+        rear_bump_damper_level: i8, rear_rebound_damper_level: i8, is_ignition_on: u8, is_pitlimiter_on: u8,
+        active_performance_mode: i8,
+    );
+    let mut out = Vec::new();
+    for (i, which) in ["now", "min", "max", "step"].iter().enumerate() {
+        for f in &block {
+            out.push(field(&format!("electronics.{which}.{}", f.name), base + i * size_of::<Electronics>() + f.offset, f.size, f.kind));
+        }
+    }
+    out
+}
+
+/// The four tyres (left front, right front, left rear, right rear), by name.
+fn evo_tyre_fields() -> Vec<Field> {
+    let base = std::mem::offset_of!(Graphics, tyres);
+    let tyre = fields!(TyreState;
+        unknown_0: f32, unknown_4: f32, pressure_psi: f32, core_temp_c: f32, brake_temp_c: f32, unknown_20: f32,
+        tread_temp_c: f32, compound: text, compound_alt: text, unknown_104: f32, wear_like: f32,
+    );
+    let mut out = Vec::new();
+    for (i, which) in ["lf", "rf", "lr", "rr"].iter().enumerate() {
+        for f in &tyre {
+            out.push(field(&format!("tyre.{which}.{}", f.name), base + i * size_of::<TyreState>() + f.offset, f.size, f.kind));
+        }
+    }
+    out
+}
+
 fn evo_graphics_fields() -> Vec<Field> {
+    let mut all = evo_graphics_plain_fields();
+    all.extend(evo_electronics_fields());
+    all.extend(evo_tyre_fields());
+    all
+}
+
+fn evo_graphics_plain_fields() -> Vec<Field> {
     fields!(Graphics;
         packet_id: i32, status: i32, focused_car_id: u64, player_car_id: u64, rpm: u16, engine_flags: u8,
         display_speed_kmh: i16, display_speed_mph: i16, display_speed_ms: i16, pitspeeding_delta: f32,
         gear_int: i16, inputs: f32, water_temperature_c: i8, air_temperature_c: i8, engine: f32,
         steer_degrees: i32, current_km: f32, total_km: u32, total_driving_time_s: u32, time_of_day: i32,
         delta_time_ms: i32, current_lap_time_ms: i32, predicted_lap_time_ms: i32, fuel: f32,
-        current_torque: f32, current_bhp: i32, tyres: u32, npos: f32, kers_charge_perc: f32,
+        current_torque: f32, current_bhp: i32, npos: f32, kers_charge_perc: f32,
         kers_current_perc: f32, control_lock_time: f32, car_damage: u32, car_location: i32, pit_info: u32,
-        fuel_and_battery: f32, instrumentation: u32, electronics: u32, total_lap_count: i32, current_pos: u32,
+        fuel_and_battery: f32, instrumentation: u32, total_lap_count: i32, current_pos: u32,
         total_drivers: u32, last_laptime_ms: i32, best_laptime_ms: i32, flag: i32, global_flag: i32,
         max_gears: u32, engine_type: i32, has_kers: u8, is_last_lap: u8, performance_mode_name: text,
         diff_coast_raw_value: f32, diff_power_raw_value: f32, race_cut_gained_time_ms: i32,
@@ -173,6 +216,8 @@ fn page(label: &str, shm_name: &str, known: Vec<Field>) -> Value {
 pub fn read_pages(game: &str) -> Option<Vec<Value>> {
     Some(match game {
         "acevo" => vec![
+            // Nothing named yet: the point is to find heading, velocity and slip in it.
+            page("physics", acevo::PHYSICS_PAGE, Vec::new()),
             page("graphics", acevo::GRAPHICS_PAGE, evo_graphics_fields()),
             page("static", acevo::STATIC_PAGE, evo_static_fields()),
         ],

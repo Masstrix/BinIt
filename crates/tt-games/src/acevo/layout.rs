@@ -63,6 +63,68 @@ pub struct TimingState {
     pub place_holder: [u8; 137],
 }
 
+/// `SMEvoElectronics`: the driver-adjustable aids and setup. The graphics page holds four of them. Checked
+/// against the live game (2026-10-27): the first is what the car is set to now; the others hold each setting's
+/// minimum, maximum and step (brake bias reads 0.60 / 0.48 / 0.75 / 1.0, TC and ABS 2, 1 / 0, 0 / 12, 11 / 1, 1).
+/// Field order and types are from the shared-memory guide (https://steamcommunity.com/sharedfiles/filedetails/?id=3707421508);
+/// `packed(4)` puts the floats on 4-byte boundaries. Offsets up to `is_ignition_on` were confirmed in game.
+#[repr(C, packed(4))]
+#[derive(Clone, Copy)]
+pub struct Electronics {
+    pub tc_level: i8,
+    pub tc_cut_level: i8,
+    pub abs_level: i8,
+    pub esc_level: i8,
+    pub ebb_level: i8,
+    /// Front share of the braking, 0..1.
+    pub brake_bias: f32,
+    pub engine_map_level: i8,
+    pub turbo_level: f32,
+    pub ers_deployment_map: i8,
+    pub ers_recharge_map: f32,
+    pub is_ers_heat_charging_on: u8,
+    pub is_ers_overtake_mode_on: u8,
+    pub is_drs_open: u8,
+    pub diff_power_level: i8,
+    pub diff_coast_level: i8,
+    pub front_bump_damper_level: i8,
+    pub front_rebound_damper_level: i8,
+    pub rear_bump_damper_level: i8,
+    pub rear_rebound_damper_level: i8,
+    pub is_ignition_on: u8,
+    pub is_pitlimiter_on: u8,
+    pub active_performance_mode: i8,
+    pub place_holder: [u8; 88],
+}
+
+/// `SMEvoTyreState`: one tyre, 256 bytes; the graphics page holds four, in the order left front, right front,
+/// left rear, right rear. Named from watching the live game (2026-10-27) rather than from a table. Confirmed
+/// against the game's own tyre overlay: the order, `pressure_psi` (24.4 / 24.2 / 24.9 / 24.7) and `core_temp_c`
+/// (the 43 / 42 / 54 / 52 degrees it shows). `brake_temp_c`, `tread_temp_c` and `compound` follow from how they
+/// behaved. The words not named were seen changing or constant but not identified (`unknown_*`, and
+/// `wear_like`, which only moved on the rear tyres).
+#[repr(C, packed(4))]
+#[derive(Clone, Copy)]
+pub struct TyreState {
+    pub unknown_0: f32,
+    pub unknown_4: f32,
+    /// psi (about 24-25 when cool).
+    pub pressure_psi: f32,
+    /// The tyre temperature the game's overlay shows, in degrees C.
+    pub core_temp_c: f32,
+    /// Cooled faster than the core and sat near 100 C: probably the brake disc, in degrees C.
+    pub brake_temp_c: f32,
+    pub unknown_20: f32,
+    /// Three temperatures across the tread (inner, middle, outer by the guide's usual order), degrees C.
+    pub tread_temp_c: [f32; 3],
+    /// The compound, such as "Slick (S)".
+    pub compound: [u8; 33],
+    pub compound_alt: [u8; 33],
+    pub unknown_104: f32,
+    pub wear_like: [f32; 5],
+    pub place_holder: [u8; 128],
+}
+
 /// `SPageFileGraphicEvo`: HUD-level data, updated every rendered frame.
 #[repr(C, packed(4))]
 #[derive(Clone, Copy)]
@@ -175,6 +237,31 @@ pub struct Static {
 const _: () = assert!(size_of::<SessionState>() == 256);
 const _: () = assert!(size_of::<TimingState>() == 256);
 const _: () = assert!(size_of::<Static>() == 208);
+const _: () = assert!(size_of::<Electronics>() == 128);
+const _: () = assert!(size_of::<TyreState>() == 256);
+
+impl Graphics {
+    /// What the car's electronics are set to now (the first of the four blocks on the page).
+    pub fn electronics_now(&self) -> Electronics {
+        let blocks = self.electronics;
+        // SAFETY: both are 128 bytes of plain integers, and every bit pattern is valid for `Electronics`.
+        unsafe { std::mem::transmute::<[u32; 32], Electronics>(blocks[0]) }
+    }
+
+    /// All four electronics blocks: what the car is set to now, then each setting's minimum, maximum and step.
+    pub fn electronics_blocks(&self) -> [Electronics; 4] {
+        let blocks = self.electronics;
+        // SAFETY: each block is 128 bytes of plain integers and floats, and every bit pattern is valid for `Electronics`.
+        unsafe { std::mem::transmute::<[[u32; 32]; 4], [Electronics; 4]>(blocks) }
+    }
+
+    /// The four tyres: left front, right front, left rear, right rear.
+    pub fn tyres_now(&self) -> [TyreState; 4] {
+        let tyres = self.tyres;
+        // SAFETY: both are 1024 bytes of plain numbers, and every bit pattern is valid for `TyreState`.
+        unsafe { std::mem::transmute::<[[u32; 64]; 4], [TyreState; 4]>(tyres) }
+    }
+}
 
 /// Decodes a fixed-size, NUL-terminated C string field.
 pub fn c_str(bytes: &[u8]) -> String {

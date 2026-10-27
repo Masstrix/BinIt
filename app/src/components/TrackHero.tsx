@@ -40,7 +40,7 @@ export function TrackHero({
   /** Every sector's fastest time on this board added together, when there is one. */
   idealMs?: number | null;
   /** Someone driving this very track right now: shown as a dot on the map. */
-  live?: { name: string; position: [number, number] } | null;
+  live?: { name: string; position: [number, number]; heading?: number | null } | null;
   children?: ReactNode;
 }) {
   const w = words(game);
@@ -88,6 +88,7 @@ export function TrackHero({
               closed={map.closed}
               stroke={6}
               position={live?.position ?? null}
+              heading={live?.heading}
               sectors={sectorCount ? { boundaries: boundaries!, colors } : undefined}
               label={`${prettify(track)} map`}
             />

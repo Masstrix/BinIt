@@ -63,13 +63,20 @@ function liveView(): LiveView {
   const map = MAPS[0].points;
   const pt = map[Math.min(map.length - 1, Math.floor(p * map.length))];
   const corner = Math.sin(p * Math.PI * 2 * 9);
+  // Pointing along the track, plus a slide that comes and goes: what the arrows and the slip card show.
+  const ahead = map[Math.min(map.length - 1, Math.floor(p * map.length) + 3)];
+  const travelDeg = (Math.atan2(-(ahead[0] - pt[0]), ahead[1] - pt[1]) * 180) / Math.PI;
+  const slipDeg = 16 * Math.sin(p * Math.PI * 2 * 7);
+  const wrap = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180;
   const sector = p < 0.31 ? 0 : p < 0.7 ? 1 : 2;
   return {
-    driving: true, phase: "driving", currentLapMs: ms, lapValid: true, outLap: false, voidReason: null, lapProgress: p,
+    driving: true, phase: "driving", onTrack: true, resets: 0, slide: Math.abs(slipDeg) >= 12 ? "drift" : Math.abs(slipDeg) >= 4 ? "slide" : "none", slideStats: { drifts: 0, spins: 0, driftMs: 0, longestMs: 0, peakSlipDeg: 0 }, currentLapMs: ms, lapValid: true, outLap: false, voidReason: null, lapProgress: p,
     position: [pt[0], pt[1]],
     inputs: {
       throttle: corner > -0.4 ? 1 : 0.2, brake: corner < -0.6 ? 0.8 : 0, clutch: 0, handbrake: 0, steering: Math.sin(p * Math.PI * 2 * 9 + 1) * 0.5,
       gear: 3 + Math.round(Math.abs(corner) * 3), speedKmh: Math.round(150 + 90 * corner), rpm: Math.round(6500 + 1500 * corner),
+      dynamics: { headingDeg: wrap(travelDeg + slipDeg), slipDeg, yawRateDps: slipDeg * 3, pitchDeg: 0, rollDeg: 0, gX: 0, gZ: 0, turboBoost: Math.round(Math.max(0, 0.6 + 0.6 * corner) * 100) / 100 },
+      aids: { tcLevel: 3, tcMax: 12, absLevel: 3, absMax: 11, brakeBias: 0.6, biasMin: 0.48, biasMax: 0.75, diffPowerLevel: 2, diffPowerMax: 8, diffCoastLevel: 5, diffCoastMax: 8, pitLimiter: false },
     },
     timing: {
       // The other drivers' best laps at this point: a little quicker or slower than this lap, trading places.
@@ -188,9 +195,14 @@ function trace(lapId: number) {
     const p = i * 0.0025;
     const s = speedAt(p, lapId);
     const slope = speedAt(p + 0.002, lapId) - s;
-    return [p, elapsed, Math.round(s), slope >= -2 ? 1 : 0.15, slope < -6 ? Math.min(1, -slope / 30) : 0, 0, Math.sin(p * Math.PI * 2 * 9 + 1) * 0.5, Math.max(1, Math.min(6, Math.round(s / 45)))];
+    return [
+      p, elapsed, Math.round(s), slope >= -2 ? 1 : 0.15, slope < -6 ? Math.min(1, -slope / 30) : 0, 0, Math.sin(p * Math.PI * 2 * 9 + 1) * 0.5, Math.max(1, Math.min(6, Math.round(s / 45))),
+      null, null, null, null,
+      // TC and brake bias are changed part-way round, so the readouts show a setting changing.
+      p < 0.5 ? 2 : 3, 3, p > 0.7 ? 0.62 : 0.6, 2, 5, false, Math.round(Math.max(0, s - 80) / 120 * 130) / 100,
+    ];
   });
-  return { lapId, points };
+  return { lapId, points, slides: null, aidsMax: { tcMax: 12, absMax: 11, diffPowerMax: 8, diffCoastMax: 8, biasMin: 0.48, biasMax: 0.75 } };
 }
 
 function replay(id: number): ReplayEntry[] {

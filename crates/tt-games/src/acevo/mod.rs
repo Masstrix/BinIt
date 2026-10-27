@@ -1,8 +1,9 @@
 //! Assetto Corsa EVO adapter.
 //!
 //! Reads the game's official shared memory (`Local\acevo_pmf_*`). Only the `graphics`
-//! (per-frame HUD data) and `static` (per-session) pages are used; the 333 Hz physics
-//! page is never opened. Polling at 20 Hz copies ~8 KB per tick: microseconds of work.
+//! (per-frame HUD data) and `static` (per-session) pages are used, plus the first few hundred bytes of the
+//! 333 Hz physics page for the car's heading, slip and turbo. Polling at 20 Hz copies ~9 KB per tick:
+//! microseconds of work.
 
 pub mod documents;
 pub mod layout;
@@ -19,6 +20,8 @@ pub const CATALOGUE_JSON: &str = include_str!("catalogue.json");
 pub const PROCESS_NAME: &str = "AssettoCorsaEVO.exe";
 pub const GRAPHICS_PAGE: &str = "Local\\acevo_pmf_graphics";
 pub const STATIC_PAGE: &str = "Local\\acevo_pmf_static";
+/// The 333 Hz physics page. The adapter never opens it; the dev Memory page does, to look for heading and slip.
+pub const PHYSICS_PAGE: &str = "Local\\acevo_pmf_physics";
 
 const CONNECTED_POLL: Duration = Duration::from_millis(50);
 const DISCONNECTED_POLL: Duration = Duration::from_secs(2);
@@ -78,10 +81,43 @@ pub fn inputs(g: &Graphics) -> crate::Inputs {
         gear,
         speed_kmh: speed as f32,
         rpm,
+        dynamics: None,
+        position: player_position(g),
+        aids: Some(aids(g)),
+    }
+}
+
+/// The driver aids and brake balance as they are set now, with the range of each: the electronics page's first block is
+/// the current setting, the second the minimum and the third the maximum. Only what has been seen to follow the car's
+/// menus is read (TC, ABS, brake bias, the two diff settings and the pit limiter).
+pub fn aids(g: &Graphics) -> crate::Aids {
+    let blocks = g.electronics_blocks();
+    let (now, min, max) = (blocks[0], blocks[1], blocks[2]);
+    let level = |v: i8| v.max(0) as u8;
+    // A page with nothing in it yet can hold anything: only a sensible share of the braking is taken.
+    let share = |v: f32| if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 };
+    crate::Aids {
+        tc_level: level(now.tc_level),
+        tc_max: level(max.tc_level),
+        abs_level: level(now.abs_level),
+        abs_max: level(max.abs_level),
+        brake_bias: share(now.brake_bias),
+        bias_min: share(min.brake_bias),
+        bias_max: share(max.brake_bias),
+        diff_power_level: level(now.diff_power_level),
+        diff_power_max: level(max.diff_power_level),
+        diff_coast_level: level(now.diff_coast_level),
+        diff_coast_max: level(max.diff_coast_level),
+        pit_limiter: now.is_pitlimiter_on != 0,
     }
 }
 
 pub fn sample(g: &Graphics) -> Sample {
+    sample_with(g, None)
+}
+
+/// A sample whose inputs also carry how the car is moving (heading, slip), so the lap's trace records them.
+pub fn sample_with(g: &Graphics, dynamics: Option<crate::dynamics::Dynamics>) -> Sample {
     Sample {
         status: g.status,
         lap_count: g.total_lap_count,
@@ -90,8 +126,8 @@ pub fn sample(g: &Graphics) -> Sample {
         lap_valid: g.is_valid_lap != 0 && g.timing_state.is_invalid == 0,
         in_pit_lane: g.is_in_pit_lane != 0 || g.is_in_pit_box != 0,
         progress: g.npos,
-            inputs: Some(inputs(g)),
-}
+        inputs: Some(crate::Inputs { dynamics, ..inputs(g) }),
+    }
 }
 
 #[cfg(windows)]
@@ -102,13 +138,16 @@ mod connection {
     use anyhow::{Result, bail};
 
     use super::layout::{Graphics, Static, c_str};
-    use super::{GRAPHICS_PAGE, STATIC_PAGE};
+    use super::{GRAPHICS_PAGE, PHYSICS_PAGE, STATIC_PAGE};
+    use crate::acpmf::{self, Physics};
     use crate::shm::SharedMemory;
 
-    /// Open handles to the two pages we read.
+    /// Open handles to the pages we read. The physics page is optional: without it everything but heading and
+    /// slip still works.
     pub struct Connection {
         graphics: SharedMemory,
         statics: SharedMemory,
+        physics: Option<SharedMemory>,
     }
 
     impl Connection {
@@ -132,7 +171,8 @@ mod connection {
                     size_of::<Graphics>()
                 );
             }
-            Ok(Self { graphics, statics })
+            let physics = SharedMemory::open(PHYSICS_PAGE).ok().filter(|p| p.region_size() >= acpmf::physics::NEEDED);
+            Ok(Self { graphics, statics, physics })
         }
 
         /// Reads the graphics page, retrying if the game was mid-write.
@@ -146,6 +186,11 @@ mod connection {
                 g = self.graphics.read().expect("size checked on open");
             }
             g
+        }
+
+        /// The car's motion from the physics page, when the game publishes one.
+        pub fn read_physics(&self) -> Option<Physics> {
+            self.physics.as_ref().map(|p| Physics::parse(&p.bytes(acpmf::physics::NEEDED)))
         }
 
         pub fn read_static(&self) -> Static {
@@ -260,7 +305,9 @@ impl GameAdapter for AcEvoAdapter {
             }
         }
 
-        if let Some(lap) = self.tracker.update(sample(&g))
+        // One reading of the physics page serves both the lap's trace and the live display.
+        let dynamics = conn.read_physics().map(|p| crate::dynamics::Dynamics::from_physics(&p));
+        if let Some(lap) = self.tracker.update(sample_with(&g, dynamics))
             && let Some(session) = self.session.clone()
         {
             events.push(GameEvent::LapCompleted(CompletedLap {
@@ -291,11 +338,36 @@ impl GameAdapter for AcEvoAdapter {
                 out_lap: self.tracker.on_out_lap(),
                 lap_progress: g.npos.clamp(0.0, 1.0),
                 position: player_position(&g),
-                inputs: Some(inputs(&g)),
+                inputs: Some(crate::Inputs { dynamics, ..inputs(&g) }),
             }));
         }
 
         events
+    }
+}
+
+#[cfg(test)]
+mod sample_tests {
+    use super::*;
+    use crate::dynamics::Dynamics;
+
+    fn blank() -> Graphics {
+        // SAFETY: `Graphics` is plain numbers; all zeros is a valid (empty) page.
+        unsafe { std::mem::zeroed() }
+    }
+
+    #[test]
+    fn the_sample_a_lap_is_recorded_from_carries_heading_and_slip() {
+        let d = Dynamics { heading_deg: 45.0, slip_deg: -12.5, ..Dynamics::default() };
+        let i = sample_with(&blank(), Some(d)).inputs.expect("inputs");
+        assert_eq!(i.dynamics, Some(d));
+        assert_eq!(sample(&blank()).inputs.expect("inputs").dynamics, None, "no physics page, no dynamics");
+    }
+
+    #[test]
+    fn an_empty_page_has_every_aid_at_zero_and_the_sample_carries_them() {
+        assert_eq!(aids(&blank()), crate::Aids::default());
+        assert_eq!(sample(&blank()).inputs.expect("inputs").aids, Some(crate::Aids::default()));
     }
 }
 

@@ -15,7 +15,7 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, bail};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tt_games::timing::even_boundaries;
 use tt_games::{CompletedLap, GameEvent, GameId, LiveState, SessionInfo, TimingKind, UntimedReason};
@@ -85,11 +85,96 @@ pub struct LiveInputs {
     pub gear: i16,
     pub speed_kmh: f32,
     pub rpm: u16,
+    /// Heading, slip and turbo, when the game's physics page is read.
+    pub dynamics: Option<LiveDynamics>,
+    /// The driver aids and brake balance, when the game gives them.
+    pub aids: Option<LiveAids>,
+}
+
+/// What the aids and brake balance are set to, and how far each goes (see `tt_games::Aids`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveAids {
+    pub tc_level: u8,
+    pub tc_max: u8,
+    pub abs_level: u8,
+    pub abs_max: u8,
+    pub brake_bias: f32,
+    pub bias_min: f32,
+    pub bias_max: f32,
+    pub diff_power_level: u8,
+    pub diff_power_max: u8,
+    pub diff_coast_level: u8,
+    pub diff_coast_max: u8,
+    pub pit_limiter: bool,
+}
+
+impl From<tt_games::Aids> for LiveAids {
+    fn from(a: tt_games::Aids) -> Self {
+        Self {
+            tc_level: a.tc_level,
+            tc_max: a.tc_max,
+            abs_level: a.abs_level,
+            abs_max: a.abs_max,
+            brake_bias: a.brake_bias,
+            bias_min: a.bias_min,
+            bias_max: a.bias_max,
+            diff_power_level: a.diff_power_level,
+            diff_power_max: a.diff_power_max,
+            diff_coast_level: a.diff_coast_level,
+            diff_coast_max: a.diff_coast_max,
+            pit_limiter: a.pit_limiter,
+        }
+    }
+}
+
+/// Drifts and spins over a lap (so far, or kept with the lap once it ends).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveSlideStats {
+    pub drifts: u32,
+    pub spins: u32,
+    pub drift_ms: u64,
+    pub longest_ms: u64,
+    pub peak_slip_deg: f32,
+}
+
+impl LiveSlideStats {
+    /// Whether there is anything to keep: a lap with no drifting or spinning stores nothing.
+    pub fn any(&self) -> bool {
+        self.drifts > 0 || self.spins > 0
+    }
+}
+
+impl From<tt_games::dynamics::SlideStats> for LiveSlideStats {
+    fn from(s: tt_games::dynamics::SlideStats) -> Self {
+        Self { drifts: s.drifts, spins: s.spins, drift_ms: s.drift_ms, longest_ms: s.longest_ms, peak_slip_deg: s.peak_slip_deg }
+    }
+}
+
+/// How the car is moving compared with where it points (see `tt_games::dynamics`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveDynamics {
+    pub heading_deg: f32,
+    pub slip_deg: f32,
+    pub yaw_rate_dps: f32,
+    pub pitch_deg: f32,
+    pub roll_deg: f32,
+    pub g_x: f32,
+    pub g_z: f32,
+    pub turbo_boost: f32,
+}
+
+impl From<tt_games::dynamics::Dynamics> for LiveDynamics {
+    fn from(d: tt_games::dynamics::Dynamics) -> Self {
+        Self { heading_deg: d.heading_deg, slip_deg: d.slip_deg, yaw_rate_dps: d.yaw_rate_dps, pitch_deg: d.pitch_deg, roll_deg: d.roll_deg, g_x: d.g_x, g_z: d.g_z, turbo_boost: d.turbo_boost }
+    }
 }
 
 impl From<tt_games::Inputs> for LiveInputs {
     fn from(i: tt_games::Inputs) -> Self {
-        Self { throttle: i.throttle, brake: i.brake, clutch: i.clutch, handbrake: i.handbrake, steering: i.steering, gear: i.gear, speed_kmh: i.speed_kmh, rpm: i.rpm }
+        Self { throttle: i.throttle, brake: i.brake, clutch: i.clutch, handbrake: i.handbrake, steering: i.steering, gear: i.gear, speed_kmh: i.speed_kmh, rpm: i.rpm, dynamics: i.dynamics.map(LiveDynamics::from), aids: i.aids.map(LiveAids::from) }
     }
 }
 
@@ -99,6 +184,15 @@ pub struct LiveView {
     pub driving: bool,
     /// "menu", "driving", "paused" or "replay".
     pub phase: &'static str,
+    /// In the car on track, driving or paused (a pause, or a reset, doesn't take the car off the screen). Display only:
+    /// timing, map learning and rewards still follow `driving`.
+    pub on_track: bool,
+    /// How many times the car has been reset (or the stage restarted) in this session.
+    pub resets: u32,
+    /// "none", "drift" or "spin": steady, not the flicker of single readings (see `tt_games::dynamics::SlideTracker`).
+    pub slide: &'static str,
+    /// What the driver has slid so far this lap.
+    pub slide_stats: LiveSlideStats,
     pub current_lap_ms: u32,
     pub lap_valid: bool,
     pub out_lap: bool,
@@ -151,6 +245,12 @@ struct Runtime {
     last_out_lap: bool,
     /// The stage clock at the previous live reading, to notice a restart.
     last_clock_ms: u32,
+    /// Resets seen since the session began.
+    resets: u32,
+    /// Drifts and spins, with this lap's totals.
+    slides: tt_games::dynamics::SlideTracker,
+    /// The totals of the lap that ended as the car crossed the line, until its result arrives.
+    wrap_slides: Option<LiveSlideStats>,
 }
 
 /// Where the catalogue looks for extra names. Set by the host app.
@@ -590,6 +690,11 @@ impl BinIt {
 
     // ---- laps ----------------------------------------------------------------
 
+    /// What a lap's driver drifted and spun, if they did.
+    pub fn lap_slides(&self, id: LapId) -> Result<Option<LiveSlideStats>> {
+        Ok(self.store().lap_slides(id)?.and_then(|json| serde_json::from_str(&json).ok()))
+    }
+
     /// The throttle / brake / steering / gear trace of a lap, if it was recorded.
     pub fn lap_trace(&self, id: LapId) -> Result<Option<tt_games::timing::LapTrace>> {
         self.store().lap_trace(id)
@@ -777,11 +882,11 @@ impl BinIt {
     }
 
     fn record_lap_at(&self, completed: &CompletedLap, now: Timestamp) -> Result<LapResult> {
-        self.record_lap_for(completed, now, None)
+        self.record_lap_for(completed, now, None, None)
     }
 
     /// `driver` names who drove it when that is known (`Some(None)` = a guest); otherwise it is whoever is in the seat.
-    fn record_lap_for(&self, completed: &CompletedLap, now: Timestamp, driver: Option<Option<DriverId>>) -> Result<LapResult> {
+    fn record_lap_for(&self, completed: &CompletedLap, now: Timestamp, driver: Option<Option<DriverId>>, slides: Option<LiveSlideStats>) -> Result<LapResult> {
         let combo = combo_of(&completed.session);
         let driver_id = match driver {
             Some(d) => d,
@@ -816,6 +921,9 @@ impl BinIt {
             recorded_at: now,
         };
         lap.id = store.insert_lap(&lap, completed.profile.as_ref(), completed.trace.as_ref())?;
+        if let Some(slides) = slides.filter(LiveSlideStats::any) {
+            store.set_lap_slides(lap.id, &serde_json::to_string(&slides)?)?;
+        }
 
         // Purple / green / yellow per sector, against every other valid lap on this combo.
         let sector_status = if lap.valid || completed.untimed == Some(UntimedReason::Cut) {
@@ -993,12 +1101,13 @@ impl BinIt {
                     rt.session_info = Some(info);
                     // The path so far belonged to the previous track.
                     rt.map.reset();
+                    rt.resets = 0;
                 }
                 self.refresh_timing()?;
                 self.emit(AppEvent::Session { session: Some(view) });
             }
             GameEvent::LapCompleted(mut lap) => {
-                let (changed, driver) = {
+                let (changed, driver, slides) = {
                     let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
                     // The lap's result can arrive a moment after the car crossed the line: by then a new
                     // lap has begun, and a swap made in that gap belongs to the new lap, not this one.
@@ -1009,14 +1118,15 @@ impl BinIt {
                         rt.wrap_waiting = false;
                         rt.void_pending = false;
                         rt.wrap_driver = None;
+                        rt.wrap_slides = None;
                     }
                     if std::mem::take(&mut rt.wrap_waiting) {
-                        (std::mem::take(&mut rt.void_pending), rt.wrap_driver.take())
+                        (std::mem::take(&mut rt.void_pending), rt.wrap_driver.take(), rt.wrap_slides.take())
                     } else {
                         // The result came first: the car is still just short of the line in the live readings,
                         // and the crossing they are about to show is this lap's, not a new one to wait on.
                         rt.wrap_skip = rt.last_progress > 0.9;
-                        (std::mem::take(&mut rt.lap_driver_changed), None)
+                        (std::mem::take(&mut rt.lap_driver_changed), None, Some(LiveSlideStats::from(rt.slides.stats())))
                     }
                 };
                 // Only a lap that would have counted (or been a failed attempt) needs voiding; out, in and
@@ -1029,7 +1139,7 @@ impl BinIt {
                 }
                 self.learn_map(&lap)?;
                 // The lap belongs to whoever was driving as it ended, even if the seat changed hands since.
-                self.record_lap_for(&lap, now_ms(), driver)?;
+                self.record_lap_for(&lap, now_ms(), driver, slides)?;
             }
             GameEvent::Live(LiveState { driving, phase, current_lap_ms, lap_valid, out_lap, lap_progress, position, inputs }) => {
                 let mut crossed = false;
@@ -1043,9 +1153,17 @@ impl BinIt {
                     None
                 };
                 let stage = rt.session_info.as_ref().is_some_and(|s| s.timing == TimingKind::RallyStage);
-                if stage && current_lap_ms + 1_000 < rt.last_clock_ms {
-                    // The stage was restarted: the path so far belongs to the abandoned run.
+                // The lap clock jumping back, other than by the car crossing the line, is a reset (or a stage
+                // restart): the path so far belongs to the abandoned run.
+                let crossing = !stage && rt.last_progress > 0.9 && lap_progress < 0.1;
+                if rt.session_info.is_some() && !crossing && current_lap_ms + 1_000 < rt.last_clock_ms {
                     rt.map.reset();
+                    rt.resets += 1;
+                    rt.slides = Default::default();
+                }
+                let lap_slides: LiveSlideStats = rt.slides.stats().into();
+                if crossing {
+                    rt.slides.reset_stats();
                 }
                 rt.last_clock_ms = current_lap_ms;
                 // On a stage the path starts when the clock does, not at the drive-up to the line.
@@ -1063,14 +1181,18 @@ impl BinIt {
                     } else {
                         rt.void_pending = std::mem::take(&mut rt.lap_driver_changed);
                         rt.wrap_waiting = true;
+                        rt.wrap_slides = Some(lap_slides);
                         crossed = true;
                     }
                 }
                 rt.last_progress = lap_progress;
                 rt.last_out_lap = out_lap;
+                // Sliding only counts while the car is being driven: a pause isn't a drift.
+                let sliding = inputs.and_then(|i| i.dynamics.map(|d| (d, i.speed_kmh))).filter(|_| driving);
+                let slide = rt.slides.update(sliding.as_ref().map(|(d, _)| d), sliding.map_or(0.0, |(_, speed)| speed), now_ms() as u64);
                 let changed = rt.lap_driver_changed && !out_lap;
                 let lap_valid = lap_valid && !changed;
-                let live = LiveView { driving, phase: phase.key(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
+                let live = LiveView { driving, phase: phase.key(), on_track: matches!(phase, tt_games::GamePhase::Driving | tt_games::GamePhase::Paused), resets: rt.resets, slide: slide.key(), slide_stats: rt.slides.stats().into(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
                 rt.live = Some(live.clone());
                 drop(rt);
                 if crossed {

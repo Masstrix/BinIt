@@ -235,6 +235,70 @@ export interface LiveInputs {
   gear: number;
   speedKmh: number;
   rpm: number;
+  /** Heading, slip and turbo; null when the game's physics isn't read (AC EVO only so far). */
+  dynamics: LiveDynamics | null;
+  /** The driver aids and brake balance as they are set now; null when the game doesn't give them (AC EVO only so far). */
+  aids: LiveAids | null;
+}
+
+/** What the aids and brake balance are set to, and how far each goes on this car. Levels are what the car's menus show. */
+export interface LiveAids {
+  tcLevel: number;
+  tcMax: number;
+  absLevel: number;
+  absMax: number;
+  /** The front share of the braking, 0..1, and the range it can be set across. */
+  brakeBias: number;
+  biasMin: number;
+  biasMax: number;
+  diffPowerLevel: number;
+  diffPowerMax: number;
+  diffCoastLevel: number;
+  diffCoastMax: number;
+  pitLimiter: boolean;
+}
+
+/** How the car moves compared with where it points. Slip is heading minus direction of travel, degrees. */
+export interface LiveDynamics {
+  headingDeg: number;
+  slipDeg: number;
+  yawRateDps: number;
+  pitchDeg: number;
+  rollDeg: number;
+  gX: number;
+  gZ: number;
+  /** Bar; 0 for a car without a turbo. */
+  turboBoost: number;
+}
+
+/**
+ * One sample of a lap's trace: progress, elapsed ms, speed km/h, throttle, brake, clutch, steering, gear, then the car's
+ * world position x and z (metres), heading and slip (degrees), then TC level, ABS level, brake bias (0..1), diff power and
+ * coast levels, whether the pit limiter is on, and turbo boost (bar). The last eleven are null when the game didn't give them.
+ */
+export type TraceRow = [
+  number, number, number, number, number, number, number, number,
+  number | null, number | null, number | null, number | null,
+  number | null, number | null, number | null, number | null, number | null, boolean | null, number | null,
+];
+
+/** How far each aid goes on the car a lap was driven in. */
+export interface AidsMax {
+  tcMax: number;
+  absMax: number;
+  diffPowerMax: number;
+  diffCoastMax: number;
+  biasMin: number;
+  biasMax: number;
+}
+
+/** What a driver drifted and spun over a lap; a lap with none has no entry. */
+export interface LapSlides {
+  drifts: number;
+  spins: number;
+  driftMs: number;
+  longestMs: number;
+  peakSlipDeg: number;
 }
 
 export type OverlayShow = "always" | "drivingPaused" | "driving";
@@ -244,6 +308,14 @@ export interface LiveView {
   driving: boolean;
   /** What the game is doing: in a menu, driving, paused on track, or watching a replay. */
   phase: GamePhase;
+  /** In the car on track, driving or paused: what to show a car and map for. Timing and rewards still follow `driving`. */
+  onTrack: boolean;
+  /** Times the car has been reset (or a stage restarted) in this session. */
+  resets: number;
+  /** What the slip angle says right now: "none", "slide" (4 degrees or more), "drift" (12 or more at speed) or "spin" (90 or more). */
+  slide: "none" | "slide" | "drift" | "spin";
+  /** What the driver has slid so far this lap. */
+  slideStats: { drifts: number; spins: number; driftMs: number; longestMs: number; peakSlipDeg: number };
   currentLapMs: number;
   lapValid: boolean;
   /** From the pits or a spawn point: not a timed attempt. */
@@ -515,7 +587,7 @@ export const api = {
   combos: (game?: string) => request<Combo[]>("GET", `/combos${game ? `?game=${encodeURIComponent(game)}` : ""}`),
   catalogue: (game: string) => request<Catalogue>("GET", `/catalogue?game=${encodeURIComponent(game)}`),
   /** Rows of [progress, elapsedMs, speedKmh, throttle, brake, clutch, steering, gear], or null. */
-  lapTrace: (lapId: number) => request<{ lapId: number; points: number[][] } | null>("GET", `/laps/${lapId}/trace`),
+  lapTrace: (lapId: number) => request<{ lapId: number; points: TraceRow[]; slides: LapSlides | null; aidsMax: AidsMax | null } | null>("GET", `/laps/${lapId}/trace`),
   /** Version, data folder and database counts. Desktop app only. */
   about: () => request<About>("GET", "/admin/about"),
   /** Dev builds only: every page of a game's shared memory, whole, with the fields Bin It knows. */

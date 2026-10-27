@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { api, useAppEvent, type AppEvent } from "./api";
 
-export type WidgetId = "driver" | "pb" | "challenge" | "timing" | "standings" | "leaderboard" | "tower" | "qr" | "toasts";
+export type WidgetId = "driver" | "pb" | "challenge" | "timing" | "standings" | "leaderboard" | "tower" | "qr" | "slip" | "toasts";
 export type Anchor =
   | "top-left"
   | "top-center"
@@ -49,6 +49,7 @@ export const WIDGETS: Record<WidgetId, { label: string; description: string; com
   leaderboard: { label: "Track leaderboard", description: "Top 5 on this track and car, plus where the driver is", compact: false },
   tower: { label: "Gap tower", description: "The top few drivers and their gaps, in a column or a row depending on where it sits", compact: false },
   qr: { label: "Phone QR code", description: "Scan to open Bin It on a phone: pick the driver, see the standings", compact: false },
+  slip: { label: "Slip angle", description: "How far sideways the car is, and whether that is a slide, a drift or a spin. AC EVO only", compact: false },
   toasts: { label: "Pop-ups", description: "New PB, record, new leader, cut lap. Shows for 4s", compact: false },
 };
 

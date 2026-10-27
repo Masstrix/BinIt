@@ -14,7 +14,7 @@ import { carName, trackName } from "../format";
 export function TelemetryPage({ path }: { path: string }) {
   const { status } = useAppState();
   const session = status?.session ?? null;
-  const driving = !!(status?.live?.driving && session);
+  const driving = !!(status?.live?.onTrack && session);
   const linked = /^\/telemetry\/lap\/(\d+)/.exec(path);
   const lapId = linked ? Number(linked[1]) : null;
   // Arriving on a linked lap counts as choosing Analysis, so it stays put after the link is let go.

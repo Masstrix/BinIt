@@ -217,6 +217,11 @@ impl ProfileRecorder {
                     clutch: i.clutch.clamp(0.0, 1.0),
                     steering: i.steering.clamp(-1.0, 1.0),
                     gear: i.gear,
+                    position: i.position,
+                    heading_deg: i.dynamics.map(|d| d.heading_deg),
+                    slip_deg: i.dynamics.map(|d| d.slip_deg),
+                    aids: i.aids,
+                    boost: i.dynamics.map(|d| d.turbo_boost),
                 })
             })
             .collect();
@@ -224,8 +229,8 @@ impl ProfileRecorder {
     }
 }
 
-/// One sample of a lap's driver inputs.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// One sample of a lap's driver inputs, and where the car was and how it was moving.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct TracePoint {
     pub progress: f32,
     pub elapsed_ms: u32,
@@ -235,20 +240,76 @@ pub struct TracePoint {
     pub clutch: f32,
     pub steering: f32,
     pub gear: i16,
+    /// World position in metres (x, z).
+    pub position: Option<[f32; 2]>,
+    /// Which way the nose pointed, degrees.
+    pub heading_deg: Option<f32>,
+    /// Heading minus direction of travel, degrees (see `dynamics`).
+    pub slip_deg: Option<f32>,
+    /// What the driver aids and brake balance were set to (see `Aids`).
+    pub aids: Option<crate::Aids>,
+    /// Turbo boost in bar.
+    pub boost: Option<f32>,
 }
 
 /// Throttle, brake, clutch, steering, gear and speed through one lap (about 20 samples a second),
-/// for comparing laps. Stored compactly: 13 bytes a sample, around 25 KB for a 90 s lap.
+/// for comparing laps, and where the car was and how it was moving when the game says. Stored compactly:
+/// 13 bytes a sample (version 1), or version 2: `[2, channels]` then 13 bytes plus 4 for position, 2 for
+/// heading, 2 for slip, 7 for the aids and 1 for boost, whichever channels every sample of the lap has. The aids
+/// channel puts 8 bytes of ranges (the largest TC, ABS and diff settings, the brake bias range) after the channel
+/// byte. Boost is left out for a car that never has any. Around 25 to 50 KB for a 90 s lap.
 #[derive(Debug, Clone, PartialEq)]
 pub struct LapTrace(pub Vec<TracePoint>);
 
-const TRACE_VERSION: u8 = 1;
+const TRACE_V1: u8 = 1;
+const TRACE_V2: u8 = 2;
 const TRACE_POINT_BYTES: usize = 13;
+/// Channel bits in a version 2 trace.
+const CH_POSITION: u8 = 1;
+const CH_HEADING: u8 = 2;
+const CH_SLIP: u8 = 4;
+const CH_AIDS: u8 = 8;
+const CH_BOOST: u8 = 16;
+/// Bytes of ranges after the channel byte when the aids channel is there, and bytes of aids in each sample.
+const AIDS_RANGE_BYTES: usize = 8;
+const AIDS_POINT_BYTES: usize = 7;
+/// Position is stored in half metres (about +-16 km), angles in hundredths of a degree.
+const POSITION_STEP_M: f32 = 0.5;
 
 impl LapTrace {
+    /// The channels every point has: a channel with gaps is left out rather than made up.
+    fn channels(&self) -> u8 {
+        if self.0.is_empty() {
+            return 0;
+        }
+        let all = |f: fn(&TracePoint) -> bool| self.0.iter().all(f);
+        (if all(|p| p.position.is_some()) { CH_POSITION } else { 0 })
+            | (if all(|p| p.heading_deg.is_some()) { CH_HEADING } else { 0 })
+            | (if all(|p| p.slip_deg.is_some()) { CH_SLIP } else { 0 })
+            | (if all(|p| p.aids.is_some()) { CH_AIDS } else { 0 })
+            // Only for a car that has some: an engine without a turbo reads zero all lap.
+            | (if all(|p| p.boost.is_some()) && self.0.iter().any(|p| p.boost.unwrap_or(0.0) > 0.005) { CH_BOOST } else { 0 })
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(1 + self.0.len() * TRACE_POINT_BYTES);
-        out.push(TRACE_VERSION);
+        let channels = self.channels();
+        let mut out = Vec::with_capacity(2 + AIDS_RANGE_BYTES + self.0.len() * (TRACE_POINT_BYTES + 16));
+        let milli = |v: f32| ((if v.is_finite() { v } else { 0.0 }).clamp(0.0, 1.0) * 1000.0).round() as u16;
+        if channels == 0 {
+            out.push(TRACE_V1);
+        } else {
+            out.push(TRACE_V2);
+            out.push(channels);
+            if channels & CH_AIDS != 0 {
+                // The ranges are the car's, the same all lap: kept once, from the first sample.
+                let a = self.0[0].aids.unwrap_or_default();
+                out.extend([a.tc_max, a.abs_max, a.diff_power_max, a.diff_coast_max]);
+                out.extend(milli(a.bias_min).to_le_bytes());
+                out.extend(milli(a.bias_max).to_le_bytes());
+            }
+        }
+        let angle = |deg: f32| ((deg.clamp(-327.0, 327.0) * 100.0).round() as i16).to_le_bytes();
+        let metres = |m: f32| ((m / POSITION_STEP_M).round().clamp(i16::MIN as f32, i16::MAX as f32) as i16).to_le_bytes();
         for p in &self.0 {
             out.extend(((p.progress.clamp(0.0, 1.0) * 65535.0).round() as u16).to_le_bytes());
             out.extend(p.elapsed_ms.to_le_bytes());
@@ -258,6 +319,25 @@ impl LapTrace {
             out.push((p.clutch.clamp(0.0, 1.0) * 255.0).round() as u8);
             out.push(((p.steering.clamp(-1.0, 1.0) * 127.0).round() as i8) as u8);
             out.push((p.gear.clamp(-127, 127) as i8) as u8);
+            if channels & CH_POSITION != 0 {
+                let [x, z] = p.position.unwrap_or_default();
+                out.extend(metres(x));
+                out.extend(metres(z));
+            }
+            if channels & CH_HEADING != 0 {
+                out.extend(angle(p.heading_deg.unwrap_or_default()));
+            }
+            if channels & CH_SLIP != 0 {
+                out.extend(angle(p.slip_deg.unwrap_or_default()));
+            }
+            if channels & CH_AIDS != 0 {
+                let a = p.aids.unwrap_or_default();
+                out.extend([a.tc_level, a.abs_level, a.diff_power_level, a.diff_coast_level, a.pit_limiter as u8]);
+                out.extend(milli(a.brake_bias).to_le_bytes());
+            }
+            if channels & CH_BOOST != 0 {
+                out.push((p.boost.unwrap_or(0.0).clamp(0.0, 2.55) * 100.0).round() as u8);
+            }
         }
         out
     }
@@ -281,12 +361,71 @@ impl LapTrace {
 
     pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
         let (&version, rest) = bytes.split_first()?;
-        if version != TRACE_VERSION || rest.len() % TRACE_POINT_BYTES != 0 {
+        let (channels, rest) = match version {
+            TRACE_V1 => (0, rest),
+            TRACE_V2 => rest.split_first().map(|(&c, r)| (c, r))?,
+            _ => return None,
+        };
+        // The aids' ranges come once, before the samples.
+        let (ranges, rest) = if channels & CH_AIDS != 0 {
+            if rest.len() < AIDS_RANGE_BYTES {
+                return None;
+            }
+            let (r, rest) = rest.split_at(AIDS_RANGE_BYTES);
+            (Some(r), rest)
+        } else {
+            (None, rest)
+        };
+        let size = TRACE_POINT_BYTES
+            + if channels & CH_POSITION != 0 { 4 } else { 0 }
+            + if channels & CH_HEADING != 0 { 2 } else { 0 }
+            + if channels & CH_SLIP != 0 { 2 } else { 0 }
+            + if channels & CH_AIDS != 0 { AIDS_POINT_BYTES } else { 0 }
+            + if channels & CH_BOOST != 0 { 1 } else { 0 };
+        if rest.len() % size != 0 {
             return None;
         }
+        let i16_at = |c: &[u8], at: usize| i16::from_le_bytes([c[at], c[at + 1]]);
         Some(Self(
-            rest.chunks_exact(TRACE_POINT_BYTES)
-                .map(|c| TracePoint {
+            rest.chunks_exact(size)
+                .map(|c| {
+                    let mut at = TRACE_POINT_BYTES;
+                    let position = (channels & CH_POSITION != 0).then(|| {
+                        let p = [i16_at(c, at) as f32 * POSITION_STEP_M, i16_at(c, at + 2) as f32 * POSITION_STEP_M];
+                        at += 4;
+                        p
+                    });
+                    let heading_deg = (channels & CH_HEADING != 0).then(|| {
+                        let a = i16_at(c, at) as f32 / 100.0;
+                        at += 2;
+                        a
+                    });
+                    let slip_deg = (channels & CH_SLIP != 0).then(|| {
+                        let a = i16_at(c, at) as f32 / 100.0;
+                        at += 2;
+                        a
+                    });
+                    let aids = ranges.map(|r| {
+                        let milli = |b: &[u8], i: usize| u16::from_le_bytes([b[i], b[i + 1]]) as f32 / 1000.0;
+                        let a = crate::Aids {
+                            tc_level: c[at],
+                            tc_max: r[0],
+                            abs_level: c[at + 1],
+                            abs_max: r[1],
+                            brake_bias: milli(c, at + 5),
+                            bias_min: milli(r, 4),
+                            bias_max: milli(r, 6),
+                            diff_power_level: c[at + 2],
+                            diff_power_max: r[2],
+                            diff_coast_level: c[at + 3],
+                            diff_coast_max: r[3],
+                            pit_limiter: c[at + 4] != 0,
+                        };
+                        at += AIDS_POINT_BYTES;
+                        a
+                    });
+                    let boost = (channels & CH_BOOST != 0).then(|| c[at] as f32 / 100.0);
+                    TracePoint {
                     progress: u16::from_le_bytes([c[0], c[1]]) as f32 / 65535.0,
                     elapsed_ms: u32::from_le_bytes([c[2], c[3], c[4], c[5]]),
                     speed_kmh: u16::from_le_bytes([c[6], c[7]]) as f32 / 100.0,
@@ -295,6 +434,12 @@ impl LapTrace {
                     clutch: c[10] as f32 / 255.0,
                     steering: (c[11] as i8) as f32 / 127.0,
                     gear: (c[12] as i8) as i16,
+                    position,
+                    heading_deg,
+                    slip_deg,
+                    aids,
+                    boost,
+                    }
                 })
                 .collect(),
         ))
@@ -495,5 +640,145 @@ mod tests {
     fn bytes_roundtrip() {
         let prof = recorder(90_000).finish(90_000).unwrap();
         assert_eq!(TimingProfile::from_bytes(&prof.to_bytes()), Some(prof));
+    }
+
+    fn point(i: u32) -> TracePoint {
+        TracePoint {
+            progress: i as f32 / 100.0,
+            elapsed_ms: i * 900,
+            speed_kmh: 120.5,
+            throttle: 1.0,
+            brake: 0.0,
+            clutch: 0.0,
+            steering: -0.25,
+            gear: 3,
+            ..TracePoint::default()
+        }
+    }
+
+    #[test]
+    fn a_trace_without_position_or_heading_is_still_the_original_format() {
+        let trace = LapTrace((0..60).map(point).collect());
+        let bytes = trace.to_bytes();
+        assert_eq!(bytes[0], 1, "version 1");
+        assert_eq!(bytes.len(), 1 + 60 * 13, "13 bytes a sample, as before");
+        assert_eq!(LapTrace::from_bytes(&bytes).unwrap().0.len(), 60);
+    }
+
+    #[test]
+    fn position_heading_and_slip_survive_a_round_trip_to_a_fraction_of_a_metre_and_a_degree() {
+        let points: Vec<TracePoint> = (0..60)
+            .map(|i| TracePoint {
+                position: Some([-1065.8 + i as f32 * 3.3, 1882.2 - i as f32 * 1.7]),
+                heading_deg: Some(-170.0 + i as f32 * 5.5),
+                slip_deg: Some(if i % 2 == 0 { 17.25 } else { -42.5 }),
+                ..point(i)
+            })
+            .collect();
+        let bytes = LapTrace(points.clone()).to_bytes();
+        assert_eq!(bytes[0], 2, "version 2");
+        assert_eq!(bytes[1], 7, "position, heading and slip");
+        assert_eq!(bytes.len(), 2 + 60 * (13 + 4 + 2 + 2));
+        let back = LapTrace::from_bytes(&bytes).unwrap().0;
+        assert_eq!(back.len(), 60);
+        for (a, b) in points.iter().zip(&back) {
+            let (pa, pb) = (a.position.unwrap(), b.position.unwrap());
+            assert!((pa[0] - pb[0]).abs() <= 0.26 && (pa[1] - pb[1]).abs() <= 0.26, "{pa:?} vs {pb:?}");
+            assert!((a.heading_deg.unwrap() - b.heading_deg.unwrap()).abs() < 0.01);
+            assert!((a.slip_deg.unwrap() - b.slip_deg.unwrap()).abs() < 0.01);
+            assert_eq!((a.elapsed_ms, a.gear), (b.elapsed_ms, b.gear), "the original channels are unchanged");
+        }
+    }
+
+    #[test]
+    fn a_channel_with_a_gap_is_left_out_rather_than_made_up() {
+        // Heading is missing from one sample (say the physics page wasn't open yet), position is complete.
+        let points: Vec<TracePoint> = (0..60)
+            .map(|i| TracePoint { position: Some([i as f32, 2.0 * i as f32]), heading_deg: (i != 3).then_some(10.0), ..point(i) })
+            .collect();
+        let bytes = LapTrace(points).to_bytes();
+        assert_eq!(bytes[1], 1, "only position");
+        let back = LapTrace::from_bytes(&bytes).unwrap().0;
+        assert!(back.iter().all(|p| p.position.is_some() && p.heading_deg.is_none() && p.slip_deg.is_none()));
+    }
+
+    #[test]
+    fn a_truncated_or_unknown_trace_is_refused() {
+        let points: Vec<TracePoint> = (0..60).map(|i| TracePoint { position: Some([1.0, 2.0]), ..point(i) }).collect();
+        let mut bytes = LapTrace(points).to_bytes();
+        bytes.pop();
+        assert!(LapTrace::from_bytes(&bytes).is_none());
+        assert!(LapTrace::from_bytes(&[9, 0, 0]).is_none(), "a version we don't know");
+        assert!(LapTrace::from_bytes(&[2]).is_none(), "version 2 without its channel byte");
+    }
+
+    fn some_aids(tc: u8, bias: f32) -> crate::Aids {
+        crate::Aids {
+            tc_level: tc,
+            tc_max: 12,
+            abs_level: 3,
+            abs_max: 11,
+            brake_bias: bias,
+            bias_min: 0.48,
+            bias_max: 0.75,
+            diff_power_level: 2,
+            diff_power_max: 8,
+            diff_coast_level: 5,
+            diff_coast_max: 8,
+            pit_limiter: false,
+        }
+    }
+
+    #[test]
+    fn the_aids_and_boost_survive_storage_and_a_mid_lap_change_shows() {
+        let points: Vec<TracePoint> = (0..60)
+            .map(|i| TracePoint {
+                aids: Some(some_aids(if i < 30 { 2 } else { 4 }, if i < 30 { 0.6 } else { 0.62 })),
+                boost: Some(i as f32 * 0.02),
+                ..point(i)
+            })
+            .collect();
+        let bytes = LapTrace(points).to_bytes();
+        assert_eq!(bytes[1], 8 | 16, "aids and boost");
+        assert_eq!(bytes.len(), 2 + 8 + 60 * (13 + 7 + 1));
+        let back = LapTrace::from_bytes(&bytes).unwrap().0;
+        assert_eq!(back.len(), 60);
+        let (early, late) = (back[0].aids.unwrap(), back[59].aids.unwrap());
+        assert_eq!((early.tc_level, late.tc_level), (2, 4), "a change made mid-lap shows up");
+        assert_eq!((early.tc_max, early.abs_max, early.diff_power_max, early.diff_coast_max), (12, 11, 8, 8));
+        assert_eq!((early.abs_level, early.diff_power_level, early.diff_coast_level, early.pit_limiter), (3, 2, 5, false));
+        assert!((early.brake_bias - 0.6).abs() < 0.001 && (late.brake_bias - 0.62).abs() < 0.001);
+        assert!((early.bias_min - 0.48).abs() < 0.001 && (early.bias_max - 0.75).abs() < 0.001);
+        assert!((back[59].boost.unwrap() - 1.18).abs() < 0.011);
+    }
+
+    #[test]
+    fn a_car_without_a_turbo_has_no_boost_channel_and_a_cut_short_aids_header_is_refused() {
+        let points: Vec<TracePoint> = (0..60).map(|i| TracePoint { boost: Some(0.0), aids: Some(some_aids(2, 0.6)), ..point(i) }).collect();
+        let bytes = LapTrace(points).to_bytes();
+        assert_eq!(bytes[1], 8, "aids only");
+        assert!(LapTrace::from_bytes(&bytes).unwrap().0.iter().all(|p| p.boost.is_none()));
+        assert!(LapTrace::from_bytes(&[2, 8, 1, 2, 3]).is_none(), "the ranges are cut short");
+    }
+
+    #[test]
+    fn what_the_recorder_saw_of_the_car_ends_up_in_the_trace() {
+        use crate::dynamics::Dynamics;
+        let mut r = ProfileRecorder::default();
+        for i in 0..200u32 {
+            let progress = 0.002 + i as f32 * 0.005;
+            let inputs = crate::Inputs {
+                speed_kmh: 100.0,
+                position: Some([i as f32 * 2.0, -(i as f32)]),
+                dynamics: Some(Dynamics { heading_deg: 30.0, slip_deg: 8.0, ..Dynamics::default() }),
+                ..Default::default()
+            };
+            r.push_with(progress, i * 400, Some(inputs));
+        }
+        let trace = r.finish_trace(80_000).expect("a full lap has a trace");
+        let first = trace.0[0];
+        assert_eq!(first.position, Some([0.0, 0.0]));
+        assert_eq!((first.heading_deg, first.slip_deg), (Some(30.0), Some(8.0)));
+        assert!(trace.0.iter().all(|p| p.position.is_some()));
     }
 }
