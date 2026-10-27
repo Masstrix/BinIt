@@ -87,6 +87,11 @@ pub fn inputs(g: &Graphics) -> crate::Inputs {
 }
 
 pub fn sample(g: &Graphics) -> Sample {
+    sample_with(g, None)
+}
+
+/// A sample whose inputs also carry how the car is moving (heading, slip), so the lap's trace records them.
+pub fn sample_with(g: &Graphics, dynamics: Option<crate::dynamics::Dynamics>) -> Sample {
     Sample {
         status: g.status,
         lap_count: g.total_lap_count,
@@ -95,8 +100,8 @@ pub fn sample(g: &Graphics) -> Sample {
         lap_valid: g.is_valid_lap != 0 && g.timing_state.is_invalid == 0,
         in_pit_lane: g.is_in_pit_lane != 0 || g.is_in_pit_box != 0,
         progress: g.npos,
-            inputs: Some(inputs(g)),
-}
+        inputs: Some(crate::Inputs { dynamics, ..inputs(g) }),
+    }
 }
 
 #[cfg(windows)]
@@ -274,7 +279,9 @@ impl GameAdapter for AcEvoAdapter {
             }
         }
 
-        if let Some(lap) = self.tracker.update(sample(&g))
+        // One reading of the physics page serves both the lap's trace and the live display.
+        let dynamics = conn.read_physics().map(|p| crate::dynamics::Dynamics::from_physics(&p));
+        if let Some(lap) = self.tracker.update(sample_with(&g, dynamics))
             && let Some(session) = self.session.clone()
         {
             events.push(GameEvent::LapCompleted(CompletedLap {
@@ -305,14 +312,30 @@ impl GameAdapter for AcEvoAdapter {
                 out_lap: self.tracker.on_out_lap(),
                 lap_progress: g.npos.clamp(0.0, 1.0),
                 position: player_position(&g),
-                inputs: Some(crate::Inputs {
-                    dynamics: conn.read_physics().map(|p| crate::dynamics::Dynamics::from_physics(&p)),
-                    ..inputs(&g)
-                }),
+                inputs: Some(crate::Inputs { dynamics, ..inputs(&g) }),
             }));
         }
 
         events
+    }
+}
+
+#[cfg(test)]
+mod sample_tests {
+    use super::*;
+    use crate::dynamics::Dynamics;
+
+    fn blank() -> Graphics {
+        // SAFETY: `Graphics` is plain numbers; all zeros is a valid (empty) page.
+        unsafe { std::mem::zeroed() }
+    }
+
+    #[test]
+    fn the_sample_a_lap_is_recorded_from_carries_heading_and_slip() {
+        let d = Dynamics { heading_deg: 45.0, slip_deg: -12.5, ..Dynamics::default() };
+        let i = sample_with(&blank(), Some(d)).inputs.expect("inputs");
+        assert_eq!(i.dynamics, Some(d));
+        assert_eq!(sample(&blank()).inputs.expect("inputs").dynamics, None, "no physics page, no dynamics");
     }
 }
 
