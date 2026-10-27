@@ -17,6 +17,9 @@ mod process;
 pub mod tracker;
 #[cfg(windows)]
 mod shm;
+/// Raw shared-memory readout for the dev-only Memory page.
+#[cfg(windows)]
+pub mod readout;
 
 use std::time::Duration;
 

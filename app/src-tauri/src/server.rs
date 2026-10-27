@@ -92,6 +92,9 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/update/install", post(update_install))
         .route("/overlay/layout/{game}", get(overlay_layout).put(set_overlay_layout).delete(reset_overlay_layout))
         .route("/events", get(events));
+    // Dev builds only: a raw look at the games' shared memory, for the Memory page.
+    #[cfg(debug_assertions)]
+    let api = api.route("/dev/memory/{game}", get(dev_memory));
 
     let router = Router::new()
         .nest("/api", api)
@@ -625,6 +628,14 @@ async fn admin_about(ConnectInfo(addr): ConnectInfo<SocketAddr>, State(c): State
         lan_enabled: c.lan,
         counts,
     }))
+}
+
+/// Every page of `game`'s shared memory, whole, with the fields Bin It knows. Dev builds only.
+#[cfg(debug_assertions)]
+async fn dev_memory(ConnectInfo(addr): ConnectInfo<SocketAddr>, Path(game): Path<String>) -> Result<Json<Vec<serde_json::Value>>, Response> {
+    local_only(addr)?;
+    let pages = tokio::task::spawn_blocking(move || tt_games::readout::read_pages(&game)).await.ok().flatten();
+    pages.map(Json).ok_or_else(|| bad_request(anyhow::anyhow!("that game has no shared memory to read")))
 }
 
 /// Whether there's a newer Bin It, and how an update is going. Phones can see it too.

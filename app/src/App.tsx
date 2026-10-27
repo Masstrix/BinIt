@@ -14,6 +14,7 @@ import { ChallengesPage, NewChallengePage } from "./pages/Challenges";
 import { DriversPage } from "./pages/Drivers";
 import { GamesPage } from "./pages/Games";
 import { AdvancedPage } from "./pages/Advanced";
+import { DevMemoryPage } from "./pages/DevMemory";
 import { TelemetryPage } from "./pages/Telemetry";
 import { Overlay } from "./pages/Overlay";
 import { DriverProgress } from "./pages/DriverProgress";
@@ -37,6 +38,8 @@ const ROUTES = [
   ...(isTauri
     ? [{ path: "/advanced", group: "Setup", label: "Advanced", icon: "M4 6h16M4 12h16M4 18h16M9 3v6M15 9v6M8 15v6" }]
     : []),
+  // Developer tools: dev builds only, never shipped.
+  ...(import.meta.env.DEV ? [{ path: "/dev/memory", group: "Setup", label: "Dev: memory", icon: "M8 3v3M16 3v3M8 18v3M16 18v3M3 8h3M3 16h3M18 8h3M18 16h3M7 6h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM10 10h4v4h-4z" }] : []),
 ];
 
 const GROUPS = ["Play", "Compete", "Setup"] as const;
@@ -46,7 +49,7 @@ const TABS = [
   { href: "#/", label: "Home", match: ["/"], exact: true, icon: ROUTES[0].icon },
   { href: "#/leaderboard", label: "Tracks", match: ["/leaderboard", "/telemetry"], icon: "M5 21V4M5 4h11l-2 4 2 4H5" },
   { href: "#/challenges", label: "Challenges", match: ["/challenges"], icon: ROUTES.find((r) => r.path === "/challenges")!.icon },
-  { href: "#/games", label: "Rig", match: ["/games", "/drivers", "/advanced"], icon: "M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM8 21h8M12 17v4" },
+  { href: "#/games", label: "Rig", match: ["/games", "/drivers", "/advanced", "/dev"], icon: "M3 6a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM8 21h8M12 17v4" },
 ];
 
 /** On a phone, the pages that share a tab are one tap apart. */
@@ -139,6 +142,7 @@ export function App() {
   else if (path.startsWith("/drivers")) page = <DriversPage />;
   else if (path.startsWith("/games")) page = <GamesPage />;
   else if (path.startsWith("/telemetry")) page = <TelemetryPage path={path} />;
+  else if (import.meta.env.DEV && path.startsWith("/dev/memory")) page = <DevMemoryPage />;
   else if (path.startsWith("/advanced")) page = <AdvancedPage />;
   else if (/^\/you\/\d+\/progress/.test(path)) page = <DriverProgress id={Number(path.split("/")[2])} />;
   else if (path.startsWith("/you")) page = <YouPage path={path} />;

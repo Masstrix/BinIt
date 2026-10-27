@@ -156,6 +156,18 @@ export interface TrackMapData {
 }
 
 /** About Bin It: shown in the desktop app. */
+export interface MemoryPage {
+  label: string;
+  /** The Windows name of the mapping. */
+  name: string;
+  /** False when the game hasn't created the page. */
+  open: boolean;
+  size: number;
+  /** Every byte of the page, as hex. */
+  hex: string;
+  fields: { name: string; offset: number; size: number; kind: string }[];
+}
+
 export interface About {
   name: string;
   version: string;
@@ -506,6 +518,8 @@ export const api = {
   lapTrace: (lapId: number) => request<{ lapId: number; points: number[][] } | null>("GET", `/laps/${lapId}/trace`),
   /** Version, data folder and database counts. Desktop app only. */
   about: () => request<About>("GET", "/admin/about"),
+  /** Dev builds only: every page of a game's shared memory, whole, with the fields Bin It knows. */
+  devMemory: (game: string) => request<MemoryPage[]>("GET", `/dev/memory/${encodeURIComponent(game)}`),
   countLaps: (f: LapFilter) => request<number>("POST", "/admin/laps/count", f),
   deleteLaps: (f: LapFilter) => request<number>("POST", "/admin/laps/delete", f),
   setMapView: (m: { game: string; track: string; layout: string; rotate: number; mirror: boolean }) => request<null>("PUT", "/maps/view", m),
