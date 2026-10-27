@@ -547,6 +547,8 @@ h2 { font-size: 22px; line-height: 1.2; }
 .you-wallet { display: flex; align-self: stretch; align-items: stretch; justify-content: space-between; gap: 10px; min-height: 52px; padding: 0 20px 0 0; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--gold) 14%, var(--panel-2)); box-shadow: inset 0 0 0 2px var(--gold); }
 .you-customize { display: flex; align-self: stretch; align-items: center; justify-content: center; gap: 8px; min-height: 48px; border-radius: 999px; background: var(--violet); color: var(--violet-ink); font: 700 15px var(--font-body); text-decoration: none; }
 .you-customize:hover { filter: brightness(1.08); color: var(--violet-ink); }
+/* On someone else's profile there is no Shop button, so the count sits in the middle of the pill. */
+.you-wallet[data-solo] { justify-content: center; padding: 0 20px; }
 .you-shop { display: inline-flex; align-items: center; gap: 8px; padding: 0 24px 0 20px; border-radius: 999px; background: var(--gold); box-shadow: inset 0 0 0 2px var(--gold); color: #8a5405; font: 800 15px var(--font-body); text-decoration: none; }
 .you-shop:hover { filter: brightness(1.06); color: #8a5405; }
 .you-wallet-coins { display: inline-flex; align-items: center; align-self: center; gap: 8px; color: var(--gold); font: 700 20px var(--font-mono); }
