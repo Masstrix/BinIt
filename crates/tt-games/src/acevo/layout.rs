@@ -63,6 +63,40 @@ pub struct TimingState {
     pub place_holder: [u8; 137],
 }
 
+/// `SMEvoElectronics`: the driver-adjustable aids and setup. The graphics page holds four of them. Checked
+/// against the live game (2026-10-27): the first is what the car is set to now; the others hold each setting's
+/// minimum, maximum and step (brake bias reads 0.60 / 0.48 / 0.75 / 1.0, TC and ABS 2, 1 / 0, 0 / 12, 11 / 1, 1).
+/// Field order and types are from the shared-memory guide (https://steamcommunity.com/sharedfiles/filedetails/?id=3707421508);
+/// `packed(4)` puts the floats on 4-byte boundaries. Offsets up to `is_ignition_on` were confirmed in game.
+#[repr(C, packed(4))]
+#[derive(Clone, Copy)]
+pub struct Electronics {
+    pub tc_level: i8,
+    pub tc_cut_level: i8,
+    pub abs_level: i8,
+    pub esc_level: i8,
+    pub ebb_level: i8,
+    /// Front share of the braking, 0..1.
+    pub brake_bias: f32,
+    pub engine_map_level: i8,
+    pub turbo_level: f32,
+    pub ers_deployment_map: i8,
+    pub ers_recharge_map: f32,
+    pub is_ers_heat_charging_on: u8,
+    pub is_ers_overtake_mode_on: u8,
+    pub is_drs_open: u8,
+    pub diff_power_level: i8,
+    pub diff_coast_level: i8,
+    pub front_bump_damper_level: i8,
+    pub front_rebound_damper_level: i8,
+    pub rear_bump_damper_level: i8,
+    pub rear_rebound_damper_level: i8,
+    pub is_ignition_on: u8,
+    pub is_pitlimiter_on: u8,
+    pub active_performance_mode: i8,
+    pub place_holder: [u8; 88],
+}
+
 /// `SPageFileGraphicEvo`: HUD-level data, updated every rendered frame.
 #[repr(C, packed(4))]
 #[derive(Clone, Copy)]
@@ -175,6 +209,16 @@ pub struct Static {
 const _: () = assert!(size_of::<SessionState>() == 256);
 const _: () = assert!(size_of::<TimingState>() == 256);
 const _: () = assert!(size_of::<Static>() == 208);
+const _: () = assert!(size_of::<Electronics>() == 128);
+
+impl Graphics {
+    /// What the car's electronics are set to now (the first of the four blocks on the page).
+    pub fn electronics_now(&self) -> Electronics {
+        let blocks = self.electronics;
+        // SAFETY: both are 128 bytes of plain integers, and every bit pattern is valid for `Electronics`.
+        unsafe { std::mem::transmute::<[u32; 32], Electronics>(blocks[0]) }
+    }
+}
 
 /// Decodes a fixed-size, NUL-terminated C string field.
 pub fn c_str(bytes: &[u8]) -> String {
