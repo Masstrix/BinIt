@@ -49,7 +49,7 @@ export function MeBar() {
   // Level and XP to go, for the badge and the line under the name. Refetches when a lap is recorded.
   const profile = useFetch(me ? () => api.profile(me.id) : null, [me?.id]);
   const live = status?.live;
-  const driving = inSeat && !!live?.driving;
+  const driving = inSeat && !!live?.onTrack;
   const delta = live?.timing?.deltaMs;
   const state = driving ? "driving" : inSeat ? "seated" : "free";
   // The ring: XP towards the next level; while you drive it follows the lap instead.
@@ -81,7 +81,7 @@ export function MeBar() {
           {driving ? (
             <>
               <span className="mono me-time">{lapTime(live?.currentLapMs)}</span>
-              <span className="me-sub me-good">{delta != null ? <Signed text={`${delta <= 0 ? "−" : "+"}${(Math.abs(delta) / 1000).toFixed(3)} on your best`} /> : "Driving"}</span>
+              <span className="me-sub me-good">{delta != null ? <Signed text={`${delta <= 0 ? "−" : "+"}${(Math.abs(delta) / 1000).toFixed(3)} on your best`} /> : live?.phase === "paused" ? "Paused" : "Driving"}</span>
             </>
           ) : (
             <>

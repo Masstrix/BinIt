@@ -99,6 +99,11 @@ pub struct LiveView {
     pub driving: bool,
     /// "menu", "driving", "paused" or "replay".
     pub phase: &'static str,
+    /// In the car on track, driving or paused (a pause, or a reset, doesn't take the car off the screen). Display only:
+    /// timing, map learning and rewards still follow `driving`.
+    pub on_track: bool,
+    /// How many times the car has been reset (or the stage restarted) in this session.
+    pub resets: u32,
     pub current_lap_ms: u32,
     pub lap_valid: bool,
     pub out_lap: bool,
@@ -151,6 +156,8 @@ struct Runtime {
     last_out_lap: bool,
     /// The stage clock at the previous live reading, to notice a restart.
     last_clock_ms: u32,
+    /// Resets seen since the session began.
+    resets: u32,
 }
 
 /// Where the catalogue looks for extra names. Set by the host app.
@@ -993,6 +1000,7 @@ impl BinIt {
                     rt.session_info = Some(info);
                     // The path so far belonged to the previous track.
                     rt.map.reset();
+                    rt.resets = 0;
                 }
                 self.refresh_timing()?;
                 self.emit(AppEvent::Session { session: Some(view) });
@@ -1043,9 +1051,12 @@ impl BinIt {
                     None
                 };
                 let stage = rt.session_info.as_ref().is_some_and(|s| s.timing == TimingKind::RallyStage);
-                if stage && current_lap_ms + 1_000 < rt.last_clock_ms {
-                    // The stage was restarted: the path so far belongs to the abandoned run.
+                // The lap clock jumping back, other than by the car crossing the line, is a reset (or a stage
+                // restart): the path so far belongs to the abandoned run.
+                let crossing = !stage && rt.last_progress > 0.9 && lap_progress < 0.1;
+                if rt.session_info.is_some() && !crossing && current_lap_ms + 1_000 < rt.last_clock_ms {
                     rt.map.reset();
+                    rt.resets += 1;
                 }
                 rt.last_clock_ms = current_lap_ms;
                 // On a stage the path starts when the clock does, not at the drive-up to the line.
@@ -1070,7 +1081,7 @@ impl BinIt {
                 rt.last_out_lap = out_lap;
                 let changed = rt.lap_driver_changed && !out_lap;
                 let lap_valid = lap_valid && !changed;
-                let live = LiveView { driving, phase: phase.key(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
+                let live = LiveView { driving, phase: phase.key(), on_track: matches!(phase, tt_games::GamePhase::Driving | tt_games::GamePhase::Paused), resets: rt.resets, current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
                 rt.live = Some(live.clone());
                 drop(rt);
                 if crossed {

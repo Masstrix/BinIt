@@ -244,6 +244,10 @@ export interface LiveView {
   driving: boolean;
   /** What the game is doing: in a menu, driving, paused on track, or watching a replay. */
   phase: GamePhase;
+  /** In the car on track, driving or paused: what to show a car and map for. Timing and rewards still follow `driving`. */
+  onTrack: boolean;
+  /** Times the car has been reset (or a stage restarted) in this session. */
+  resets: number;
   currentLapMs: number;
   lapValid: boolean;
   /** From the pits or a spawn point: not a timed attempt. */

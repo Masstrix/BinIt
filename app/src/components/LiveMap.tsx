@@ -53,8 +53,8 @@ export function LiveMap({ placeholder = false }: { placeholder?: boolean }) {
   const w = words(session?.game);
   const maps = useTrackMaps(session?.game ?? null);
   const map = session ? findMap(maps, session.track, session.layout) : undefined;
-  const learned = useLearningPath(!!session && !!live?.driving && !map, session ? `${session.game}|${session.track}|${session.layout}|${session.car}` : "");
-  if (!session || !live?.driving) {
+  const learned = useLearningPath(!!session && !!live?.onTrack && !map, session ? `${session.game}|${session.track}|${session.layout}|${session.car}` : "");
+  if (!session || !live?.onTrack) {
     if (!placeholder) return null;
     return (
       <section className="card livemap livemap-idle" aria-label="Live map">
@@ -87,7 +87,7 @@ export function LiveMap({ placeholder = false }: { placeholder?: boolean }) {
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
           <Helmet color={driver?.color ?? "#8f99b3"} look={driver?.look} size={40} seed={driver?.id} />
           <div style={{ minWidth: 0 }}>
-            <div className="label" style={{ color: "var(--peach)" }}>{w.rally ? "Live on the stage" : "Live on track"}</div>
+            <div className="label" style={{ color: "var(--peach)" }}>{live.phase === "paused" ? "Paused" : w.rally ? "Live on the stage" : "Live on track"}</div>
             <h2 style={{ marginTop: 2, overflowWrap: "anywhere" }}>{driver?.name ?? "Guest"}</h2>
           </div>
         </div>

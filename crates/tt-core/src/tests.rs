@@ -1339,3 +1339,27 @@ fn a_challenge_remembers_its_reward_size_and_refuses_a_made_up_one() {
     assert_eq!(tt.create_challenge(&new(Some("high"))).unwrap().reward_size, "high");
     assert!(tt.create_challenge(&new(Some("enormous"))).is_err());
 }
+
+#[test]
+fn a_reset_is_counted_but_a_pause_and_crossing_the_line_are_not() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
+    let live = |phase: tt_games::GamePhase, p: f32, t: u32| {
+        GameEvent::Live(tt_games::LiveState { driving: phase == tt_games::GamePhase::Driving, phase, current_lap_ms: t, lap_valid: true, out_lap: false, lap_progress: p, position: None, inputs: None })
+    };
+    let resets = |tt: &BinIt| tt.status().unwrap().live.expect("live").resets;
+    use tt_games::GamePhase::{Driving, Paused};
+    tt.handle_game_event(live(Driving, 0.60, 90_000)).unwrap();
+    // Paused with the clock where it was: nothing happened.
+    tt.handle_game_event(live(Paused, 0.60, 90_000)).unwrap();
+    tt.handle_game_event(live(Driving, 0.61, 91_000)).unwrap();
+    assert_eq!(resets(&tt), 0);
+    // Crossing the line: progress wraps and the clock restarts, which is a new lap.
+    tt.handle_game_event(live(Driving, 0.99, 150_000)).unwrap();
+    tt.handle_game_event(live(Driving, 0.01, 800)).unwrap();
+    assert_eq!(resets(&tt), 0);
+    // A reset to the pits mid-lap: progress and the clock jump back.
+    tt.handle_game_event(live(Driving, 0.65, 116_000)).unwrap();
+    tt.handle_game_event(live(Paused, 0.10, 16_000)).unwrap();
+    assert_eq!(resets(&tt), 1);
+}

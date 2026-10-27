@@ -67,7 +67,7 @@ export function LeaderboardPage() {
   const seat = status?.seat ?? null;
   // Someone is driving the selected track right now: show them on its map.
   const liveHere =
-    selected && status?.session && trackKey(status.session) === trackKey(selected) && status.live?.driving && status.live.position
+    selected && status?.session && trackKey(status.session) === trackKey(selected) && status.live?.onTrack && status.live.position
       ? { name: (seat != null ? driverMap.get(seat)?.name : undefined) ?? "Guest", position: status.live.position as [number, number] }
       : null;
 
