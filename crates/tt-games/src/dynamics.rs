@@ -8,6 +8,10 @@ use crate::acpmf::Physics;
 
 /// Below this the direction of travel is too noisy to mean anything (and a stationary car has none).
 pub const MIN_SLIP_SPEED_KMH: f32 = 15.0;
+/// A slip angle at least this big, at speed, is the car sliding: noticeable, not yet a drift. Shown, never counted.
+pub const SLIDE_SLIP_DEG: f32 = 4.0;
+/// A slide is over once the slip is back under this (lower than the start, so it doesn't flicker at the line).
+pub const SLIDE_EXIT_DEG: f32 = 3.0;
 /// A slip angle at least this big, at speed, is a drift.
 pub const DRIFT_SLIP_DEG: f32 = 12.0;
 /// At least this much and the car has spun: it is pointing well away from where it is going.
@@ -37,6 +41,8 @@ pub struct Dynamics {
 pub enum Slide {
     #[default]
     None,
+    /// A few degrees of slip: the car is moving about, not drifting.
+    Light,
     Drift,
     Spin,
 }
@@ -45,6 +51,7 @@ impl Slide {
     pub fn key(self) -> &'static str {
         match self {
             Slide::None => "none",
+            Slide::Light => "slide",
             Slide::Drift => "drift",
             Slide::Spin => "spin",
         }
@@ -88,6 +95,8 @@ impl Dynamics {
             Slide::Spin
         } else if slip >= DRIFT_SLIP_DEG {
             Slide::Drift
+        } else if slip >= SLIDE_SLIP_DEG {
+            Slide::Light
         } else {
             Slide::None
         }
@@ -166,6 +175,18 @@ impl SlideTracker {
                     self.state = Slide::Spin;
                 } else if slip >= DRIFT_SLIP_DEG {
                     self.start_drift(slip);
+                } else if slip >= SLIDE_SLIP_DEG {
+                    self.state = Slide::Light;
+                }
+            }
+            Slide::Light => {
+                if slip >= SPIN_SLIP_DEG {
+                    self.stats.spins += 1;
+                    self.state = Slide::Spin;
+                } else if slip >= DRIFT_SLIP_DEG {
+                    self.start_drift(slip);
+                } else if slip < SLIDE_EXIT_DEG {
+                    self.state = Slide::None;
                 }
             }
             Slide::Drift => {
@@ -188,6 +209,8 @@ impl SlideTracker {
                     self.state = Slide::None;
                     if slip >= DRIFT_SLIP_DEG {
                         self.start_drift(slip);
+                    } else if slip >= SLIDE_SLIP_DEG {
+                        self.state = Slide::Light;
                     }
                 }
             }
@@ -326,7 +349,7 @@ mod tests {
         // The 30 degrees before the spin was one drift (the spin ended it); the slide after the spin is another.
         assert_eq!(t.stats().drifts, 2);
         // Held under the exit angle long enough, it is over.
-        let after = feed(&mut t, &[5.0, 5.0, 5.0, 5.0, 5.0, 5.0], 600);
+        let after = feed(&mut t, &[2.0, 2.0, 2.0, 2.0, 2.0, 2.0], 600);
         assert_eq!(*after.last().unwrap(), Slide::None);
     }
 
@@ -357,5 +380,31 @@ mod tests {
         t.reset_stats();
         assert_eq!(t.stats(), SlideStats::default());
         assert_eq!(t.state(), Slide::Drift, "the slide itself carries on");
+    }
+
+    #[test]
+    fn a_few_degrees_is_a_slide_that_is_shown_but_never_counted() {
+        let mut t = SlideTracker::default();
+        // Gentle slip: nothing under 4, a slide from 4, and it holds until it is back under 3.
+        let states = feed(&mut t, &[1.0, 3.9, 4.0, 5.0, 3.5, 3.1, 2.9, 1.0], 0);
+        assert_eq!(states, [Slide::None, Slide::None, Slide::Light, Slide::Light, Slide::Light, Slide::Light, Slide::None, Slide::None]);
+        assert_eq!(t.stats(), SlideStats::default(), "a slide is not a drift");
+    }
+
+    #[test]
+    fn a_slide_that_grows_becomes_a_drift_and_a_drift_that_fades_goes_back_to_none() {
+        let mut t = SlideTracker::default();
+        let states = feed(&mut t, &[5.0, 8.0, 12.0, 15.0, 9.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0], 0);
+        assert_eq!(&states[..2], &[Slide::Light, Slide::Light]);
+        assert_eq!(states[2], Slide::Drift, "12 degrees is the drift line");
+        assert_eq!(t.stats().drifts, 1);
+        assert_eq!(*states.last().unwrap(), Slide::None);
+    }
+
+    #[test]
+    fn the_instant_reading_has_the_same_three_tiers() {
+        let at = |deg: f32| slipping(deg).slide(90.0);
+        assert_eq!((at(3.0), at(4.0), at(11.9), at(12.0), at(89.9), at(90.0)), (Slide::None, Slide::Light, Slide::Light, Slide::Drift, Slide::Drift, Slide::Spin));
+        assert_eq!(Slide::Light.key(), "slide");
     }
 }

@@ -50,8 +50,8 @@ export function InputsPanel() {
       <div className="head" style={{ alignItems: "center" }}>
         <h2>Inputs</h2>
         {live?.slide && live.slide !== "none" && inputs?.dynamics ? (
-          <span className="chip plain mono" role="status" style={{ background: live.slide === "spin" ? "rgba(255,107,138,0.18)" : "rgba(255,159,107,0.18)", color: live.slide === "spin" ? "#ff7a92" : "var(--peach)", fontSize: 15 }}>
-            {live.slide === "spin" ? "SPIN" : "DRIFT"} {Math.abs(inputs.dynamics.slipDeg).toFixed(0)}°
+          <span className="chip plain mono" role="status" style={{ background: live.slide === "spin" ? "rgba(255,107,138,0.18)" : live.slide === "slide" ? "rgba(139,139,245,0.18)" : "rgba(255,159,107,0.18)", color: live.slide === "spin" ? "#ff7a92" : live.slide === "slide" ? "var(--violet)" : "var(--peach)", fontSize: 15 }}>
+            {live.slide === "spin" ? "SPIN" : live.slide === "slide" ? "SLIDE" : "DRIFT"} {Math.abs(inputs.dynamics.slipDeg).toFixed(0)}°
           </span>
         ) : (
           <span className="muted" style={{ fontSize: 13 }}>last 10 seconds</span>
@@ -83,7 +83,7 @@ export function InputsPanel() {
                 <span className="label">SLIP</span>
                 <span className="mono">
                   {Math.abs(inputs.dynamics.slipDeg).toFixed(0)}<small>°</small>
-                  {live?.slide && live.slide !== "none" && <small style={{ marginLeft: 6, color: live.slide === "spin" ? "var(--red, #ff7a92)" : "var(--peach)" }}>{live.slide === "spin" ? "spin" : "drift"}</small>}
+                  {live?.slide && live.slide !== "none" && <small style={{ marginLeft: 6, color: live.slide === "spin" ? "var(--red, #ff7a92)" : live.slide === "slide" ? "var(--violet)" : "var(--peach)" }}>{live.slide}</small>}
                 </span>
               </div>
               <div className="inputs-stat">

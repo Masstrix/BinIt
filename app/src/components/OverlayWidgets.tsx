@@ -53,6 +53,8 @@ export interface OverlayData {
   /** "driverChange" when the seat changed hands mid-lap. */
   lapVoidReason: string | null;
   outLap: boolean;
+  /** How sideways the car is right now, while someone is driving (null when the game doesn't give it). */
+  slip: { slipDeg: number; slide: "none" | "slide" | "drift" | "spin" } | null;
   /** Address phones on the network can open (null when sharing is off or there is no network). */
   url: string | null;
 }
@@ -115,6 +117,7 @@ export function useOverlayData(): OverlayData {
     lapInvalid: !!(status?.live?.driving && !status.live.outLap && !status.live.lapValid),
     lapVoidReason: status?.live?.voidReason ?? null,
     outLap: !!(status?.live?.driving && status.live.outLap),
+    slip: status?.live?.driving && status.live.inputs?.dynamics ? { slipDeg: status.live.inputs.dynamics.slipDeg, slide: status.live.slide } : null,
     url,
   };
 }
@@ -229,6 +232,7 @@ export const MOCK_DATA: OverlayData = {
   lapInvalid: false,
   lapVoidReason: null,
   outLap: false,
+  slip: { slipDeg: -23, slide: "drift" },
   url: "http://192.168.0.20:7878",
 };
 
@@ -249,6 +253,8 @@ export function hasContent(w: WidgetId, data: OverlayData): boolean {
       return data.timing !== null || data.outLap;
     case "qr":
       return data.url !== null;
+    case "slip":
+      return data.slip !== null;
     default:
       return true;
   }
@@ -906,6 +912,35 @@ export function QrCard({ data }: { data: OverlayData }) {
   );
 }
 
+const SLIP_STATES = {
+  none: { word: "GRIP", color: "var(--muted)", tint: "transparent" },
+  slide: { word: "SLIDE", color: "var(--violet)", tint: "rgba(139,139,245,0.16)" },
+  drift: { word: "DRIFT", color: "var(--peach)", tint: "rgba(255,138,76,0.22)" },
+  spin: { word: "SPIN", color: "#ff7a92", tint: "rgba(255,122,146,0.24)" },
+} as const;
+
+/** The slip angle, big, with what it means: easy to read at a glance in front of the game. */
+export function SlipCard({ data }: { data: OverlayData }) {
+  const slip = data.slip;
+  if (!slip) return null;
+  const s = SLIP_STATES[slip.slide];
+  // The bar runs from 45 degrees one way to 45 the other; the tick is where the car is.
+  const at = 50 + Math.max(-45, Math.min(45, slip.slipDeg)) * (50 / 45);
+  return (
+    <div style={{ ...card, borderRadius: 28, padding: "10px 22px 12px", minWidth: 190, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: `linear-gradient(${s.tint}, ${s.tint}), var(--panel)`, boxShadow: `0 8px 30px rgba(0,0,0,0.35)${slip.slide === "none" ? "" : `, inset 0 0 0 2px ${s.color}`}` }}>
+      <span className="mono" style={{ fontSize: 52, fontWeight: 700, lineHeight: 1, letterSpacing: "-0.03em", color: slip.slide === "none" ? "var(--text)" : s.color }}>
+        {Math.abs(slip.slipDeg).toFixed(0)}
+        <span style={{ fontSize: 26, marginLeft: 2 }}>{"°"}</span>
+      </span>
+      <span style={{ font: "800 15px var(--font-display)", letterSpacing: "0.14em", color: s.color }}>{s.word}</span>
+      <span style={{ position: "relative", width: "100%", height: 6, borderRadius: 3, background: "var(--line)", marginTop: 4 }} aria-hidden="true">
+        <span style={{ position: "absolute", left: "50%", top: -2, width: 2, height: 10, background: "var(--muted)", transform: "translateX(-50%)" }} />
+        <span style={{ position: "absolute", left: `${at}%`, top: -3, width: 8, height: 12, borderRadius: 3, background: s.color, transform: "translateX(-50%)" }} />
+      </span>
+    </div>
+  );
+}
+
 /** Top of the leaderboard for what's being driven right now, independent of challenges. */
 export function LeaderboardCard({ data }: { data: OverlayData }) {
   const box = useRef<HTMLDivElement>(null);
@@ -1091,6 +1126,7 @@ export function SectionWidgets({
           return wrap(g, <Tower data={data} orientation={orientationFor(anchor)} live={towerMode === "live"} />);
         }
         if (g === "qr") return wrap(g, <QrCard data={data} />);
+        if (g === "slip") return wrap(g, <SlipCard data={data} />);
         if (celebration) return wrap(g, <CelebrationView key={celebration.id} c={celebration} layout={orientationFor(anchor) === "horizontal" ? "pill" : "card"} />);
         const shown = toast ?? (preview ? MOCK_TOAST : null);
         return shown ? wrap(g, <ToastCard toast={shown} animate={!preview || shown !== MOCK_TOAST} />) : null;

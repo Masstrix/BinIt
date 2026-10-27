@@ -278,8 +278,8 @@ export interface LiveView {
   onTrack: boolean;
   /** Times the car has been reset (or a stage restarted) in this session. */
   resets: number;
-  /** What the slip angle says right now: "none", "drift" (12 degrees or more at speed) or "spin" (90 or more). */
-  slide: "none" | "drift" | "spin";
+  /** What the slip angle says right now: "none", "slide" (4 degrees or more), "drift" (12 or more at speed) or "spin" (90 or more). */
+  slide: "none" | "slide" | "drift" | "spin";
   /** What the driver has slid so far this lap. */
   slideStats: { drifts: number; spins: number; driftMs: number; longestMs: number; peakSlipDeg: number };
   currentLapMs: number;

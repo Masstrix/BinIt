@@ -28,6 +28,7 @@ import {
   GapTowerCard,
   LeaderboardCard,
   QrCard,
+  SlipCard,
   MOCK_DATA,
   type OverlayData,
   MOCK_TOAST,
@@ -710,6 +711,7 @@ function WidgetPreview({ w, data, styles }: { w: WidgetId; data: OverlayData; st
   // As a row, so the whole of it fits the tray's small preview whichever style it is in.
   if (w === "tower") return styleOf({ styles }, "tower") === "gaps" ? <GapMonitorCard data={data} orientation="horizontal" /> : <GapTowerCard data={data} orientation="horizontal" />;
   if (w === "qr") return <QrCard data={data} />;
+  if (w === "slip") return <SlipCard data={data} />;
   return <ToastCard toast={MOCK_TOAST} animate={false} />;
 }
 
