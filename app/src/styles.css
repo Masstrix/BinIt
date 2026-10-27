@@ -951,6 +951,8 @@ h2 { font-size: 22px; line-height: 1.2; }
 .aid-bar b { display: block; height: 100%; border-radius: 4px; background: var(--mint); transition: width 0.1s linear; }
 .aid-limiter { justify-self: start; }
 .la-aids { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+/* Slip and electronics at the point being read, under the sector times. */
+.la-live { display: flex; flex-direction: column; gap: 12px; padding: 14px 18px; }
 /* What each lap slid, under the charts. */
 .la-slides { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-2); padding: 14px 18px; }
 

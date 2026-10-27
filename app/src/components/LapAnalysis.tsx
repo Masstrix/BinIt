@@ -393,9 +393,8 @@ export function LapAnalysis({ lapId }: { lapId: number | null }) {
           {traceA === null ? (
             <div className="empty">This {w.lap} has no input recording (the game didn't send it, or it was recorded before Bin It kept them).</div>
           ) : (
-            <Traces a={a} b={other && traceB ? b : []} lapA={lap} lapB={other} nameA={name(lap.driverId)} nameB={other ? name(other.driverId) : ""} maxA={traceA ? traceA.aidsMax : null} maxB={other && traceB ? traceB.aidsMax : null} w={w} where={selected!}>
+            <Traces a={a} b={other && traceB ? b : []} lapA={lap} lapB={other} nameA={name(lap.driverId)} nameB={other ? name(other.driverId) : ""} maxA={traceA ? traceA.aidsMax : null} maxB={other && traceB ? traceB.aidsMax : null} w={w} where={selected!} after={slidesNote}>
               {sectorsCard}
-              {slidesNote}
             </Traces>
           )}
 
@@ -577,6 +576,7 @@ function Traces({
   w,
   where,
   children,
+  after,
 }: {
   a: Pt[];
   b: Pt[];
@@ -592,6 +592,8 @@ function Traces({
   where: { game: string; track: string; layout: string };
   /** More of the page (the sector times), shown above the dock so the dock stays the page's last thing. */
   children?: ReactNode;
+  /** What goes under those and the live cards, still above the dock (the sliding summary). */
+  after?: ReactNode;
 }) {
   const [a, b] = useMemo(() => fit(rawA, lapA.timeMs, rawB, lapB?.timeMs ?? 0), [rawA, rawB, lapA.timeMs, lapB?.timeMs]);
   const touch = useMemo(() => !!window.matchMedia?.("(pointer: coarse)").matches, []);
@@ -898,13 +900,6 @@ function Traces({
             />
           )}
         </div>
-        {hasSlip && <SlipDial a={atA ? atA.slip : null} b={hasB ? (atB ? atB.slip : null) : undefined} nameA={nameA} nameB={nameB} />}
-        {hasAids && (
-          <div className="la-aids" aria-label="Electronics at this point of the lap">
-            {aidsA && <ElectronicsGauges aids={aidsA} boost={refA ? refA.boost : null} tag={hasB ? { color: LAP_A, text: `This ${w.lap} · ${nameA}` } : undefined} />}
-            {hasB && aidsB && <ElectronicsGauges aids={aidsB} boost={refB ? refB.boost : null} tag={{ color: LAP_B, text: `Comparison · ${nameB}` }} />}
-          </div>
-        )}
         <span className="muted la-hint">
           {touch
             ? `Swipe sideways on the charts to move through the ${w.lap}. Pinch to zoom.`
@@ -1003,6 +998,23 @@ function Traces({
       </section>
 
       {children}
+
+      {/* How each car points against where it is going, and its electronics, at the point being read on the charts. Down
+          here under the sector times, so the charts and the map above keep the screen. */}
+      {(hasSlip || hasAids) && (
+        <section className="card la-live" aria-label="Slip and electronics at this point of the lap">
+          <span className="label">At the point you're reading</span>
+          {hasSlip && <SlipDial a={atA ? atA.slip : null} b={hasB ? (atB ? atB.slip : null) : undefined} nameA={nameA} nameB={nameB} />}
+          {hasAids && (
+            <div className="la-aids" aria-label="Electronics at this point of the lap">
+              {aidsA && <ElectronicsGauges aids={aidsA} boost={refA ? refA.boost : null} tag={hasB ? { color: LAP_A, text: `This ${w.lap} · ${nameA}` } : undefined} />}
+              {hasB && aidsB && <ElectronicsGauges aids={aidsB} boost={refB ? refB.boost : null} tag={{ color: LAP_B, text: `Comparison · ${nameB}` }} />}
+            </div>
+          )}
+        </section>
+      )}
+
+      {after}
 
       {/* The dock: replay controls, zoom and the timeline strip. It's the page's last element and sticks
           to the bottom of the screen, so it's in reach from the map, the charts and the sector times. */}
