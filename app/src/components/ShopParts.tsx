@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import type { Driver } from "../api";
 import { Eyes, Helmet, type HelmetMood } from "./Helmet";
 import { Coin } from "./Coin";
-import { DECALS, SHELLS, faceById, shellCss, type Look } from "../looks";
+import { DECALS, faceById, type Look } from "../looks";
+import { SHELL_FX } from "../shellFx";
 import type { Offer, Slot } from "../shopModel";
 
 /** Back button, the page's name and the coin count: what the Customize and Shop pages open with, as in the designs. */
@@ -58,8 +59,12 @@ export function DecalGlyph({ id, size = 28 }: { id: string; size?: number }) {
  */
 export function ItemArt({ slot, id, driver, size = 64 }: { slot: Slot; id: string | null; driver: Driver; size?: number }) {
   if (slot === "shell") {
-    const shell = SHELLS.find((s) => s.id === id);
-    return <span className="art-swatch" style={{ width: size, height: size, background: shellCss(shell?.stops ?? [driver.color, driver.color], shell?.stars) }} />;
+    // Every shell is shown on a bare helmet (no eyes or detail), so the grid reads as one set; Legendary ones move from 64px up.
+    return (
+      <span className="art-glyph art-shell" data-legendary={(id != null && !!SHELL_FX[id]) || undefined} style={{ width: size, height: size }}>
+        <Helmet color={driver.color} look={id ? { shell: id } : {}} size={Math.max(64, size)} tile={false} seed={driver.id} bare />
+      </span>
+    );
   }
   if (slot === "decal") {
     return (

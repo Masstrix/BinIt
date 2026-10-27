@@ -1465,8 +1465,8 @@ img.game-icon { object-fit: cover; display: inline-block; }
 .shop-back:hover { background: var(--panel-2); color: var(--text); }
 a.garage-coins { text-decoration: none; }
 .shop-customize { align-self: flex-start; text-decoration: none; }
-.art-swatch { display: block; border-radius: 20px; }
 .art-glyph { display: grid; place-items: center; border-radius: 16px; background: var(--panel-2); color: var(--text); font-size: 12px; }
+.art-shell[data-legendary] { background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--gold) 18%, var(--panel-2)), var(--panel-2) 70%); overflow: visible; }
 .garage-section { display: flex; flex-direction: column; gap: 12px; }
 .garage-section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
 .garage-section h2 { margin: 0; font: 700 16px var(--font-display); }

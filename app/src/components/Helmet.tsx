@@ -126,7 +126,7 @@ function useAmbientMood(base: HelmetMood, seed: string): HelmetMood {
  * The eyes are alive: they blink, glance about and pull faces, on a rhythm unique to `seed`
  * (pass the driver's id; it defaults to the colour).
  */
-export function Helmet({ color, size = 48, tile = true, mood = "idle", seed, round = false, look, moment = false }: { color: string; /** A one-off reaction (a level-up, a switch) that should show its own face instead of the driver's default. */ moment?: boolean; /** What is equipped (gradient shell, decal, stripe, number); without it the helmet is plain `color`. */ look?: Look; size?: number; tile?: boolean; mood?: HelmetMood; seed?: string | number; /** The tile is a circle instead of a rounded square. */ round?: boolean }) {
+export function Helmet({ color, size = 48, tile = true, mood = "idle", seed, round = false, look, moment = false, bare = false }: { color: string; /** Just the shell and visor: no eyes, vents or detail, for showing an item rather than a driver (the shell effects still play). */ bare?: boolean; /** A one-off reaction (a level-up, a switch) that should show its own face instead of the driver's default. */ moment?: boolean; /** What is equipped (gradient shell, decal, stripe, number); without it the helmet is plain `color`. */ look?: Look; size?: number; tile?: boolean; mood?: HelmetMood; seed?: string | number; /** The tile is a circle instead of a rounded square. */ round?: boolean }) {
   const key = String(seed ?? color);
   const { vars } = useMemo(() => personality(key), [key]);
   // The default face is the driver's own choice of how they look: it stands in for the resting and "in the seat"
@@ -186,16 +186,18 @@ export function Helmet({ color, size = 48, tile = true, mood = "idle", seed, rou
         </text>
       )}
       <path d="M24.2 14.8H44.4C45.6 17 46.3 19.6 46.6 22.6V26.2H25.4C22.8 26.2 21.4 24.4 21.8 22L22.6 17C22.8 15.6 23.4 14.8 24.2 14.8Z" fill="#0e1117" />
-      <circle cx="18" cy="20.6" r="1.6" fill="#0e1117" opacity="0.5" />
+      {!bare && <circle cx="18" cy="20.6" r="1.6" fill="#0e1117" opacity="0.5" />}
       <path d="M13 28C12.4 19.6 17 12.6 25.4 10.4" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" opacity="0.55" />
-      <path d="M36.6 32.4L43.6 33.5M37.2 35.2L42.6 36.1" stroke="#0e1117" strokeWidth="1.3" strokeLinecap="round" opacity="0.45" />
-      <g className="helmet-look" style={vars}>
-        <g key={face} className="helmet-pop">
-          <g className={blinks ? "helmet-blink" : undefined}>
-            <Eyes mood={face} />
+      {!bare && <path d="M36.6 32.4L43.6 33.5M37.2 35.2L42.6 36.1" stroke="#0e1117" strokeWidth="1.3" strokeLinecap="round" opacity="0.45" />}
+      {!bare && (
+        <g className="helmet-look" style={vars}>
+          <g key={face} className="helmet-pop">
+            <g className={blinks ? "helmet-blink" : undefined}>
+              <Eyes mood={face} />
+            </g>
           </g>
         </g>
-      </g>
+      )}
       {fx?.front}
     </svg>
   );

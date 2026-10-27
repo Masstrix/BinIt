@@ -114,7 +114,7 @@ function Workbench({ driver, shop, refresh }: { driver: Driver; shop: ShopState;
             <div className="garage-grid4">
               {mine("shell").map((o) => (
                 <button key={o.id} type="button" className="garage-pick" aria-pressed={look.shell === o.id} onClick={() => toggle(o)}>
-                  <ItemArt slot="shell" id={o.id} driver={driver} size={62} />
+                  <ItemArt slot="shell" id={o.id} driver={driver} size={64} />
                   <span>{o.name}</span>
                 </button>
               ))}
