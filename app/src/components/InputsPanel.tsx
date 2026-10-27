@@ -91,7 +91,7 @@ export function InputsPanel() {
                 <span className="label">YAW</span>
                 <span className="mono">{Math.round(inputs.dynamics.yawRateDps)}<small> °/s</small></span>
               </div>
-              {inputs.dynamics.turboBoost > 0.01 && (
+              {inputs.dynamics.turboBoost > 0.01 && !inputs.aids && (
                 <div className="inputs-stat">
                   <span className="label">BOOST</span>
                   <span className="mono">{inputs.dynamics.turboBoost.toFixed(2)}<small> bar</small></span>
