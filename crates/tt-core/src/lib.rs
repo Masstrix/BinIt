@@ -87,6 +87,45 @@ pub struct LiveInputs {
     pub rpm: u16,
     /// Heading, slip and turbo, when the game's physics page is read.
     pub dynamics: Option<LiveDynamics>,
+    /// The driver aids and brake balance, when the game gives them.
+    pub aids: Option<LiveAids>,
+}
+
+/// What the aids and brake balance are set to, and how far each goes (see `tt_games::Aids`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveAids {
+    pub tc_level: u8,
+    pub tc_max: u8,
+    pub abs_level: u8,
+    pub abs_max: u8,
+    pub brake_bias: f32,
+    pub bias_min: f32,
+    pub bias_max: f32,
+    pub diff_power_level: u8,
+    pub diff_power_max: u8,
+    pub diff_coast_level: u8,
+    pub diff_coast_max: u8,
+    pub pit_limiter: bool,
+}
+
+impl From<tt_games::Aids> for LiveAids {
+    fn from(a: tt_games::Aids) -> Self {
+        Self {
+            tc_level: a.tc_level,
+            tc_max: a.tc_max,
+            abs_level: a.abs_level,
+            abs_max: a.abs_max,
+            brake_bias: a.brake_bias,
+            bias_min: a.bias_min,
+            bias_max: a.bias_max,
+            diff_power_level: a.diff_power_level,
+            diff_power_max: a.diff_power_max,
+            diff_coast_level: a.diff_coast_level,
+            diff_coast_max: a.diff_coast_max,
+            pit_limiter: a.pit_limiter,
+        }
+    }
 }
 
 /// Drifts and spins over a lap (so far, or kept with the lap once it ends).
@@ -135,7 +174,7 @@ impl From<tt_games::dynamics::Dynamics> for LiveDynamics {
 
 impl From<tt_games::Inputs> for LiveInputs {
     fn from(i: tt_games::Inputs) -> Self {
-        Self { throttle: i.throttle, brake: i.brake, clutch: i.clutch, handbrake: i.handbrake, steering: i.steering, gear: i.gear, speed_kmh: i.speed_kmh, rpm: i.rpm, dynamics: i.dynamics.map(LiveDynamics::from) }
+        Self { throttle: i.throttle, brake: i.brake, clutch: i.clutch, handbrake: i.handbrake, steering: i.steering, gear: i.gear, speed_kmh: i.speed_kmh, rpm: i.rpm, dynamics: i.dynamics.map(LiveDynamics::from), aids: i.aids.map(LiveAids::from) }
     }
 }
 

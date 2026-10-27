@@ -83,6 +83,32 @@ pub fn inputs(g: &Graphics) -> crate::Inputs {
         rpm,
         dynamics: None,
         position: player_position(g),
+        aids: Some(aids(g)),
+    }
+}
+
+/// The driver aids and brake balance as they are set now, with the range of each: the electronics page's first block is
+/// the current setting, the second the minimum and the third the maximum. Only what has been seen to follow the car's
+/// menus is read (TC, ABS, brake bias, the two diff settings and the pit limiter).
+pub fn aids(g: &Graphics) -> crate::Aids {
+    let blocks = g.electronics_blocks();
+    let (now, min, max) = (blocks[0], blocks[1], blocks[2]);
+    let level = |v: i8| v.max(0) as u8;
+    // A page with nothing in it yet can hold anything: only a sensible share of the braking is taken.
+    let share = |v: f32| if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 };
+    crate::Aids {
+        tc_level: level(now.tc_level),
+        tc_max: level(max.tc_level),
+        abs_level: level(now.abs_level),
+        abs_max: level(max.abs_level),
+        brake_bias: share(now.brake_bias),
+        bias_min: share(min.brake_bias),
+        bias_max: share(max.brake_bias),
+        diff_power_level: level(now.diff_power_level),
+        diff_power_max: level(max.diff_power_level),
+        diff_coast_level: level(now.diff_coast_level),
+        diff_coast_max: level(max.diff_coast_level),
+        pit_limiter: now.is_pitlimiter_on != 0,
     }
 }
 
@@ -336,6 +362,12 @@ mod sample_tests {
         let i = sample_with(&blank(), Some(d)).inputs.expect("inputs");
         assert_eq!(i.dynamics, Some(d));
         assert_eq!(sample(&blank()).inputs.expect("inputs").dynamics, None, "no physics page, no dynamics");
+    }
+
+    #[test]
+    fn an_empty_page_has_every_aid_at_zero_and_the_sample_carries_them() {
+        assert_eq!(aids(&blank()), crate::Aids::default());
+        assert_eq!(sample(&blank()).inputs.expect("inputs").aids, Some(crate::Aids::default()));
     }
 }
 

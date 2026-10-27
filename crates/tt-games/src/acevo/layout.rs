@@ -248,6 +248,13 @@ impl Graphics {
         unsafe { std::mem::transmute::<[u32; 32], Electronics>(blocks[0]) }
     }
 
+    /// All four electronics blocks: what the car is set to now, then each setting's minimum, maximum and step.
+    pub fn electronics_blocks(&self) -> [Electronics; 4] {
+        let blocks = self.electronics;
+        // SAFETY: each block is 128 bytes of plain integers and floats, and every bit pattern is valid for `Electronics`.
+        unsafe { std::mem::transmute::<[[u32; 32]; 4], [Electronics; 4]>(blocks) }
+    }
+
     /// The four tyres: left front, right front, left rear, right rear.
     pub fn tyres_now(&self) -> [TyreState; 4] {
         let tyres = self.tyres;

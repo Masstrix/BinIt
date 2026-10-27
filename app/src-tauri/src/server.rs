@@ -506,8 +506,9 @@ async fn recent_laps(State(c): State<Ctx>, Query(q): Query<Limit>) -> ApiResult<
 }
 
 /// A lap's driver inputs as rows of `[progress, elapsedMs, speedKmh, throttle, brake, clutch, steering, gear, x, z,
-/// headingDeg, slipDeg]` (rounded for size; the last four are `null` when the game didn't give them), and what the
-/// driver drifted and spun (`slides`, or `null`). `null` when the lap has no trace.
+/// headingDeg, slipDeg, tcLevel, absLevel, brakeBias, diffPowerLevel, diffCoastLevel, pitLimiter, turboBoost]`
+/// (rounded for size; the last eleven are `null` when the game didn't give them), how far each aid goes on the car
+/// (`aidsMax`, or `null`), and what the driver drifted and spun (`slides`, or `null`). `null` when the lap has no trace.
 async fn lap_trace(State(c): State<Ctx>, Path(id): Path<LapId>) -> ApiResult<Option<serde_json::Value>> {
     let round = |v: f32, d: f32| (v * d).round() / d;
     Ok(Json(c.tt.lap_trace(id)?.map(|t| {
@@ -520,10 +521,20 @@ async fn lap_trace(State(c): State<Ctx>, Path(id): Path<LapId>) -> ApiResult<Opt
                     round(p.clutch, 100.0), round(p.steering, 100.0), p.gear,
                     p.position.map(|[x, _]| round(x, 10.0)), p.position.map(|[_, z]| round(z, 10.0)),
                     p.heading_deg.map(|a| round(a, 10.0)), p.slip_deg.map(|a| round(a, 10.0)),
+                    p.aids.map(|a| a.tc_level), p.aids.map(|a| a.abs_level), p.aids.map(|a| round(a.brake_bias, 1000.0)),
+                    p.aids.map(|a| a.diff_power_level), p.aids.map(|a| a.diff_coast_level), p.aids.map(|a| a.pit_limiter),
+                    p.boost.map(|b| round(b, 100.0)),
                 ])
             })
             .collect();
-        serde_json::json!({ "lapId": id, "points": rows, "slides": c.tt.lap_slides(id).ok().flatten() })
+        // How far each aid goes on this car: the same all lap, so sent once.
+        let aids_max = t.0.iter().find_map(|p| p.aids).map(|a| {
+            serde_json::json!({
+                "tcMax": a.tc_max, "absMax": a.abs_max, "diffPowerMax": a.diff_power_max, "diffCoastMax": a.diff_coast_max,
+                "biasMin": round(a.bias_min, 1000.0), "biasMax": round(a.bias_max, 1000.0),
+            })
+        });
+        serde_json::json!({ "lapId": id, "points": rows, "slides": c.tt.lap_slides(id).ok().flatten(), "aidsMax": aids_max })
     })))
 }
 

@@ -929,6 +929,31 @@ h2 { font-size: 22px; line-height: 1.2; }
 .trace-key { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); }
 .trace-key i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
 
+/* Two laps' charts of the same thing: each carries a stripe and a tag in its lap's colour. */
+.la-chart.tagged { border-left: 3px solid var(--tag); padding-left: 10px; }
+.la-tag { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; flex: 1; min-width: 0; margin-left: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.la-tag i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+/* The slip dial: each car's arrow against the direction of travel, beside its numbers. */
+.la-slip { display: flex; align-items: center; gap: 16px; padding: 8px 4px; }
+.la-slip svg { flex: none; }
+.la-slip-text { display: flex; flex-direction: column; gap: 3px; font-size: 13px; min-width: 0; }
+.la-slip-text .mono { font-weight: 700; margin-left: 4px; }
+/* The electronics gauges: each aid on its own range, one panel per car (or per lap). */
+.aids { display: grid; gap: 8px; padding: 10px 12px; border-radius: 16px; background: var(--bg); border: 1px solid var(--line); }
+.aid-tag { font-weight: 600; font-size: 12px; }
+.aid-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) 62px; align-items: center; gap: 10px; }
+.aid-value { font-size: 13px; font-weight: 700; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.aid-pips { display: flex; gap: 3px; }
+.aid-pips i { flex: 1; height: 10px; border-radius: 3px; background: var(--line); }
+.aid-pips i[data-on] { background: var(--peri-1); }
+.aid-bar { position: relative; height: 8px; border-radius: 4px; background: var(--line); }
+.aid-bar i { position: absolute; top: -3px; width: 6px; height: 14px; border-radius: 3px; background: var(--peach); transform: translateX(-50%); }
+.aid-bar b { display: block; height: 100%; border-radius: 4px; background: var(--mint); transition: width 0.1s linear; }
+.aid-limiter { justify-self: start; }
+.la-aids { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
+/* What each lap slid, under the charts. */
+.la-slides { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-2); padding: 14px 18px; }
+
 @media (max-width: 640px) {
   .inputs-top { grid-template-columns: auto 1fr 1fr; gap: 8px; }
   .inputs-gear { min-width: 64px; padding: 8px 12px; }

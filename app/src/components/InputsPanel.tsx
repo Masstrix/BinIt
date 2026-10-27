@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { LiveInputs } from "../api";
 import { useAppState } from "../api";
+import { ElectronicsGauges } from "./ElectronicsGauges";
 
 const WINDOW_MS = 10_000;
 const THROTTLE = "#4fd39a";
@@ -109,6 +110,12 @@ export function InputsPanel() {
                 </>
               )}
               {live.slideStats.spins > 0 && <>{live.slideStats.drifts > 0 ? " · " : ""}{live.slideStats.spins} {live.slideStats.spins === 1 ? "spin" : "spins"}</>}
+            </div>
+          )}
+
+          {inputs.aids && (
+            <div style={{ margin: "0 0 12px" }}>
+              <ElectronicsGauges aids={inputs.aids} boost={inputs.dynamics ? inputs.dynamics.turboBoost : null} />
             </div>
           )}
 
