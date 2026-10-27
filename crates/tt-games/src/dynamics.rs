@@ -154,7 +154,10 @@ impl SlideTracker {
         if self.state == Slide::Drift {
             self.stats.drift_ms += dt;
             self.current_ms += dt;
-            self.stats.peak_slip_deg = self.stats.peak_slip_deg.max(slip);
+            // A reading at spin angle belongs to the spin, not to the drift that led into it.
+            if slip < SPIN_SLIP_DEG {
+                self.stats.peak_slip_deg = self.stats.peak_slip_deg.max(slip);
+            }
         }
         match self.state {
             Slide::None => {
@@ -319,6 +322,7 @@ mod tests {
         // Below 60 degrees the spin is over, but 59 is still a hard slide, so it carries on as a drift.
         assert_eq!(states[4], Slide::Drift, "a spin ends below {SPIN_EXIT_DEG} degrees");
         assert_eq!(t.stats().spins, 1);
+        assert_eq!(t.stats().peak_slip_deg, 59.0, "a drift's peak stops short of the spin angle (95, 80 and 70 were the spin)");
         // The 30 degrees before the spin was one drift (the spin ended it); the slide after the spin is another.
         assert_eq!(t.stats().drifts, 2);
         // Held under the exit angle long enough, it is over.

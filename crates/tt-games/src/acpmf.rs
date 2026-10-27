@@ -131,6 +131,7 @@ pub fn inputs(p: &Physics) -> crate::Inputs {
         rpm: p.rpm.clamp(0, u16::MAX as i32) as u16,
         // Heading and slip are only trusted for AC EVO so far; the layout is the same family's, but unchecked here.
         dynamics: None,
+        position: None,
     }
 }
 

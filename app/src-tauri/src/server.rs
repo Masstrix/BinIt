@@ -505,17 +505,25 @@ async fn recent_laps(State(c): State<Ctx>, Query(q): Query<Limit>) -> ApiResult<
     Ok(Json(c.tt.recent_laps(q.limit.unwrap_or(20).min(200))?))
 }
 
-/// A lap's driver inputs as rows of `[progress, elapsedMs, speedKmh, throttle, brake, clutch, steering, gear]`
-/// (rounded for size), or `null` when the lap has none.
+/// A lap's driver inputs as rows of `[progress, elapsedMs, speedKmh, throttle, brake, clutch, steering, gear, x, z,
+/// headingDeg, slipDeg]` (rounded for size; the last four are `null` when the game didn't give them), and what the
+/// driver drifted and spun (`slides`, or `null`). `null` when the lap has no trace.
 async fn lap_trace(State(c): State<Ctx>, Path(id): Path<LapId>) -> ApiResult<Option<serde_json::Value>> {
     let round = |v: f32, d: f32| (v * d).round() / d;
     Ok(Json(c.tt.lap_trace(id)?.map(|t| {
         let rows: Vec<serde_json::Value> = t
             .0
             .iter()
-            .map(|p| serde_json::json!([round(p.progress, 10000.0), p.elapsed_ms, round(p.speed_kmh, 10.0), round(p.throttle, 100.0), round(p.brake, 100.0), round(p.clutch, 100.0), round(p.steering, 100.0), p.gear]))
+            .map(|p| {
+                serde_json::json!([
+                    round(p.progress, 10000.0), p.elapsed_ms, round(p.speed_kmh, 10.0), round(p.throttle, 100.0), round(p.brake, 100.0),
+                    round(p.clutch, 100.0), round(p.steering, 100.0), p.gear,
+                    p.position.map(|[x, _]| round(x, 10.0)), p.position.map(|[_, z]| round(z, 10.0)),
+                    p.heading_deg.map(|a| round(a, 10.0)), p.slip_deg.map(|a| round(a, 10.0)),
+                ])
+            })
             .collect();
-        serde_json::json!({ "lapId": id, "points": rows })
+        serde_json::json!({ "lapId": id, "points": rows, "slides": c.tt.lap_slides(id).ok().flatten() })
     })))
 }
 

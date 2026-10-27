@@ -252,6 +252,21 @@ export interface LiveDynamics {
   turboBoost: number;
 }
 
+/**
+ * One sample of a lap's trace: progress, elapsed ms, speed km/h, throttle, brake, clutch, steering, gear, then the car's
+ * world position x and z (metres), heading and slip (degrees). The last four are null when the game didn't give them.
+ */
+export type TraceRow = [number, number, number, number, number, number, number, number, number | null, number | null, number | null, number | null];
+
+/** What a driver drifted and spun over a lap; a lap with none has no entry. */
+export interface LapSlides {
+  drifts: number;
+  spins: number;
+  driftMs: number;
+  longestMs: number;
+  peakSlipDeg: number;
+}
+
 export type OverlayShow = "always" | "drivingPaused" | "driving";
 export type GamePhase = "menu" | "driving" | "paused" | "replay";
 
@@ -538,7 +553,7 @@ export const api = {
   combos: (game?: string) => request<Combo[]>("GET", `/combos${game ? `?game=${encodeURIComponent(game)}` : ""}`),
   catalogue: (game: string) => request<Catalogue>("GET", `/catalogue?game=${encodeURIComponent(game)}`),
   /** Rows of [progress, elapsedMs, speedKmh, throttle, brake, clutch, steering, gear], or null. */
-  lapTrace: (lapId: number) => request<{ lapId: number; points: number[][] } | null>("GET", `/laps/${lapId}/trace`),
+  lapTrace: (lapId: number) => request<{ lapId: number; points: TraceRow[]; slides: LapSlides | null } | null>("GET", `/laps/${lapId}/trace`),
   /** Version, data folder and database counts. Desktop app only. */
   about: () => request<About>("GET", "/admin/about"),
   /** Dev builds only: every page of a game's shared memory, whole, with the fields Bin It knows. */

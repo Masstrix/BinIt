@@ -82,6 +82,7 @@ pub fn inputs(g: &Graphics) -> crate::Inputs {
         speed_kmh: speed as f32,
         rpm,
         dynamics: None,
+        position: player_position(g),
     }
 }
 

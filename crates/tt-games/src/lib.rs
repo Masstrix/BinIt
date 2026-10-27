@@ -166,6 +166,8 @@ pub struct Inputs {
     pub rpm: u16,
     /// Heading, slip, yaw rate and turbo, for games whose physics page has been checked (AC EVO so far).
     pub dynamics: Option<dynamics::Dynamics>,
+    /// Where the car is in the world, metres (x, z), when the game says.
+    pub position: Option<[f32; 2]>,
 }
 
 /// What the game is doing, as far as the player can tell.

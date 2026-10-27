@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { api, useAppState, useFetch, useTrackMaps, type Driver, type Lap } from "../api";
+import { api, useAppState, useFetch, useTrackMaps, type Driver, type Lap, type LapSlides, type TraceRow } from "../api";
 import { findMap } from "../catalogueItems";
 import { usePersistedState } from "../persist";
 import { ago, carName, lapKind, lapTime } from "../format";
@@ -42,7 +42,15 @@ interface LapInfo {
  * lap; samples from before the line (still reading ~100% from the previous lap) or glitches that
  * step backwards are dropped.
  */
-function parseTrace(rows: number[][] | undefined): Pt[] {
+/** "3 drifts · 12.4 s (longest 5.1 s, up to 34°) · 1 spin" */
+function slidesText(s: LapSlides): string {
+  const parts: string[] = [];
+  if (s.drifts > 0) parts.push(`${s.drifts} ${s.drifts === 1 ? "drift" : "drifts"} · ${(s.driftMs / 1000).toFixed(1)} s (longest ${(s.longestMs / 1000).toFixed(1)} s, up to ${Math.round(s.peakSlipDeg)}°)`);
+  if (s.spins > 0) parts.push(`${s.spins} ${s.spins === 1 ? "spin" : "spins"}`);
+  return parts.join(" · ");
+}
+
+function parseTrace(rows: TraceRow[] | undefined): Pt[] {
   if (!rows) return [];
   const out: Pt[] = [];
   let max = -1;
@@ -328,6 +336,13 @@ export function LapAnalysis({ lapId }: { lapId: number | null }) {
               onLap={(v) => cmp && setCompare({ pair: cmp.pair, lap: v === "best" ? "best" : Number(v) })}
             />
           </section>
+
+          {(traceA?.slides || (other && traceB?.slides)) && (
+            <div className="muted" style={{ fontSize: 13, margin: "4px 2px 12px", display: "grid", gap: 2 }} aria-label="Sliding">
+              {traceA?.slides && <span><b style={{ color: LAP_A }}>●</b> {slidesText(traceA.slides)}</span>}
+              {other && traceB?.slides && <span><b style={{ color: LAP_B }}>●</b> {slidesText(traceB.slides)}</span>}
+            </div>
+          )}
 
           {traceA === null ? (
             <div className="empty">This {w.lap} has no input recording (the game didn't send it, or it was recorded before Bin It kept them).</div>

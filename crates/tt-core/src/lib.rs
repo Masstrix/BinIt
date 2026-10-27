@@ -15,7 +15,7 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, bail};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tt_games::timing::even_boundaries;
 use tt_games::{CompletedLap, GameEvent, GameId, LiveState, SessionInfo, TimingKind, UntimedReason};
@@ -89,8 +89,8 @@ pub struct LiveInputs {
     pub dynamics: Option<LiveDynamics>,
 }
 
-/// Drifts and spins so far this lap.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Default)]
+/// Drifts and spins over a lap (so far, or kept with the lap once it ends).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct LiveSlideStats {
     pub drifts: u32,
@@ -98,6 +98,13 @@ pub struct LiveSlideStats {
     pub drift_ms: u64,
     pub longest_ms: u64,
     pub peak_slip_deg: f32,
+}
+
+impl LiveSlideStats {
+    /// Whether there is anything to keep: a lap with no drifting or spinning stores nothing.
+    pub fn any(&self) -> bool {
+        self.drifts > 0 || self.spins > 0
+    }
 }
 
 impl From<tt_games::dynamics::SlideStats> for LiveSlideStats {
@@ -203,6 +210,8 @@ struct Runtime {
     resets: u32,
     /// Drifts and spins, with this lap's totals.
     slides: tt_games::dynamics::SlideTracker,
+    /// The totals of the lap that ended as the car crossed the line, until its result arrives.
+    wrap_slides: Option<LiveSlideStats>,
 }
 
 /// Where the catalogue looks for extra names. Set by the host app.
@@ -642,6 +651,11 @@ impl BinIt {
 
     // ---- laps ----------------------------------------------------------------
 
+    /// What a lap's driver drifted and spun, if they did.
+    pub fn lap_slides(&self, id: LapId) -> Result<Option<LiveSlideStats>> {
+        Ok(self.store().lap_slides(id)?.and_then(|json| serde_json::from_str(&json).ok()))
+    }
+
     /// The throttle / brake / steering / gear trace of a lap, if it was recorded.
     pub fn lap_trace(&self, id: LapId) -> Result<Option<tt_games::timing::LapTrace>> {
         self.store().lap_trace(id)
@@ -829,11 +843,11 @@ impl BinIt {
     }
 
     fn record_lap_at(&self, completed: &CompletedLap, now: Timestamp) -> Result<LapResult> {
-        self.record_lap_for(completed, now, None)
+        self.record_lap_for(completed, now, None, None)
     }
 
     /// `driver` names who drove it when that is known (`Some(None)` = a guest); otherwise it is whoever is in the seat.
-    fn record_lap_for(&self, completed: &CompletedLap, now: Timestamp, driver: Option<Option<DriverId>>) -> Result<LapResult> {
+    fn record_lap_for(&self, completed: &CompletedLap, now: Timestamp, driver: Option<Option<DriverId>>, slides: Option<LiveSlideStats>) -> Result<LapResult> {
         let combo = combo_of(&completed.session);
         let driver_id = match driver {
             Some(d) => d,
@@ -868,6 +882,9 @@ impl BinIt {
             recorded_at: now,
         };
         lap.id = store.insert_lap(&lap, completed.profile.as_ref(), completed.trace.as_ref())?;
+        if let Some(slides) = slides.filter(LiveSlideStats::any) {
+            store.set_lap_slides(lap.id, &serde_json::to_string(&slides)?)?;
+        }
 
         // Purple / green / yellow per sector, against every other valid lap on this combo.
         let sector_status = if lap.valid || completed.untimed == Some(UntimedReason::Cut) {
@@ -1051,7 +1068,7 @@ impl BinIt {
                 self.emit(AppEvent::Session { session: Some(view) });
             }
             GameEvent::LapCompleted(mut lap) => {
-                let (changed, driver) = {
+                let (changed, driver, slides) = {
                     let mut rt = self.runtime.lock().expect("runtime mutex poisoned");
                     // The lap's result can arrive a moment after the car crossed the line: by then a new
                     // lap has begun, and a swap made in that gap belongs to the new lap, not this one.
@@ -1062,14 +1079,15 @@ impl BinIt {
                         rt.wrap_waiting = false;
                         rt.void_pending = false;
                         rt.wrap_driver = None;
+                        rt.wrap_slides = None;
                     }
                     if std::mem::take(&mut rt.wrap_waiting) {
-                        (std::mem::take(&mut rt.void_pending), rt.wrap_driver.take())
+                        (std::mem::take(&mut rt.void_pending), rt.wrap_driver.take(), rt.wrap_slides.take())
                     } else {
                         // The result came first: the car is still just short of the line in the live readings,
                         // and the crossing they are about to show is this lap's, not a new one to wait on.
                         rt.wrap_skip = rt.last_progress > 0.9;
-                        (std::mem::take(&mut rt.lap_driver_changed), None)
+                        (std::mem::take(&mut rt.lap_driver_changed), None, Some(LiveSlideStats::from(rt.slides.stats())))
                     }
                 };
                 // Only a lap that would have counted (or been a failed attempt) needs voiding; out, in and
@@ -1082,7 +1100,7 @@ impl BinIt {
                 }
                 self.learn_map(&lap)?;
                 // The lap belongs to whoever was driving as it ended, even if the seat changed hands since.
-                self.record_lap_for(&lap, now_ms(), driver)?;
+                self.record_lap_for(&lap, now_ms(), driver, slides)?;
             }
             GameEvent::Live(LiveState { driving, phase, current_lap_ms, lap_valid, out_lap, lap_progress, position, inputs }) => {
                 let mut crossed = false;
@@ -1104,6 +1122,7 @@ impl BinIt {
                     rt.resets += 1;
                     rt.slides = Default::default();
                 }
+                let lap_slides: LiveSlideStats = rt.slides.stats().into();
                 if crossing {
                     rt.slides.reset_stats();
                 }
@@ -1123,6 +1142,7 @@ impl BinIt {
                     } else {
                         rt.void_pending = std::mem::take(&mut rt.lap_driver_changed);
                         rt.wrap_waiting = true;
+                        rt.wrap_slides = Some(lap_slides);
                         crossed = true;
                     }
                 }

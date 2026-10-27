@@ -51,7 +51,7 @@ export function InputsPanel() {
         <h2>Inputs</h2>
         {live?.slide && live.slide !== "none" && inputs?.dynamics ? (
           <span className="chip plain mono" role="status" style={{ background: live.slide === "spin" ? "rgba(255,107,138,0.18)" : "rgba(255,159,107,0.18)", color: live.slide === "spin" ? "#ff7a92" : "var(--peach)", fontSize: 15 }}>
-            {live.slide === "spin" ? "SPIN" : "DRIFT"} {Math.abs(inputs.dynamics.slipDeg).toFixed(0)}°
+            {live.slide === "spin" ? "SPIN" : "DRIFT"} {Math.abs(inputs.dynamics.slipDeg).toFixed(0)}Â°
           </span>
         ) : (
           <span className="muted" style={{ fontSize: 13 }}>last 10 seconds</span>
@@ -82,13 +82,13 @@ export function InputsPanel() {
               <div className="inputs-stat">
                 <span className="label">SLIP</span>
                 <span className="mono">
-                  {Math.abs(inputs.dynamics.slipDeg).toFixed(0)}<small>°</small>
+                  {Math.abs(inputs.dynamics.slipDeg).toFixed(0)}<small>Â°</small>
                   {live?.slide && live.slide !== "none" && <small style={{ marginLeft: 6, color: live.slide === "spin" ? "var(--red, #ff7a92)" : "var(--peach)" }}>{live.slide === "spin" ? "spin" : "drift"}</small>}
                 </span>
               </div>
               <div className="inputs-stat">
                 <span className="label">YAW</span>
-                <span className="mono">{Math.round(inputs.dynamics.yawRateDps)}<small> °/s</small></span>
+                <span className="mono">{Math.round(inputs.dynamics.yawRateDps)}<small> Â°/s</small></span>
               </div>
               {inputs.dynamics.turboBoost > 0.01 && (
                 <div className="inputs-stat">
@@ -104,11 +104,11 @@ export function InputsPanel() {
               This lap:{" "}
               {live.slideStats.drifts > 0 && (
                 <>
-                  {live.slideStats.drifts} {live.slideStats.drifts === 1 ? "drift" : "drifts"} · {(live.slideStats.driftMs / 1000).toFixed(1)} s
-                  {" "}(longest {(live.slideStats.longestMs / 1000).toFixed(1)} s, up to {Math.round(live.slideStats.peakSlipDeg)}°)
+                  {live.slideStats.drifts} {live.slideStats.drifts === 1 ? "drift" : "drifts"} Â· {(live.slideStats.driftMs / 1000).toFixed(1)} s
+                  {" "}(longest {(live.slideStats.longestMs / 1000).toFixed(1)} s, up to {Math.round(live.slideStats.peakSlipDeg)}Â°)
                 </>
               )}
-              {live.slideStats.spins > 0 && <>{live.slideStats.drifts > 0 ? " · " : ""}{live.slideStats.spins} {live.slideStats.spins === 1 ? "spin" : "spins"}</>}
+              {live.slideStats.spins > 0 && <>{live.slideStats.drifts > 0 ? " Â· " : ""}{live.slideStats.spins} {live.slideStats.spins === 1 ? "spin" : "spins"}</>}
             </div>
           )}
 
