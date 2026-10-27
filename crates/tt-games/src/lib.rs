@@ -11,6 +11,7 @@ pub mod acpmf;
 pub mod acr;
 pub mod catalogue;
 pub mod dr2;
+pub mod dynamics;
 pub mod stage;
 pub mod timing;
 mod process;
@@ -163,6 +164,8 @@ pub struct Inputs {
     pub gear: i16,
     pub speed_kmh: f32,
     pub rpm: u16,
+    /// Heading, slip, yaw rate and turbo, for games whose physics page has been checked (AC EVO so far).
+    pub dynamics: Option<dynamics::Dynamics>,
 }
 
 /// What the game is doing, as far as the player can tell.

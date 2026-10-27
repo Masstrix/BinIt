@@ -235,6 +235,21 @@ export interface LiveInputs {
   gear: number;
   speedKmh: number;
   rpm: number;
+  /** Heading, slip and turbo; null when the game's physics isn't read (AC EVO only so far). */
+  dynamics: LiveDynamics | null;
+}
+
+/** How the car moves compared with where it points. Slip is heading minus direction of travel, degrees. */
+export interface LiveDynamics {
+  headingDeg: number;
+  slipDeg: number;
+  yawRateDps: number;
+  pitchDeg: number;
+  rollDeg: number;
+  gX: number;
+  gZ: number;
+  /** Bar; 0 for a car without a turbo. */
+  turboBoost: number;
 }
 
 export type OverlayShow = "always" | "drivingPaused" | "driving";
@@ -248,6 +263,8 @@ export interface LiveView {
   onTrack: boolean;
   /** Times the car has been reset (or a stage restarted) in this session. */
   resets: number;
+  /** What the slip angle says right now: "none", "drift" (12 degrees or more at speed) or "spin" (90 or more). */
+  slide: "none" | "drift" | "spin";
   currentLapMs: number;
   lapValid: boolean;
   /** From the pits or a spawn point: not a timed attempt. */

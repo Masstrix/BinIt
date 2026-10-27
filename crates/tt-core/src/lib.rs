@@ -85,11 +85,33 @@ pub struct LiveInputs {
     pub gear: i16,
     pub speed_kmh: f32,
     pub rpm: u16,
+    /// Heading, slip and turbo, when the game's physics page is read.
+    pub dynamics: Option<LiveDynamics>,
+}
+
+/// How the car is moving compared with where it points (see `tt_games::dynamics`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveDynamics {
+    pub heading_deg: f32,
+    pub slip_deg: f32,
+    pub yaw_rate_dps: f32,
+    pub pitch_deg: f32,
+    pub roll_deg: f32,
+    pub g_x: f32,
+    pub g_z: f32,
+    pub turbo_boost: f32,
+}
+
+impl From<tt_games::dynamics::Dynamics> for LiveDynamics {
+    fn from(d: tt_games::dynamics::Dynamics) -> Self {
+        Self { heading_deg: d.heading_deg, slip_deg: d.slip_deg, yaw_rate_dps: d.yaw_rate_dps, pitch_deg: d.pitch_deg, roll_deg: d.roll_deg, g_x: d.g_x, g_z: d.g_z, turbo_boost: d.turbo_boost }
+    }
 }
 
 impl From<tt_games::Inputs> for LiveInputs {
     fn from(i: tt_games::Inputs) -> Self {
-        Self { throttle: i.throttle, brake: i.brake, clutch: i.clutch, handbrake: i.handbrake, steering: i.steering, gear: i.gear, speed_kmh: i.speed_kmh, rpm: i.rpm }
+        Self { throttle: i.throttle, brake: i.brake, clutch: i.clutch, handbrake: i.handbrake, steering: i.steering, gear: i.gear, speed_kmh: i.speed_kmh, rpm: i.rpm, dynamics: i.dynamics.map(LiveDynamics::from) }
     }
 }
 
@@ -104,6 +126,8 @@ pub struct LiveView {
     pub on_track: bool,
     /// How many times the car has been reset (or the stage restarted) in this session.
     pub resets: u32,
+    /// "none", "drift" or "spin": what the car's slip angle says right now (instant, not yet debounced).
+    pub slide: &'static str,
     pub current_lap_ms: u32,
     pub lap_valid: bool,
     pub out_lap: bool,
@@ -1081,7 +1105,7 @@ impl BinIt {
                 rt.last_out_lap = out_lap;
                 let changed = rt.lap_driver_changed && !out_lap;
                 let lap_valid = lap_valid && !changed;
-                let live = LiveView { driving, phase: phase.key(), on_track: matches!(phase, tt_games::GamePhase::Driving | tt_games::GamePhase::Paused), resets: rt.resets, current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
+                let live = LiveView { driving, phase: phase.key(), on_track: matches!(phase, tt_games::GamePhase::Driving | tt_games::GamePhase::Paused), resets: rt.resets, slide: inputs.and_then(|i| i.dynamics.map(|d| d.slide(i.speed_kmh))).unwrap_or_default().key(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
                 rt.live = Some(live.clone());
                 drop(rt);
                 if crossed {

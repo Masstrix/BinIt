@@ -71,6 +71,28 @@ export function InputsPanel() {
             </div>
           </div>
 
+          {inputs.dynamics && (
+            <div className="inputs-top" aria-label="How the car is sliding">
+              <div className="inputs-stat">
+                <span className="label">SLIP</span>
+                <span className="mono">
+                  {Math.abs(inputs.dynamics.slipDeg).toFixed(0)}<small>°</small>
+                  {live?.slide && live.slide !== "none" && <small style={{ marginLeft: 6, color: live.slide === "spin" ? "var(--red, #ff7a92)" : "var(--peach)" }}>{live.slide === "spin" ? "spin" : "drift"}</small>}
+                </span>
+              </div>
+              <div className="inputs-stat">
+                <span className="label">YAW</span>
+                <span className="mono">{Math.round(inputs.dynamics.yawRateDps)}<small> °/s</small></span>
+              </div>
+              {inputs.dynamics.turboBoost > 0.01 && (
+                <div className="inputs-stat">
+                  <span className="label">BOOST</span>
+                  <span className="mono">{inputs.dynamics.turboBoost.toFixed(2)}<small> bar</small></span>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="pedals">
             {(
               [

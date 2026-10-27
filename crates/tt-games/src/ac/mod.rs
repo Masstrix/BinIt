@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn inputs_are_clamped_into_their_ranges() {
-        let p = Physics { gas: 1.4, brake: -0.2, clutch: 0.25, gear: 4, rpm: 70_000, steer_angle: -3.0, speed_kmh: -1.0, tyres_out: 0 };
+        let p = Physics { gas: 1.4, brake: -0.2, clutch: 0.25, gear: 4, rpm: 70_000, steer_angle: -3.0, speed_kmh: -1.0, tyres_out: 0, ..Physics::default() };
         let i = inputs(&p);
         assert_eq!((i.throttle, i.brake, i.clutch, i.steering), (1.0, 0.0, 0.75, -1.0));
         assert_eq!((i.gear, i.rpm, i.speed_kmh), (3, u16::MAX, 0.0));

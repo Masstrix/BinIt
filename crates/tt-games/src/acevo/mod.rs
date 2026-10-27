@@ -1,8 +1,9 @@
 //! Assetto Corsa EVO adapter.
 //!
 //! Reads the game's official shared memory (`Local\acevo_pmf_*`). Only the `graphics`
-//! (per-frame HUD data) and `static` (per-session) pages are used; the 333 Hz physics
-//! page is never opened. Polling at 20 Hz copies ~8 KB per tick: microseconds of work.
+//! (per-frame HUD data) and `static` (per-session) pages are used, plus the first few hundred bytes of the
+//! 333 Hz physics page for the car's heading, slip and turbo. Polling at 20 Hz copies ~9 KB per tick:
+//! microseconds of work.
 
 pub mod documents;
 pub mod layout;
@@ -80,6 +81,7 @@ pub fn inputs(g: &Graphics) -> crate::Inputs {
         gear,
         speed_kmh: speed as f32,
         rpm,
+        dynamics: None,
     }
 }
 
@@ -104,13 +106,16 @@ mod connection {
     use anyhow::{Result, bail};
 
     use super::layout::{Graphics, Static, c_str};
-    use super::{GRAPHICS_PAGE, STATIC_PAGE};
+    use super::{GRAPHICS_PAGE, PHYSICS_PAGE, STATIC_PAGE};
+    use crate::acpmf::{self, Physics};
     use crate::shm::SharedMemory;
 
-    /// Open handles to the two pages we read.
+    /// Open handles to the pages we read. The physics page is optional: without it everything but heading and
+    /// slip still works.
     pub struct Connection {
         graphics: SharedMemory,
         statics: SharedMemory,
+        physics: Option<SharedMemory>,
     }
 
     impl Connection {
@@ -134,7 +139,8 @@ mod connection {
                     size_of::<Graphics>()
                 );
             }
-            Ok(Self { graphics, statics })
+            let physics = SharedMemory::open(PHYSICS_PAGE).ok().filter(|p| p.region_size() >= acpmf::physics::NEEDED);
+            Ok(Self { graphics, statics, physics })
         }
 
         /// Reads the graphics page, retrying if the game was mid-write.
@@ -148,6 +154,11 @@ mod connection {
                 g = self.graphics.read().expect("size checked on open");
             }
             g
+        }
+
+        /// The car's motion from the physics page, when the game publishes one.
+        pub fn read_physics(&self) -> Option<Physics> {
+            self.physics.as_ref().map(|p| Physics::parse(&p.bytes(acpmf::physics::NEEDED)))
         }
 
         pub fn read_static(&self) -> Static {
@@ -293,7 +304,10 @@ impl GameAdapter for AcEvoAdapter {
                 out_lap: self.tracker.on_out_lap(),
                 lap_progress: g.npos.clamp(0.0, 1.0),
                 position: player_position(&g),
-                inputs: Some(inputs(&g)),
+                inputs: Some(crate::Inputs {
+                    dynamics: conn.read_physics().map(|p| crate::dynamics::Dynamics::from_physics(&p)),
+                    ..inputs(&g)
+                }),
             }));
         }
 

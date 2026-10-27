@@ -21,6 +21,11 @@ impl Page<'_> {
         self.0.get(at..at + 4).map(|b| i32::from_le_bytes(b.try_into().expect("4 bytes")))
     }
 
+    /// Three floats in a row; missing ones read as zero.
+    pub fn f32x3(&self, at: usize) -> [f32; 3] {
+        [0, 4, 8].map(|i| self.f32(at + i).unwrap_or(0.0))
+    }
+
     pub fn f32(&self, at: usize) -> Option<f32> {
         self.0.get(at..at + 4).map(|b| f32::from_le_bytes(b.try_into().expect("4 bytes")))
     }
@@ -42,6 +47,18 @@ pub mod physics {
     pub const RPM: usize = 20;
     pub const STEER_ANGLE: usize = 24;
     pub const SPEED_KMH: usize = 28;
+    /// The car's velocity in world axes (three floats, m/s).
+    pub const VELOCITY: usize = 32;
+    /// G-forces on the car (three floats).
+    pub const ACC_G: usize = 44;
+    /// The car's yaw, in radians (-pi..pi). Pitch and roll follow it.
+    pub const HEADING: usize = 208;
+    pub const PITCH: usize = 212;
+    pub const ROLL: usize = 216;
+    /// Turbo boost, in bar.
+    pub const TURBO_BOOST: usize = 276;
+    /// Angular velocity in the car's own axes (three floats, rad/s); the second is the yaw rate.
+    pub const LOCAL_ANGULAR_VELOCITY: usize = 296;
     /// How many tyres are outside the track limits right now (0 to 4). Not every game fills it in.
     pub const TYRES_OUT: usize = 244;
     /// 1.0 with the pedal released, 0.0 pressed.
@@ -62,6 +79,13 @@ pub struct Physics {
     pub steer_angle: f32,
     pub speed_kmh: f32,
     pub tyres_out: i32,
+    pub velocity: [f32; 3],
+    pub acc_g: [f32; 3],
+    pub heading: f32,
+    pub pitch: f32,
+    pub roll: f32,
+    pub turbo_boost: f32,
+    pub local_angular_velocity: [f32; 3],
 }
 
 impl Physics {
@@ -76,6 +100,13 @@ impl Physics {
             steer_angle: p.f32(physics::STEER_ANGLE).unwrap_or(0.0),
             speed_kmh: p.f32(physics::SPEED_KMH).unwrap_or(0.0),
             tyres_out: p.i32(physics::TYRES_OUT).unwrap_or(0),
+            velocity: p.f32x3(physics::VELOCITY),
+            acc_g: p.f32x3(physics::ACC_G),
+            heading: p.f32(physics::HEADING).unwrap_or(0.0),
+            pitch: p.f32(physics::PITCH).unwrap_or(0.0),
+            roll: p.f32(physics::ROLL).unwrap_or(0.0),
+            turbo_boost: p.f32(physics::TURBO_BOOST).unwrap_or(0.0),
+            local_angular_velocity: p.f32x3(physics::LOCAL_ANGULAR_VELOCITY),
         }
     }
 }
@@ -98,6 +129,8 @@ pub fn inputs(p: &Physics) -> crate::Inputs {
         gear: display_gear(p.gear),
         speed_kmh: p.speed_kmh.max(0.0),
         rpm: p.rpm.clamp(0, u16::MAX as i32) as u16,
+        // Heading and slip are only trusted for AC EVO so far; the layout is the same family's, but unchecked here.
+        dynamics: None,
     }
 }
 
