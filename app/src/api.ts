@@ -265,6 +265,8 @@ export interface LiveView {
   resets: number;
   /** What the slip angle says right now: "none", "drift" (12 degrees or more at speed) or "spin" (90 or more). */
   slide: "none" | "drift" | "spin";
+  /** What the driver has slid so far this lap. */
+  slideStats: { drifts: number; spins: number; driftMs: number; longestMs: number; peakSlipDeg: number };
   currentLapMs: number;
   lapValid: boolean;
   /** From the pits or a spawn point: not a timed attempt. */

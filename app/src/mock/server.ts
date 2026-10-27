@@ -65,7 +65,7 @@ function liveView(): LiveView {
   const corner = Math.sin(p * Math.PI * 2 * 9);
   const sector = p < 0.31 ? 0 : p < 0.7 ? 1 : 2;
   return {
-    driving: true, phase: "driving", onTrack: true, resets: 0, slide: "none", currentLapMs: ms, lapValid: true, outLap: false, voidReason: null, lapProgress: p,
+    driving: true, phase: "driving", onTrack: true, resets: 0, slide: "none", slideStats: { drifts: 0, spins: 0, driftMs: 0, longestMs: 0, peakSlipDeg: 0 }, currentLapMs: ms, lapValid: true, outLap: false, voidReason: null, lapProgress: p,
     position: [pt[0], pt[1]],
     inputs: {
       throttle: corner > -0.4 ? 1 : 0.2, brake: corner < -0.6 ? 0.8 : 0, clutch: 0, handbrake: 0, steering: Math.sin(p * Math.PI * 2 * 9 + 1) * 0.5,

@@ -89,6 +89,23 @@ pub struct LiveInputs {
     pub dynamics: Option<LiveDynamics>,
 }
 
+/// Drifts and spins so far this lap.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveSlideStats {
+    pub drifts: u32,
+    pub spins: u32,
+    pub drift_ms: u64,
+    pub longest_ms: u64,
+    pub peak_slip_deg: f32,
+}
+
+impl From<tt_games::dynamics::SlideStats> for LiveSlideStats {
+    fn from(s: tt_games::dynamics::SlideStats) -> Self {
+        Self { drifts: s.drifts, spins: s.spins, drift_ms: s.drift_ms, longest_ms: s.longest_ms, peak_slip_deg: s.peak_slip_deg }
+    }
+}
+
 /// How the car is moving compared with where it points (see `tt_games::dynamics`).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -126,8 +143,10 @@ pub struct LiveView {
     pub on_track: bool,
     /// How many times the car has been reset (or the stage restarted) in this session.
     pub resets: u32,
-    /// "none", "drift" or "spin": what the car's slip angle says right now (instant, not yet debounced).
+    /// "none", "drift" or "spin": steady, not the flicker of single readings (see `tt_games::dynamics::SlideTracker`).
     pub slide: &'static str,
+    /// What the driver has slid so far this lap.
+    pub slide_stats: LiveSlideStats,
     pub current_lap_ms: u32,
     pub lap_valid: bool,
     pub out_lap: bool,
@@ -182,6 +201,8 @@ struct Runtime {
     last_clock_ms: u32,
     /// Resets seen since the session began.
     resets: u32,
+    /// Drifts and spins, with this lap's totals.
+    slides: tt_games::dynamics::SlideTracker,
 }
 
 /// Where the catalogue looks for extra names. Set by the host app.
@@ -1081,6 +1102,10 @@ impl BinIt {
                 if rt.session_info.is_some() && !crossing && current_lap_ms + 1_000 < rt.last_clock_ms {
                     rt.map.reset();
                     rt.resets += 1;
+                    rt.slides = Default::default();
+                }
+                if crossing {
+                    rt.slides.reset_stats();
                 }
                 rt.last_clock_ms = current_lap_ms;
                 // On a stage the path starts when the clock does, not at the drive-up to the line.
@@ -1103,9 +1128,12 @@ impl BinIt {
                 }
                 rt.last_progress = lap_progress;
                 rt.last_out_lap = out_lap;
+                // Sliding only counts while the car is being driven: a pause isn't a drift.
+                let sliding = inputs.and_then(|i| i.dynamics.map(|d| (d, i.speed_kmh))).filter(|_| driving);
+                let slide = rt.slides.update(sliding.as_ref().map(|(d, _)| d), sliding.map_or(0.0, |(_, speed)| speed), now_ms() as u64);
                 let changed = rt.lap_driver_changed && !out_lap;
                 let lap_valid = lap_valid && !changed;
-                let live = LiveView { driving, phase: phase.key(), on_track: matches!(phase, tt_games::GamePhase::Driving | tt_games::GamePhase::Paused), resets: rt.resets, slide: inputs.and_then(|i| i.dynamics.map(|d| d.slide(i.speed_kmh))).unwrap_or_default().key(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
+                let live = LiveView { driving, phase: phase.key(), on_track: matches!(phase, tt_games::GamePhase::Driving | tt_games::GamePhase::Paused), resets: rt.resets, slide: slide.key(), slide_stats: rt.slides.stats().into(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
                 rt.live = Some(live.clone());
                 drop(rt);
                 if crossed {

@@ -94,6 +94,123 @@ impl Dynamics {
     }
 }
 
+/// Below this a drift is over (once it has stayed below for `DRIFT_HOLD_MS`).
+pub const DRIFT_EXIT_DEG: f32 = 7.0;
+/// A drift that goes through zero slip for less than this (switching direction, a quick correction) isn't over.
+pub const DRIFT_HOLD_MS: u64 = 400;
+/// Below this a spin is over.
+pub const SPIN_EXIT_DEG: f32 = 60.0;
+/// A gap longer than this between readings (a pause) isn't counted as time sliding.
+const MAX_GAP_MS: u64 = 500;
+
+/// What a driver has done sliding, over a lap.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct SlideStats {
+    pub drifts: u32,
+    pub spins: u32,
+    /// Total time drifting, milliseconds.
+    pub drift_ms: u64,
+    /// The longest single drift, milliseconds.
+    pub longest_ms: u64,
+    /// The biggest slip angle reached while drifting, degrees.
+    pub peak_slip_deg: f32,
+}
+
+/// Turns the flicker of instant slip readings into steady drifts and spins, and totals them up. A drift starts at
+/// `DRIFT_SLIP_DEG`, and only ends once the slip has stayed under `DRIFT_EXIT_DEG` for `DRIFT_HOLD_MS`; a spin starts at
+/// `SPIN_SLIP_DEG` and ends under `SPIN_EXIT_DEG`.
+#[derive(Debug, Clone, Default)]
+pub struct SlideTracker {
+    state: Slide,
+    last_ms: Option<u64>,
+    below_since: Option<u64>,
+    current_ms: u64,
+    stats: SlideStats,
+}
+
+impl SlideTracker {
+    pub fn state(&self) -> Slide {
+        self.state
+    }
+
+    pub fn stats(&self) -> SlideStats {
+        self.stats
+    }
+
+    /// Starts the totals again (a new lap) without ending a slide that is under way.
+    pub fn reset_stats(&mut self) {
+        self.stats = SlideStats::default();
+        self.current_ms = 0;
+    }
+
+    /// Feeds one reading. `dynamics` is `None` when the car isn't being driven (a pause, a game without the data).
+    pub fn update(&mut self, dynamics: Option<&Dynamics>, speed_kmh: f32, now_ms: u64) -> Slide {
+        let slip = match dynamics {
+            Some(d) if speed_kmh >= MIN_SLIP_SPEED_KMH => d.slip_deg.abs(),
+            _ => 0.0,
+        };
+        let dt = self.last_ms.map_or(0, |t| now_ms.saturating_sub(t)).min(MAX_GAP_MS);
+        self.last_ms = Some(now_ms);
+        if self.state == Slide::Drift {
+            self.stats.drift_ms += dt;
+            self.current_ms += dt;
+            self.stats.peak_slip_deg = self.stats.peak_slip_deg.max(slip);
+        }
+        match self.state {
+            Slide::None => {
+                if slip >= SPIN_SLIP_DEG {
+                    self.stats.spins += 1;
+                    self.state = Slide::Spin;
+                } else if slip >= DRIFT_SLIP_DEG {
+                    self.start_drift(slip);
+                }
+            }
+            Slide::Drift => {
+                if slip >= SPIN_SLIP_DEG {
+                    self.end_drift(0);
+                    self.stats.spins += 1;
+                    self.state = Slide::Spin;
+                } else if slip < DRIFT_EXIT_DEG {
+                    let since = *self.below_since.get_or_insert(now_ms);
+                    let held = now_ms - since;
+                    if held >= DRIFT_HOLD_MS {
+                        self.end_drift(held);
+                    }
+                } else {
+                    self.below_since = None;
+                }
+            }
+            Slide::Spin => {
+                if slip < SPIN_EXIT_DEG {
+                    self.state = Slide::None;
+                    if slip >= DRIFT_SLIP_DEG {
+                        self.start_drift(slip);
+                    }
+                }
+            }
+        }
+        self.state
+    }
+
+    fn start_drift(&mut self, slip: f32) {
+        self.state = Slide::Drift;
+        self.stats.drifts += 1;
+        self.stats.peak_slip_deg = self.stats.peak_slip_deg.max(slip);
+        self.current_ms = 0;
+        self.below_since = None;
+    }
+
+    /// Ends the drift, not counting the `trailing_ms` spent waiting to be sure it was over.
+    fn end_drift(&mut self, trailing_ms: u64) {
+        let length = self.current_ms.saturating_sub(trailing_ms);
+        self.stats.drift_ms = self.stats.drift_ms.saturating_sub(trailing_ms);
+        self.stats.longest_ms = self.stats.longest_ms.max(length);
+        self.state = Slide::None;
+        self.current_ms = 0;
+        self.below_since = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,5 +269,89 @@ mod tests {
         let d = Dynamics::from_physics(&p);
         assert!((d.yaw_rate_dps - 57.2958).abs() < 0.01);
         assert_eq!(d.turbo_boost, 1.3);
+    }
+
+    fn slipping(deg: f32) -> Dynamics {
+        Dynamics { slip_deg: deg, ..Dynamics::default() }
+    }
+
+    /// Feeds one reading every 100 ms, the rate the live readings arrive at.
+    fn feed(t: &mut SlideTracker, readings: &[f32], start_ms: u64) -> Vec<Slide> {
+        readings.iter().enumerate().map(|(i, &deg)| t.update(Some(&slipping(deg)), 90.0, start_ms + i as u64 * 100)).collect()
+    }
+
+    #[test]
+    fn a_drift_that_flips_direction_through_zero_stays_one_drift() {
+        let mut t = SlideTracker::default();
+        // 20 deg one way, a 200 ms pass through zero, 20 deg the other way.
+        let states = feed(&mut t, &[20.0, 20.0, 20.0, 3.0, 2.0, -20.0, -20.0, -20.0], 0);
+        assert!(states.iter().all(|s| *s == Slide::Drift), "{states:?}");
+        assert_eq!(t.stats().drifts, 1);
+    }
+
+    #[test]
+    fn a_drift_ends_after_a_clear_gap_and_its_time_excludes_the_wait() {
+        let mut t = SlideTracker::default();
+        let states = feed(&mut t, &[0.0, 20.0, 20.0, 20.0, 20.0, 20.0, 2.0, 2.0, 2.0, 2.0, 2.0, 2.0], 0);
+        assert_eq!(states[5], Slide::Drift);
+        assert_eq!(*states.last().unwrap(), Slide::None);
+        let s = t.stats();
+        assert_eq!(s.drifts, 1);
+        // Five readings at 20 degrees, 100 ms apart: about half a second of drift, without the wait on top.
+        assert!((400..=600).contains(&s.drift_ms), "{s:?}");
+        assert_eq!(s.longest_ms, s.drift_ms);
+        assert_eq!(s.peak_slip_deg, 20.0);
+    }
+
+    #[test]
+    fn wobbling_around_the_drift_line_does_not_flicker() {
+        let mut t = SlideTracker::default();
+        let states = feed(&mut t, &[13.0, 11.0, 13.0, 10.0, 12.5, 9.0, 13.0], 0);
+        assert!(states.iter().all(|s| *s == Slide::Drift));
+        assert_eq!(t.stats().drifts, 1);
+    }
+
+    #[test]
+    fn a_spin_holds_until_the_car_is_well_back_under_control() {
+        let mut t = SlideTracker::default();
+        let states = feed(&mut t, &[30.0, 95.0, 80.0, 70.0, 59.0, 5.0], 0);
+        assert_eq!(&states[1..4], &[Slide::Spin; 3], "{states:?}");
+        // Below 60 degrees the spin is over, but 59 is still a hard slide, so it carries on as a drift.
+        assert_eq!(states[4], Slide::Drift, "a spin ends below {SPIN_EXIT_DEG} degrees");
+        assert_eq!(t.stats().spins, 1);
+        // The 30 degrees before the spin was one drift (the spin ended it); the slide after the spin is another.
+        assert_eq!(t.stats().drifts, 2);
+        // Held under the exit angle long enough, it is over.
+        let after = feed(&mut t, &[5.0, 5.0, 5.0, 5.0, 5.0, 5.0], 600);
+        assert_eq!(*after.last().unwrap(), Slide::None);
+    }
+
+    #[test]
+    fn a_pause_is_not_drift_time() {
+        let mut t = SlideTracker::default();
+        t.update(Some(&slipping(20.0)), 90.0, 0);
+        t.update(Some(&slipping(20.0)), 90.0, 100);
+        // Ten seconds later (a pause); the reading is still a drift, but the gap isn't time sliding.
+        t.update(Some(&slipping(20.0)), 90.0, 10_100);
+        assert!(t.stats().drift_ms <= 600, "{:?}", t.stats());
+    }
+
+    #[test]
+    fn slow_or_missing_data_ends_a_drift_after_the_hold() {
+        let mut t = SlideTracker::default();
+        feed(&mut t, &[20.0, 20.0], 0);
+        for i in 0..6 {
+            t.update(None, 0.0, 200 + i * 100);
+        }
+        assert_eq!(t.state(), Slide::None);
+    }
+
+    #[test]
+    fn totals_can_be_started_again_for_a_new_lap_mid_drift() {
+        let mut t = SlideTracker::default();
+        feed(&mut t, &[20.0, 20.0, 20.0], 0);
+        t.reset_stats();
+        assert_eq!(t.stats(), SlideStats::default());
+        assert_eq!(t.state(), Slide::Drift, "the slide itself carries on");
     }
 }

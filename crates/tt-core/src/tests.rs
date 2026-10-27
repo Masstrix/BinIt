@@ -1363,3 +1363,29 @@ fn a_reset_is_counted_but_a_pause_and_crossing_the_line_are_not() {
     tt.handle_game_event(live(Paused, 0.10, 16_000)).unwrap();
     assert_eq!(resets(&tt), 1);
 }
+
+#[test]
+fn a_car_sliding_sideways_shows_as_a_drift_and_a_spin_in_the_live_state() {
+    use tt_games::dynamics::Dynamics;
+    use tt_games::GamePhase::Driving;
+    let tt = BinIt::in_memory().unwrap();
+    tt.handle_game_event(GameEvent::SessionChanged(session("Porsche 992 GT3 R"))).unwrap();
+    let slipping = |deg: f32, progress: f32| {
+        let inputs = tt_games::Inputs { speed_kmh: 90.0, dynamics: Some(Dynamics { slip_deg: deg, ..Dynamics::default() }), ..Default::default() };
+        GameEvent::Live(tt_games::LiveState { driving: true, phase: Driving, current_lap_ms: 30_000, lap_valid: true, out_lap: false, lap_progress: progress, position: None, inputs: Some(inputs) })
+    };
+    let live = |tt: &BinIt| tt.status().unwrap().live.expect("live");
+    tt.handle_game_event(slipping(2.0, 0.30)).unwrap();
+    assert_eq!(live(&tt).slide, "none");
+    tt.handle_game_event(slipping(24.0, 0.31)).unwrap();
+    assert_eq!(live(&tt).slide, "drift");
+    assert_eq!(live(&tt).slide_stats.drifts, 1);
+    assert_eq!(live(&tt).slide_stats.peak_slip_deg, 24.0);
+    tt.handle_game_event(slipping(110.0, 0.32)).unwrap();
+    assert_eq!(live(&tt).slide, "spin");
+    assert_eq!(live(&tt).slide_stats.spins, 1);
+    // Crossing the line starts the lap's totals again.
+    tt.handle_game_event(slipping(2.0, 0.99)).unwrap();
+    tt.handle_game_event(slipping(2.0, 0.01)).unwrap();
+    assert_eq!(live(&tt).slide_stats.spins, 0);
+}
