@@ -37,6 +37,75 @@ function CarArrow({ at, deg, u, color }: { at: [number, number]; deg: number; u:
   );
 }
 
+/** The framing of a camera view as plain numbers, so one can be blended into another. */
+interface Pose {
+  /** The centre of what is in view, in map units, and its size. */
+  cx: number;
+  cz: number;
+  w: number;
+  h: number;
+  /** How far the map is turned (degrees) about the pivot. */
+  deg: number;
+  px: number;
+  pz: number;
+  /** Map units to about two screen pixels, and the outline's thickness. */
+  u: number;
+  line: number;
+}
+
+const VIEW_MS = 450;
+const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const mix = (a: number, b: number, t: number) => a + (b - a) * t;
+/** Sizes blend on a log scale, so a zoom looks like an even zoom rather than a lurch at the start. */
+const mixLog = (a: number, b: number, t: number) => Math.exp(mix(Math.log(a), Math.log(b), t));
+const reducedMotion = () => typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * Glides from the framing the map was showing to `target` whenever `key` changes (a new zoom, turning on or off with the
+ * car), and shows `target` as it is the rest of the time, so a car being followed is never held back. Turns take the short
+ * way round. Nothing moves for people who ask their system for reduced motion.
+ */
+function useEasedPose(target: Pose | undefined, key: string): Pose | undefined {
+  const [, redraw] = useState(0);
+  const s = useRef<{ key: string; from: Pose | null; start: number; shown: Pose | undefined }>({ key, from: null, start: 0, shown: undefined });
+  const now = performance.now();
+  if (s.current.key !== key) {
+    s.current.key = key;
+    s.current.from = target && s.current.shown && !reducedMotion() ? s.current.shown : null;
+    s.current.start = now;
+  }
+  let shown = target;
+  if (target && s.current.from) {
+    const t = Math.min(1, (now - s.current.start) / VIEW_MS);
+    if (t >= 1) {
+      s.current.from = null;
+    } else {
+      const f = s.current.from;
+      const e = ease(t);
+      const turn = ((((target.deg - f.deg) % 360) + 540) % 360) - 180;
+      shown = {
+        cx: mix(f.cx, target.cx, e),
+        cz: mix(f.cz, target.cz, e),
+        w: mixLog(f.w, target.w, e),
+        h: mixLog(f.h, target.h, e),
+        deg: f.deg + turn * e,
+        px: mix(f.px, target.px, e),
+        pz: mix(f.pz, target.pz, e),
+        u: mixLog(f.u, target.u, e),
+        line: mix(f.line, target.line, e),
+      };
+    }
+  }
+  s.current.shown = shown;
+  const animating = s.current.from !== null;
+  useEffect(() => {
+    if (!animating) return;
+    const id = requestAnimationFrame(() => redraw((n) => n + 1));
+    return () => cancelAnimationFrame(id);
+  });
+  return shown;
+}
+
 export function TrackMap({
   points: rawPoints,
   position: rawPosition,
@@ -95,6 +164,9 @@ export function TrackMap({
     const pad = span * 0.06;
     return {
       unit: span / 100,
+      // The whole-track view's size in map units, for working out how many pixels a map unit is.
+      boxW: maxX - minX + pad * 2,
+      boxH: maxZ - minZ + pad * 2,
       box: `${minX - pad} ${minZ - pad} ${maxX - minX + pad * 2} ${maxZ - minZ + pad * 2}`,
       d: points.map(([x, z], i) => `${i ? "L" : "M"}${x} ${z}`).join("") + (closed ? "Z" : ""),
       start: points[0],
@@ -123,7 +195,6 @@ export function TrackMap({
   const svgRef = useRef<SVGSVGElement>(null);
   const [frame, setFrame] = useState<{ w: number; h: number } | null>(null);
   useEffect(() => {
-    if (!camera) return;
     const el = svgRef.current;
     if (!el) return;
     const measure = () => {
@@ -138,10 +209,10 @@ export function TrackMap({
       ro?.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [!camera]);
+  }, []);
 
   const view = useMemo(() => {
-    const plain = { box: geo.box, turn: undefined as string | undefined, fit: "xMidYMid meet", u: geo.unit, line: stroke };
+    const plain = { box: geo.box, turn: undefined as string | undefined, fit: "xMidYMid meet", u: geo.unit, line: stroke, pose: undefined as Pose | undefined };
     if (!camera) return plain;
     let deg = 0;
     if (camera.heading) {
@@ -176,20 +247,32 @@ export function TrackMap({
     const [mx, mz] = zoom <= 1 ? [(minX + maxX) / 2, (minZ + maxZ) / 2] : orient(camera.at, rotate, mirror);
     const x0 = mx - (l - margin + (frame.w - l - r + 2 * margin) / 2) / scale;
     const z0 = mz - (t - margin + (frame.h - t - b + 2 * margin) / 2) / scale;
+    const w = frame.w / scale;
+    const h = frame.h / scale;
+    const pose: Pose = { cx: x0 + w / 2, cz: z0 + h / 2, w, h, deg, px: mx, pz: mz, u, line };
     return {
-      box: `${x0} ${z0} ${frame.w / scale} ${frame.h / scale}`,
+      box: `${x0} ${z0} ${w} ${h}`,
       turn: deg ? `rotate(${deg} ${mx} ${mz})` : undefined,
       fit: "xMidYMid meet",
       u,
       line,
+      pose: pose as Pose | undefined,
     };
   }, [camera, geo, rotate, mirror, frame, stroke, corner?.w, corner?.h]);
-  const u = view.u;
-  const line = view.line;
+  // A new zoom, or turning with the car on or off, glides in rather than jumping.
+  const eased = useEasedPose(view.pose, `${camera?.zoom ?? 0}|${camera?.heading ? 1 : 0}|${corner ? 1 : 0}`);
+  const shown = eased
+    ? { box: `${eased.cx - eased.w / 2} ${eased.cz - eased.h / 2} ${eased.w} ${eased.h}`, turn: `rotate(${eased.deg} ${eased.px} ${eased.pz})` as string | undefined, u: eased.u, line: eased.line }
+    : view;
+  const u = shown.u;
+  // Cars drawn as arrows are the same size on the screen in every view: about 2 px to a unit, however far the map is
+  // zoomed or however big its frame is (the dots and markers keep their sizes relative to the track, as before).
+  const au = camera ? shown.u : frame ? 2.2 / Math.min(frame.w / geo.boxW, frame.h / geo.boxH) : geo.unit * 0.3;
+  const line = shown.line;
 
   return (
-    <svg ref={svgRef} viewBox={view.box} width="100%" height="100%" role="img" aria-label={label ?? "Track map"} preserveAspectRatio={view.fit} style={{ display: "block" }}>
-      <g transform={view.turn}>
+    <svg ref={svgRef} viewBox={shown.box} width="100%" height="100%" role="img" aria-label={label ?? "Track map"} preserveAspectRatio={view.fit} style={{ display: "block" }}>
+      <g transform={shown.turn}>
       <path d={geo.d} fill="none" stroke="var(--line)" strokeWidth={line + 4} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       {segments ? (
         segments.map((d, i) => (
@@ -219,7 +302,7 @@ export function TrackMap({
         return (
           <g key={i} opacity={m.faded ? 0.55 : 1}>
             {m.heading != null && Number.isFinite(m.heading) ? (
-              <CarArrow at={[mx, mz]} deg={arrowAngle(m.heading, rotate, mirror)} u={u * 0.8} color={m.color} />
+              <CarArrow at={[mx, mz]} deg={arrowAngle(m.heading, rotate, mirror)} u={au * 0.8} color={m.color} />
             ) : (
               <circle cx={mx} cy={mz} r={u * 3} fill={m.color} stroke="#fff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
             )}
@@ -230,8 +313,8 @@ export function TrackMap({
         <>
           {heading != null && Number.isFinite(heading) ? (
             <>
-              <circle cx={position[0]} cy={position[1]} r={u * 3.4} fill="var(--peach)" opacity={0.25} />
-              <CarArrow at={position} deg={arrowAngle(heading, rotate, mirror)} u={u * 0.8} color="var(--peach)" />
+              <circle cx={position[0]} cy={position[1]} r={au * 3.4} fill="var(--peach)" opacity={0.25} />
+              <CarArrow at={position} deg={arrowAngle(heading, rotate, mirror)} u={au * 0.8} color="var(--peach)" />
             </>
           ) : (
             <>

@@ -81,9 +81,11 @@ export function LiveMap({ placeholder = false }: { placeholder?: boolean }) {
   const timing = live.timing;
   const sectorColours = timing ? timing.sectors.map((x) => SECTOR_COLOURS[x.status]) : session.boundaries.slice(1).map(() => SECTOR_COLOURS.pending);
   const driver = status?.seat != null ? drivers.get(status.seat) : undefined;
-  // Zoom in and turn with the car, as on the analysis page. Left alone (whole track, fixed), the map is framed as it always was.
-  const outlineCamera = map && (mapView.zoom > 1 || mapView.carUp) ? cameraAt(map.points, map.closed, live.lapProgress, mapView) : undefined;
+  // Zoom in and turn with the car, as on the analysis page. The map always goes through the camera so a change of zoom
+  // can glide; room is kept clear for the controls only once there is a zoom or a turn, so the whole-track view fills its frame.
+  const outlineCamera = map ? cameraAt(map.points, map.closed, live.lapProgress, mapView) : undefined;
   const camera = outlineCamera && live.position ? { ...outlineCamera, at: live.position } : outlineCamera;
+  const controlsCorner = mapView.zoom > 1 || mapView.carUp ? { w: 250, h: 48 } : undefined;
 
   return (
     <section className="card livemap" aria-label="Live map">
@@ -99,13 +101,13 @@ export function LiveMap({ placeholder = false }: { placeholder?: boolean }) {
           {live.outLap ? `Out ${w.lap}` : !live.lapValid ? <><s style={{ opacity: 0.7 }}>{lapTime(live.currentLapMs)}</s>&nbsp;{live.voidReason === "driverChange" ? "Driver changed" : "Invalid"}</> : lapTime(live.currentLapMs)}
         </span>
       </div>
-      <div className="livemap-frame">
+      <div className="livemap-frame" style={map ? { position: "relative" } : undefined}>
         {map ? (
-          <div style={{ position: "relative", width: "100%", height: "100%", alignSelf: "stretch" }}>
+          <div style={{ position: "absolute", inset: 12, overflow: "hidden", borderRadius: 12 }}>
             {/* The controls float over the top right; the map keeps the track clear of them. */}
             <MapViewControls view={mapView} />
             <TrackMap points={map.points} position={live.position} heading={live.inputs?.dynamics?.headingDeg} rotate={map.rotate} mirror={map.mirror} closed={map.closed} stroke={5}
-              camera={camera} corner={camera ? { w: 250, h: 48 } : undefined}
+              camera={camera} corner={controlsCorner}
               sectors={session.boundaries.length > 2 ? { boundaries: session.boundaries, colors: sectorColours, active: timing?.currentSector } : undefined} label={`${trackName(session.track, session.layout)} live map`} />
           </div>
         ) : (
