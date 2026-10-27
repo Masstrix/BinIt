@@ -5,7 +5,7 @@ import { carName, lapTime, trackName } from "../format";
 import type { SectorStatus } from "../api";
 import { Helmet } from "./Helmet";
 import { words } from "../vocab";
-import { TrackMap } from "./TrackMap";
+import { cameraAt, MapViewControls, TrackMap, useMapView } from "./TrackMap";
 import { Signed } from "./Signed";
 
 /**
@@ -53,6 +53,7 @@ export function LiveMap({ placeholder = false }: { placeholder?: boolean }) {
   const w = words(session?.game);
   const maps = useTrackMaps(session?.game ?? null);
   const map = session ? findMap(maps, session.track, session.layout) : undefined;
+  const mapView = useMapView();
   const learned = useLearningPath(!!session && !!live?.onTrack && !map, session ? `${session.game}|${session.track}|${session.layout}|${session.car}` : "");
   if (!session || !live?.onTrack) {
     if (!placeholder) return null;
@@ -80,6 +81,9 @@ export function LiveMap({ placeholder = false }: { placeholder?: boolean }) {
   const timing = live.timing;
   const sectorColours = timing ? timing.sectors.map((x) => SECTOR_COLOURS[x.status]) : session.boundaries.slice(1).map(() => SECTOR_COLOURS.pending);
   const driver = status?.seat != null ? drivers.get(status.seat) : undefined;
+  // Zoom in and turn with the car, as on the analysis page. Left alone (whole track, fixed), the map is framed as it always was.
+  const outlineCamera = map && (mapView.zoom > 1 || mapView.carUp) ? cameraAt(map.points, map.closed, live.lapProgress, mapView) : undefined;
+  const camera = outlineCamera && live.position ? { ...outlineCamera, at: live.position } : outlineCamera;
 
   return (
     <section className="card livemap" aria-label="Live map">
@@ -97,8 +101,13 @@ export function LiveMap({ placeholder = false }: { placeholder?: boolean }) {
       </div>
       <div className="livemap-frame">
         {map ? (
-          <TrackMap points={map.points} position={live.position} heading={live.inputs?.dynamics?.headingDeg} rotate={map.rotate} mirror={map.mirror} closed={map.closed} stroke={5}
-            sectors={session.boundaries.length > 2 ? { boundaries: session.boundaries, colors: sectorColours, active: timing?.currentSector } : undefined} label={`${trackName(session.track, session.layout)} live map`} />
+          <div style={{ position: "relative", width: "100%", height: "100%", alignSelf: "stretch" }}>
+            {/* The controls float over the top right; the map keeps the track clear of them. */}
+            <MapViewControls view={mapView} />
+            <TrackMap points={map.points} position={live.position} heading={live.inputs?.dynamics?.headingDeg} rotate={map.rotate} mirror={map.mirror} closed={map.closed} stroke={5}
+              camera={camera} corner={camera ? { w: 250, h: 48 } : undefined}
+              sectors={session.boundaries.length > 2 ? { boundaries: session.boundaries, colors: sectorColours, active: timing?.currentSector } : undefined} label={`${trackName(session.track, session.layout)} live map`} />
+          </div>
         ) : (
           <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: 10, width: "min(320px, 100%)", height: "100%" }}>
             {learned.length > 8 && (

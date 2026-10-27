@@ -29,7 +29,7 @@ export function arrowAngle(heading: number, rotate: number, mirror: boolean): nu
 
 /** A car drawn as an arrow, `u` map units to a screen pixel or so, pointing along `deg` (see `arrowAngle`). */
 function CarArrow({ at, deg, u, color }: { at: [number, number]; deg: number; u: number; color: string }) {
-  const pts = [[5.4, 0], [-3.6, 4], [-1.6, 0], [-3.6, -4]].map(([x, z]) => `${x * u},${z * u}`).join(" ");
+  const pts = [[5.4, 0], [-3.6, 3.8], [-1.6, 0], [-3.6, -3.8]].map(([x, z]) => `${x * u},${z * u}`).join(" ");
   return (
     <g transform={`translate(${at[0]} ${at[1]}) rotate(${deg})`}>
       <polygon points={pts} fill={color} stroke="#fff" strokeWidth={1.5} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
@@ -219,7 +219,7 @@ export function TrackMap({
         return (
           <g key={i} opacity={m.faded ? 0.55 : 1}>
             {m.heading != null && Number.isFinite(m.heading) ? (
-              <CarArrow at={[mx, mz]} deg={arrowAngle(m.heading, rotate, mirror)} u={u * 1.15} color={m.color} />
+              <CarArrow at={[mx, mz]} deg={arrowAngle(m.heading, rotate, mirror)} u={u * 0.8} color={m.color} />
             ) : (
               <circle cx={mx} cy={mz} r={u * 3} fill={m.color} stroke="#fff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
             )}
@@ -228,11 +228,16 @@ export function TrackMap({
       })}
       {position && (
         <>
-          <circle cx={position[0]} cy={position[1]} r={u * 4.5} fill="var(--peach)" opacity={0.3} />
           {heading != null && Number.isFinite(heading) ? (
-            <CarArrow at={position} deg={arrowAngle(heading, rotate, mirror)} u={u * 1.25} color="var(--peach)" />
+            <>
+              <circle cx={position[0]} cy={position[1]} r={u * 3.4} fill="var(--peach)" opacity={0.25} />
+              <CarArrow at={position} deg={arrowAngle(heading, rotate, mirror)} u={u * 0.8} color="var(--peach)" />
+            </>
           ) : (
-            <circle cx={position[0]} cy={position[1]} r={u * 2.4} fill="var(--peach)" stroke="#fff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+            <>
+              <circle cx={position[0]} cy={position[1]} r={u * 4.5} fill="var(--peach)" opacity={0.3} />
+              <circle cx={position[0]} cy={position[1]} r={u * 2.4} fill="var(--peach)" stroke="#fff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+            </>
           )}
         </>
       )}
