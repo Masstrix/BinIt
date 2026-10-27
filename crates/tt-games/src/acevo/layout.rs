@@ -98,10 +98,11 @@ pub struct Electronics {
 }
 
 /// `SMEvoTyreState`: one tyre, 256 bytes; the graphics page holds four, in the order left front, right front,
-/// left rear, right rear. Named from watching the live game (2026-10-27) rather than from a table, so only what
-/// behaved like its name is named: pressure and the temperatures fell together as the car cooled, rear tyres ran
-/// warmer than front ones, and the compound reads as text. The words not named were seen changing or constant but
-/// not identified (`unknown_*`, and `wear_like`, which only moved on the rear tyres).
+/// left rear, right rear. Named from watching the live game (2026-10-27) rather than from a table. Confirmed
+/// against the game's own tyre overlay: the order, `pressure_psi` (24.4 / 24.2 / 24.9 / 24.7) and `core_temp_c`
+/// (the 43 / 42 / 54 / 52 degrees it shows). `brake_temp_c`, `tread_temp_c` and `compound` follow from how they
+/// behaved. The words not named were seen changing or constant but not identified (`unknown_*`, and
+/// `wear_like`, which only moved on the rear tyres).
 #[repr(C, packed(4))]
 #[derive(Clone, Copy)]
 pub struct TyreState {
@@ -109,7 +110,7 @@ pub struct TyreState {
     pub unknown_4: f32,
     /// psi (about 24-25 when cool).
     pub pressure_psi: f32,
-    /// Probably the tyre's core temperature, in degrees C.
+    /// The tyre temperature the game's overlay shows, in degrees C.
     pub core_temp_c: f32,
     /// Cooled faster than the core and sat near 100 C: probably the brake disc, in degrees C.
     pub brake_temp_c: f32,
