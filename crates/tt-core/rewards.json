@@ -21,12 +21,28 @@
   "challenge": {
     "_about": "Paid when a challenge ends. See docs/profiles-and-points.md.",
     "placings": [
-      { "xp": 300, "coins": 100 },
-      { "xp": 200, "coins": 60 },
-      { "xp": 100, "coins": 30 }
+      {
+        "xp": 300,
+        "coins": 100
+      },
+      {
+        "xp": 200,
+        "coins": 60
+      },
+      {
+        "xp": 100,
+        "coins": 30
+      }
     ],
-    "sizes": { "low": 0.5, "medium": 1.0, "high": 2.0 },
-    "participation": { "xp": 25, "coins": 5 },
+    "sizes": {
+      "low": 0.5,
+      "medium": 1.0,
+      "high": 2.0
+    },
+    "participation": {
+      "xp": 25,
+      "coins": 5
+    },
     "minEntrants": 2,
     "scalePerEntrant": 0.1,
     "maxScale": 2.0
@@ -77,7 +93,7 @@
     {
       "slot": "shell",
       "id": "gold",
-      "price": 2000,
+      "price": 3000,
       "minLevel": 9
     },
     {

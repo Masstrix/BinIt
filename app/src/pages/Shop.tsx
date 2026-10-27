@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { api, type Driver, type ShopState } from "../api";
 import { Helmet } from "../components/Helmet";
 import { Modal } from "../components/Modal";
+import { PurchaseBurst } from "../components/PurchaseBurst";
 import type { Look } from "../looks";
 import { SLOTS, offers, useShop, useShopDriver, type Offer, type Slot } from "../shopModel";
 import { ItemArt, PriceTag, ShopHeader } from "../components/ShopParts";
@@ -69,6 +70,8 @@ function Grid({ driver, shop, refresh }: { driver: Driver; shop: ShopState; refr
 function ItemSheet({ driver, shop, offer, onClose, onChanged }: { driver: Driver; shop: ShopState; offer: Offer; onClose: () => void; onChanged: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Counts purchases made in this sheet: each one plays the burst (the key restarts it) and the "yours now" message.
+  const [bought, setBought] = useState(0);
   const wearing = shop.look[offer.slot] === offer.id;
   const left = shop.coins - offer.price;
 
@@ -96,13 +99,23 @@ function ItemSheet({ driver, shop, offer, onClose, onChanged }: { driver: Driver
   return (
     <Modal title={offer.name} narrow onClose={onClose}>
       <div className="modal-body" style={{ alignItems: "center", textAlign: "center", gap: 14 }}>
-        <Helmet color={driver.color} look={{ ...shop.look, ...offer.preview }} size={120} seed={driver.id} mood="idle" />
+        <div className="burst-wrap" data-pop={bought > 0 || undefined} key={`pop-${bought}`}>
+          <Helmet color={driver.color} look={{ ...shop.look, ...offer.preview }} size={120} seed={driver.id} mood={bought > 0 ? "happy" : "idle"} moment={bought > 0} />
+          {bought > 0 && <PurchaseBurst key={bought} color={offer.rarityColor} />}
+        </div>
         <div>
           <div className="garage-tile-rarity" style={{ color: offer.rarityColor }}>{offer.rarity} · {offer.slot}</div>
           <h2 style={{ margin: 0 }}>{offer.name}</h2>
         </div>
         {offer.owned ? (
-          <p className="muted" style={{ margin: 0 }}>{offer.free ? "Free for everyone." : "You own this."}</p>
+          bought > 0 ? (
+            <p className="sheet-won" role="status">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10" /></svg>
+              Yours now. Equip it to wear it.
+            </p>
+          ) : (
+            <p className="muted" style={{ margin: 0 }}>{offer.free ? "Free for everyone." : "You own this."}</p>
+          )
         ) : offer.locked ? (
           <p className="muted" style={{ margin: 0 }}>Reach level {offer.minLevel} to unlock it. You are level {shop.level}.</p>
         ) : (
@@ -117,9 +130,9 @@ function ItemSheet({ driver, shop, offer, onClose, onChanged }: { driver: Driver
       <div className="modal-foot">
         <button className="btn ghost" onClick={onClose}>Close</button>
         {offer.owned ? (
-          <button className="btn big" onClick={equip} disabled={busy || wearing}>{wearing ? "Equipped" : "Equip"}</button>
+          <button className="btn big" data-nudge={(bought > 0 && !wearing) || undefined} onClick={equip} disabled={busy || wearing}>{wearing ? "Equipped" : "Equip"}</button>
         ) : (
-          <button className="btn big" disabled={busy || offer.locked || left < 0} onClick={() => run(() => api.buy(driver.id, offer.slot, offer.id))}>
+          <button className="btn big" disabled={busy || offer.locked || left < 0} onClick={() => run(async () => { await api.buy(driver.id, offer.slot, offer.id); setBought((n) => n + 1); })}>
             {left < 0 ? `Need ${(-left).toLocaleString()} more` : `Buy for ${offer.price.toLocaleString()}`}
           </button>
         )}

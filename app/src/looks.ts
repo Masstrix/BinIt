@@ -26,8 +26,6 @@ export interface Shell {
   rarity: Rarity;
   /** Two or three gradient stops, top-left to bottom-right. */
   stops: string[];
-  /** Twinkling stars drawn over the shell. */
-  stars?: boolean;
 }
 
 export interface Decal {
@@ -63,7 +61,7 @@ export const SHELLS: Shell[] = [
   { id: "inferno", name: "Inferno", rarity: "legendary", stops: ["#FFE48A", "#FF8A1F", "#E4231F", "#6B0F1A"] },
   { id: "nebula", name: "Nebula", rarity: "legendary", stops: ["#2A1B6B", "#C2409B", "#FF8A4C", "#FFE48A"] },
   { id: "glacier", name: "Glacier", rarity: "legendary", stops: ["#E8F7FF", "#8BE9FF", "#4DA3FF", "#2A3F8F"] },
-  { id: "galaxy", name: "Galaxy", rarity: "legendary", stops: ["#04020D", "#150A33", "#3B1B8C", "#7A3FD6"], stars: true },
+  { id: "galaxy", name: "Galaxy", rarity: "legendary", stops: ["#04020D", "#150A33", "#3B1B8C", "#7A3FD6"] },
 ];
 
 export const DECALS: Decal[] = [
@@ -124,13 +122,4 @@ export const DECAL_AT: Record<NonNullable<Look["decalAt"]>, { x: number; y: numb
   side: { x: 12, y: 16.5, s: 0.45 },
   top: { x: 22, y: 7.5, s: 0.4 },
   chin: { x: 26, y: 29.5, s: 0.35 },
-};
-
-/** CSS for a shell as a swatch: the same stops the helmet uses. */
-export const shellCss = (stops: string[], stars = false) => {
-  const gradient = `linear-gradient(135deg, ${stops.join(", ")})`;
-  if (!stars) return gradient;
-  // Fixed pin-pricks of light over the gradient, for swatches (the helmet twinkles them for real).
-  const dots = [[18, 22, 1.4], [62, 14, 1], [80, 40, 1.6], [30, 58, 1], [52, 72, 1.4], [84, 82, 1], [12, 84, 1.2], [70, 60, 0.9]];
-  return `${dots.map(([x, y, r]) => `radial-gradient(circle at ${x}% ${y}%, #fff 0, #fff ${r}px, transparent ${r + 1}px)`).join(", ")}, ${gradient}`;
 };
