@@ -25,6 +25,10 @@ interface Pt {
   brake: number;
   steer: number;
   gear: number;
+  /** World position (metres) and heading (degrees), when the lap's trace recorded them. */
+  x: number | null;
+  z: number | null;
+  heading: number | null;
 }
 
 /** What the page shows about a lap, from the recent-laps list or the leaderboard. */
@@ -54,11 +58,11 @@ function parseTrace(rows: TraceRow[] | undefined): Pt[] {
   if (!rows) return [];
   const out: Pt[] = [];
   let max = -1;
-  for (const [p, t, speed, throttle, brake, , steer, gear] of rows) {
+  for (const [p, t, speed, throttle, brake, , steer, gear, x, z, heading] of rows) {
     if (out.length === 0 && p > 0.5) continue;
     if (p < max) continue;
     max = p;
-    out.push({ p, t, speed, throttle, brake, steer, gear });
+    out.push({ p, t, speed, throttle, brake, steer, gear, x, z, heading });
   }
   return smoothProgress(out);
 }
@@ -106,6 +110,35 @@ function smoothProgress(pts: Pt[]): Pt[] {
     out[i] = { ...pts[i], p };
   }
   return out;
+}
+
+/**
+ * Where a lap's car was `clockMs` into it, and which way it faced, from the trace's own readings (null when the lap
+ * was recorded without them). The heading is blended the short way round, so it doesn't swing through 360 degrees.
+ */
+function carAt(pts: Pt[], clockMs: number): { position: [number, number]; heading: number | null } | null {
+  if (pts.length === 0) return null;
+  let lo = 0;
+  let hi = pts.length - 1;
+  if (clockMs <= pts[0].t) hi = lo;
+  else if (clockMs >= pts[hi].t) lo = hi;
+  else {
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (pts[mid].t <= clockMs) lo = mid;
+      else hi = mid;
+    }
+  }
+  const a = pts[lo];
+  const b = pts[hi];
+  if (a.x === null || a.z === null || b.x === null || b.z === null) return null;
+  const f = b.t === a.t ? 0 : Math.min(1, Math.max(0, (clockMs - a.t) / (b.t - a.t)));
+  let heading: number | null = null;
+  if (a.heading !== null && b.heading !== null) {
+    const turn = ((((b.heading - a.heading) % 360) + 540) % 360) - 180;
+    heading = a.heading + turn * f;
+  }
+  return { position: [a.x + (b.x - a.x) * f, a.z + (b.z - a.z) * f], heading };
 }
 
 /** Linear lookup of `key` → `val` over points sorted by `key`. */
@@ -1104,7 +1137,11 @@ function MiniMap({
 
   // Zoom and turn the map as the viewer chose, following this lap's car.
   const mapView = useMapView();
-  const camera = map ? cameraAt(map.points, map.closed, pA, mapView) : undefined;
+  const carA = carAt(a, clockMs);
+  const carB = b ? carAt(b, clockMs) : null;
+  const outlineCamera = map ? cameraAt(map.points, map.closed, pA, mapView) : undefined;
+  // Following the car means following where it really was, when the lap recorded that.
+  const camera = outlineCamera && carA ? { ...outlineCamera, at: carA.position } : outlineCamera;
 
   return (
     <section className="card la-map" aria-label={`${cap(w.track)} map`}>
@@ -1132,9 +1169,9 @@ function MiniMap({
               label={`${cap(w.track)} map`}
               sectors={outline}
               markers={[
-                { at: b && pB !== null ? pointAlong(map.points, map.closed, pB) : null, color: LAP_B },
-                { at: pointAlong(map.points, map.closed, pA), color: LAP_A },
-              ].flatMap((m) => (m.at ? [{ position: m.at, color: m.color }] : []))}
+                { at: carB?.position ?? (b && pB !== null ? pointAlong(map.points, map.closed, pB) : null), heading: carB?.heading, color: LAP_B },
+                { at: carA?.position ?? pointAlong(map.points, map.closed, pA), heading: carA?.heading, color: LAP_A },
+              ].flatMap((m) => (m.at ? [{ position: m.at, heading: m.heading, color: m.color }] : []))}
             />
           </div>
         </div>

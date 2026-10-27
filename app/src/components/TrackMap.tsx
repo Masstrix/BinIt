@@ -16,9 +16,31 @@ export function orient([x, z]: [number, number], rotate: number, mirror: boolean
   }
 }
 
+/**
+ * The angle (degrees, in the map's own x-right, z-down drawing space) an arrow must turn to point the way a car faces.
+ * `heading` is the game's yaw in degrees, where the car travels along (-sin, cos) in world (x, z); the map's chosen
+ * mirror and rotation apply to that direction like they do to every point.
+ */
+export function arrowAngle(heading: number, rotate: number, mirror: boolean): number {
+  const h = (heading * Math.PI) / 180;
+  const [dx, dz] = orient([-Math.sin(h), Math.cos(h)], rotate, mirror);
+  return (Math.atan2(dz, dx) * 180) / Math.PI;
+}
+
+/** A car drawn as an arrow, `u` map units to a screen pixel or so, pointing along `deg` (see `arrowAngle`). */
+function CarArrow({ at, deg, u, color }: { at: [number, number]; deg: number; u: number; color: string }) {
+  const pts = [[5.4, 0], [-3.6, 4], [-1.6, 0], [-3.6, -4]].map(([x, z]) => `${x * u},${z * u}`).join(" ");
+  return (
+    <g transform={`translate(${at[0]} ${at[1]}) rotate(${deg})`}>
+      <polygon points={pts} fill={color} stroke="#fff" strokeWidth={1.5} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    </g>
+  );
+}
+
 export function TrackMap({
   points: rawPoints,
   position: rawPosition,
+  heading,
   rotate = 0,
   mirror = false,
   closed = true,
@@ -36,13 +58,15 @@ export function TrackMap({
   closed?: boolean;
   /** Car position in the same world coordinates. */
   position?: [number, number] | null;
+  /** Which way that car faces, degrees (the game's yaw). Given, the car is drawn as an arrow instead of a dot. */
+  heading?: number | null;
   /** Outline thickness in CSS pixels. */
   stroke?: number;
   label?: string;
   /** Colour the outline by sector: boundaries as lap fractions `[0, ..., 1]` and one colour per sector. */
   sectors?: { boundaries: number[]; colors: string[]; active?: number };
   /** Extra cars to draw (drawn in order, so put the one that should sit on top last). */
-  markers?: { position: [number, number]; color: string; faded?: boolean }[];
+  markers?: { position: [number, number]; color: string; faded?: boolean; heading?: number | null }[];
   /**
    * How to frame the map (world coordinates, like the markers). `zoom` above 1 follows `at` (a car)
    * that much closer, filling the frame. `heading` turns the map so travel from `from` to `to` points
@@ -194,14 +218,22 @@ export function TrackMap({
         const [mx, mz] = orient(m.position, rotate, mirror);
         return (
           <g key={i} opacity={m.faded ? 0.55 : 1}>
-            <circle cx={mx} cy={mz} r={u * 3} fill={m.color} stroke="#fff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+            {m.heading != null && Number.isFinite(m.heading) ? (
+              <CarArrow at={[mx, mz]} deg={arrowAngle(m.heading, rotate, mirror)} u={u * 1.15} color={m.color} />
+            ) : (
+              <circle cx={mx} cy={mz} r={u * 3} fill={m.color} stroke="#fff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+            )}
           </g>
         );
       })}
       {position && (
         <>
           <circle cx={position[0]} cy={position[1]} r={u * 4.5} fill="var(--peach)" opacity={0.3} />
-          <circle cx={position[0]} cy={position[1]} r={u * 2.4} fill="var(--peach)" stroke="#fff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+          {heading != null && Number.isFinite(heading) ? (
+            <CarArrow at={position} deg={arrowAngle(heading, rotate, mirror)} u={u * 1.25} color="var(--peach)" />
+          ) : (
+            <circle cx={position[0]} cy={position[1]} r={u * 2.4} fill="var(--peach)" stroke="#fff" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+          )}
         </>
       )}
       </g>
