@@ -7,7 +7,7 @@
 use serde_json::{Value, json};
 
 use crate::{acpmf, acevo};
-use crate::acevo::layout::{Electronics, Graphics, Static};
+use crate::acevo::layout::{Electronics, Graphics, Static, TyreState};
 use crate::shm::SharedMemory;
 
 /// A field Bin It knows: where it sits, how big it is and what its elements are.
@@ -59,9 +59,26 @@ fn evo_electronics_fields() -> Vec<Field> {
     out
 }
 
+/// The four tyres (left front, right front, left rear, right rear), by name.
+fn evo_tyre_fields() -> Vec<Field> {
+    let base = std::mem::offset_of!(Graphics, tyres);
+    let tyre = fields!(TyreState;
+        unknown_0: f32, unknown_4: f32, pressure_psi: f32, core_temp_c: f32, brake_temp_c: f32, unknown_20: f32,
+        tread_temp_c: f32, compound: text, compound_alt: text, unknown_104: f32, wear_like: f32,
+    );
+    let mut out = Vec::new();
+    for (i, which) in ["lf", "rf", "lr", "rr"].iter().enumerate() {
+        for f in &tyre {
+            out.push(field(&format!("tyre.{which}.{}", f.name), base + i * size_of::<TyreState>() + f.offset, f.size, f.kind));
+        }
+    }
+    out
+}
+
 fn evo_graphics_fields() -> Vec<Field> {
     let mut all = evo_graphics_plain_fields();
     all.extend(evo_electronics_fields());
+    all.extend(evo_tyre_fields());
     all
 }
 
@@ -72,7 +89,7 @@ fn evo_graphics_plain_fields() -> Vec<Field> {
         gear_int: i16, inputs: f32, water_temperature_c: i8, air_temperature_c: i8, engine: f32,
         steer_degrees: i32, current_km: f32, total_km: u32, total_driving_time_s: u32, time_of_day: i32,
         delta_time_ms: i32, current_lap_time_ms: i32, predicted_lap_time_ms: i32, fuel: f32,
-        current_torque: f32, current_bhp: i32, tyres: u32, npos: f32, kers_charge_perc: f32,
+        current_torque: f32, current_bhp: i32, npos: f32, kers_charge_perc: f32,
         kers_current_perc: f32, control_lock_time: f32, car_damage: u32, car_location: i32, pit_info: u32,
         fuel_and_battery: f32, instrumentation: u32, total_lap_count: i32, current_pos: u32,
         total_drivers: u32, last_laptime_ms: i32, best_laptime_ms: i32, flag: i32, global_flag: i32,
@@ -199,6 +216,8 @@ fn page(label: &str, shm_name: &str, known: Vec<Field>) -> Value {
 pub fn read_pages(game: &str) -> Option<Vec<Value>> {
     Some(match game {
         "acevo" => vec![
+            // Nothing named yet: the point is to find heading, velocity and slip in it.
+            page("physics", "Local\acevo_pmf_physics", Vec::new()),
             page("graphics", acevo::GRAPHICS_PAGE, evo_graphics_fields()),
             page("static", acevo::STATIC_PAGE, evo_static_fields()),
         ],

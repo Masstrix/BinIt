@@ -97,6 +97,33 @@ pub struct Electronics {
     pub place_holder: [u8; 88],
 }
 
+/// `SMEvoTyreState`: one tyre, 256 bytes; the graphics page holds four, in the order left front, right front,
+/// left rear, right rear. Named from watching the live game (2026-10-27) rather than from a table, so only what
+/// behaved like its name is named: pressure and the temperatures fell together as the car cooled, rear tyres ran
+/// warmer than front ones, and the compound reads as text. The words not named were seen changing or constant but
+/// not identified (`unknown_*`, and `wear_like`, which only moved on the rear tyres).
+#[repr(C, packed(4))]
+#[derive(Clone, Copy)]
+pub struct TyreState {
+    pub unknown_0: f32,
+    pub unknown_4: f32,
+    /// psi (about 24-25 when cool).
+    pub pressure_psi: f32,
+    /// Probably the tyre's core temperature, in degrees C.
+    pub core_temp_c: f32,
+    /// Cooled faster than the core and sat near 100 C: probably the brake disc, in degrees C.
+    pub brake_temp_c: f32,
+    pub unknown_20: f32,
+    /// Three temperatures across the tread (inner, middle, outer by the guide's usual order), degrees C.
+    pub tread_temp_c: [f32; 3],
+    /// The compound, such as "Slick (S)".
+    pub compound: [u8; 33],
+    pub compound_alt: [u8; 33],
+    pub unknown_104: f32,
+    pub wear_like: [f32; 5],
+    pub place_holder: [u8; 128],
+}
+
 /// `SPageFileGraphicEvo`: HUD-level data, updated every rendered frame.
 #[repr(C, packed(4))]
 #[derive(Clone, Copy)]
@@ -210,6 +237,7 @@ const _: () = assert!(size_of::<SessionState>() == 256);
 const _: () = assert!(size_of::<TimingState>() == 256);
 const _: () = assert!(size_of::<Static>() == 208);
 const _: () = assert!(size_of::<Electronics>() == 128);
+const _: () = assert!(size_of::<TyreState>() == 256);
 
 impl Graphics {
     /// What the car's electronics are set to now (the first of the four blocks on the page).
@@ -217,6 +245,13 @@ impl Graphics {
         let blocks = self.electronics;
         // SAFETY: both are 128 bytes of plain integers, and every bit pattern is valid for `Electronics`.
         unsafe { std::mem::transmute::<[u32; 32], Electronics>(blocks[0]) }
+    }
+
+    /// The four tyres: left front, right front, left rear, right rear.
+    pub fn tyres_now(&self) -> [TyreState; 4] {
+        let tyres = self.tyres;
+        // SAFETY: both are 1024 bytes of plain numbers, and every bit pattern is valid for `TyreState`.
+        unsafe { std::mem::transmute::<[[u32; 64]; 4], [TyreState; 4]>(tyres) }
     }
 }
 
