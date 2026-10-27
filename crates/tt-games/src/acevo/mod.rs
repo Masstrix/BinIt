@@ -19,6 +19,8 @@ pub const CATALOGUE_JSON: &str = include_str!("catalogue.json");
 pub const PROCESS_NAME: &str = "AssettoCorsaEVO.exe";
 pub const GRAPHICS_PAGE: &str = "Local\\acevo_pmf_graphics";
 pub const STATIC_PAGE: &str = "Local\\acevo_pmf_static";
+/// The 333 Hz physics page. The adapter never opens it; the dev Memory page does, to look for heading and slip.
+pub const PHYSICS_PAGE: &str = "Local\\acevo_pmf_physics";
 
 const CONNECTED_POLL: Duration = Duration::from_millis(50);
 const DISCONNECTED_POLL: Duration = Duration::from_secs(2);

@@ -217,7 +217,7 @@ pub fn read_pages(game: &str) -> Option<Vec<Value>> {
     Some(match game {
         "acevo" => vec![
             // Nothing named yet: the point is to find heading, velocity and slip in it.
-            page("physics", "Local\acevo_pmf_physics", Vec::new()),
+            page("physics", acevo::PHYSICS_PAGE, Vec::new()),
             page("graphics", acevo::GRAPHICS_PAGE, evo_graphics_fields()),
             page("static", acevo::STATIC_PAGE, evo_static_fields()),
         ],
