@@ -600,10 +600,12 @@ h2 { font-size: 22px; line-height: 1.2; }
 .you-switch { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 22px; background: var(--panel-2); }
 .you-switch .btn { min-height: 44px; }
 .you-layout, .you-main, .you-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.you-side { gap: 24px; }
+.you-side { gap: 48px; }
+.you-layout { row-gap: 44px; }
 /* Desktop: the profile card stays put on the left while the lists scroll beside it. */
 @media (min-width: 900px) {
   .you-layout { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 28px; align-items: start; }
+  .you-side { gap: 40px; }
   .you-main { position: sticky; top: 0; }
   .you-section h2 { font-size: 20px; }
   .sticker-grid { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 14px; }
