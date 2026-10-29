@@ -172,8 +172,12 @@
       "name": "On the podium",
       "group": "challenges",
       "rarity": "rare",
-      "how": "Finish in the top 3 of a challenge.",
-      "rule": null
+      "how": "Finish in the top 3 of a challenge with at least 3 drivers, when it ends.",
+      "rule": {
+        "kind": "challengeFinishedInTopPlaces",
+        "places": 3,
+        "minEntrants": 3
+      }
     },
     {
       "id": "crown",
@@ -247,8 +251,11 @@
       "name": "Spotless",
       "group": "clean-driving",
       "rarity": "legendary",
-      "how": "Every lap clean through a whole challenge.",
-      "rule": null
+      "how": "Finish a challenge with at least 5 timed laps and not one cut lap.",
+      "rule": {
+        "kind": "challengeFinishedWithEveryLapClean",
+        "minLaps": 5
+      }
     },
     {
       "id": "rule-bender",
@@ -437,8 +444,12 @@
       "name": "Participation trophy",
       "group": "funny",
       "rarity": "common",
-      "how": "Finish last in a challenge. It still counts.",
-      "rule": null
+      "how": "Take part in a challenge and finish outside the top 3. It still counts.",
+      "rule": {
+        "kind": "challengeFinishedOutsideTopPlaces",
+        "places": 3,
+        "minEntrants": 3
+      }
     },
     {
       "id": "early-bird",
@@ -581,8 +592,12 @@
       "name": "Hat trick",
       "group": "hard",
       "rarity": "legendary",
-      "how": "Win three challenges in a row.",
-      "rule": null
+      "how": "Win three challenges in a row (each with at least 3 drivers).",
+      "rule": {
+        "kind": "challengesWonInARow",
+        "n": 3,
+        "minEntrants": 3
+      }
     },
     {
       "id": "untouchable",

@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 14;
+const SCHEMA_VERSION: i32 = 15;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -272,6 +272,21 @@ impl Store {
                 ",
             )?;
         }
+        if version < 15 {
+            // Where each driver finished in each challenge that has ended (see stickers.rs: Hat trick and friends).
+            conn.execute_batch(
+                "
+                CREATE TABLE IF NOT EXISTS challenge_results (
+                    challenge_id  INTEGER NOT NULL,
+                    driver_id     INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+                    position      INTEGER NOT NULL,
+                    entrants      INTEGER NOT NULL,
+                    ended_at      INTEGER NOT NULL,
+                    PRIMARY KEY (challenge_id, driver_id)
+                );
+                ",
+            )?;
+        }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         let store = Self { conn };
         store.backfill_points()?;
@@ -389,6 +404,24 @@ impl Store {
     pub fn grant_item(&self, driver_id: DriverId, item: &str, at: Timestamp) -> Result<()> {
         self.conn.execute("INSERT OR IGNORE INTO driver_items (driver_id, item, price, at) VALUES (?1, ?2, 0, ?3)", params![driver_id, item, at])?;
         Ok(())
+    }
+
+    // ---- challenge results -----------------------------------------------------
+
+    /// Records where a driver finished in a challenge that has ended.
+    pub fn insert_challenge_result(&self, challenge_id: ChallengeId, driver_id: DriverId, position: u32, entrants: u32, ended_at: Timestamp) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO challenge_results (challenge_id, driver_id, position, entrants, ended_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![challenge_id, driver_id, position, entrants, ended_at],
+        )?;
+        Ok(())
+    }
+
+    /// `(position, entrants)` of every challenge a driver finished, the most recent first.
+    pub fn driver_challenge_results(&self, driver_id: DriverId) -> Result<Vec<(u32, u32)>> {
+        let mut stmt = self.conn.prepare("SELECT position, entrants FROM challenge_results WHERE driver_id = ?1 ORDER BY ended_at DESC, challenge_id DESC")?;
+        let rows = stmt.query_map([driver_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     // ---- stickers --------------------------------------------------------------

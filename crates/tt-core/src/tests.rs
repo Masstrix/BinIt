@@ -1330,14 +1330,14 @@ fn a_finished_challenge_pays_once_and_old_ones_are_left_alone() {
     for (i, id) in ids.iter().enumerate() {
         tt.record_lap_for(&lap(100_000 + i as u32 * 1000, true), now - 3000, Some(Some(*id)), None).unwrap();
     }
-    let before: Vec<i64> = ids.iter().map(|id| tt.profile(*id).unwrap().coins).collect();
     assert_eq!(tt.settle_challenges().unwrap(), 3);
     assert_eq!(tt.settle_challenges().unwrap(), 0, "never paid twice");
-    let after: Vec<i64> = ids.iter().map(|id| tt.profile(*id).unwrap().coins).collect();
+    // What the challenge itself paid (its stickers pay on top, under their own ledger kinds).
+    let paid = |i: usize| tt.profile(ids[i]).unwrap().recent.iter().filter(|e| e.kind.starts_with("challenge:")).map(|e| e.coins).sum::<i64>();
     let rules = &progress::rewards().challenge;
     let scale = rules.scale(3);
-    assert_eq!(after[0] - before[0], (rules.placings[0].coins as f64 * scale).round() as i64);
-    assert_eq!(after[2] - before[2], (rules.placings[2].coins as f64 * scale).round() as i64);
+    assert_eq!(paid(0), (rules.placings[0].coins as f64 * scale).round() as i64);
+    assert_eq!(paid(2), (rules.placings[2].coins as f64 * scale).round() as i64);
     assert!(tt.profile(ids[0]).unwrap().recent.iter().any(|e| e.kind == "challenge:1:Hot Lap"));
 }
 
@@ -1514,7 +1514,8 @@ fn a_sticker_unlocks_once_pays_through_the_ledger_and_shows_in_the_book() {
     assert!(view("first-lap").earned && view("first-lap").earned_at.is_some());
     // Counting stickers show how far along they are; designed-but-not-detectable ones say so.
     assert_eq!(view("ten-laps").progress.map(|p| (p.cur, p.max)), Some((2, 10)));
-    assert!(!view("hat-trick").detectable && view("hat-trick").progress.is_none());
+    assert!(view("moonwalk").detectable && view("moonwalk").progress.is_none(), "a one-off moment has no progress bar");
+    assert!(stickers::catalogue().stickers.iter().all(|s| s.rule.is_some()), "every sticker has a rule now");
 }
 
 #[test]
@@ -1951,4 +1952,75 @@ fn stopping_pointing_against_the_track_and_carrying_on_is_wrong_way_round() {
     assert!(!sticker_ids(&tt.record_lap(&lap_with_stop(0.0)).unwrap().awards).contains(&"wrong-way-round"), "stopped but pointing the right way");
     assert!(!sticker_ids(&tt.record_lap(&lap_with_stop(90.0)).unwrap().awards).contains(&"wrong-way-round"), "sideways is not backwards");
     assert!(sticker_ids(&tt.record_lap(&lap_with_stop(180.0)).unwrap().awards).contains(&"wrong-way-round"));
+}
+
+
+// ---- challenge stickers ----------------------------------------------------------------------------
+
+fn finished_challenge(tt: &BinIt, names: &[&str], laps_each: u32, cut_by: Option<usize>) -> Vec<DriverId> {
+    let ids: Vec<DriverId> = names
+        .iter()
+        .map(|n| tt.drivers().unwrap().into_iter().find(|d| d.name == *n).map_or_else(|| tt.add_driver(n, None).unwrap().id, |d| d.id))
+        .collect();
+    let now = now_ms();
+    let combo = combo_of(&session("Porsche 992 GT3 R"));
+    let n = tt.challenges().unwrap().len() as i64;
+    let start = now - 100_000 + n * 10;
+    tt.create_challenge(&NewChallenge {
+        reward_size: None, name: format!("Cup {n}"), game: combo.game.clone(), track: combo.track.clone(), layout: combo.layout.clone(), car: None,
+        starts_at: Some(start), ends_at: Some(start + 5_000), valid_only: true, max_laps: None, prizes: vec![],
+    })
+    .unwrap();
+    for (i, id) in ids.iter().enumerate() {
+        for k in 0..laps_each {
+            tt.record_lap_for(&lap(100_000 + i as u32 * 1000 + k, true), start + 1_000 + k as i64, Some(Some(*id)), None).unwrap();
+        }
+        if cut_by == Some(i) {
+            tt.record_lap_for(&untimed_lap(99_000, UntimedReason::Cut), start + 2_000, Some(Some(*id)), None).unwrap();
+        }
+    }
+    ids
+}
+
+fn earned(tt: &BinIt, driver: DriverId, id: &str) -> bool {
+    tt.sticker_book(driver).unwrap().stickers.iter().find(|s| s.id == id).unwrap().earned
+}
+
+#[test]
+fn finishing_a_challenge_gives_the_podium_or_the_participation_trophy_and_a_clean_run_is_spotless() {
+    let tt = BinIt::in_memory().unwrap();
+    // First run only marks what had already ended.
+    tt.settle_challenges().unwrap();
+    let ids = finished_challenge(&tt, &["Sam", "Jess", "Kim", "Priya"], 5, Some(1));
+    tt.settle_challenges().unwrap();
+    // Sam, Jess and Kim are the top three, Priya is fourth.
+    assert!(earned(&tt, ids[0], "on-the-podium") && earned(&tt, ids[1], "on-the-podium") && earned(&tt, ids[2], "on-the-podium"));
+    assert!(!earned(&tt, ids[3], "on-the-podium") && earned(&tt, ids[3], "participation-trophy"));
+    assert!(!earned(&tt, ids[0], "participation-trophy"));
+    // Jess cut a lap, so she is not spotless; Sam had five timed laps and no cut.
+    assert!(earned(&tt, ids[0], "spotless") && !earned(&tt, ids[1], "spotless"));
+    // The ledger shows each sticker once.
+    let sam = tt.profile(ids[0]).unwrap();
+    assert_eq!(sam.recent.iter().filter(|e| e.kind == "sticker:on-the-podium").count(), 1);
+    // Settling again changes nothing.
+    tt.settle_challenges().unwrap();
+    assert_eq!(tt.profile(ids[0]).unwrap().recent.iter().filter(|e| e.kind == "sticker:on-the-podium").count(), 1);
+}
+
+#[test]
+fn a_small_challenge_gives_no_podium_and_three_wins_in_a_row_is_a_hat_trick() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.settle_challenges().unwrap();
+    // Two drivers: below the three-driver minimum, so no podium for anyone.
+    let pair = finished_challenge(&tt, &["Sam", "Jess"], 3, None);
+    tt.settle_challenges().unwrap();
+    assert!(!earned(&tt, pair[0], "on-the-podium"));
+
+    // Sam wins three three-driver challenges in a row (the lowest lap time wins: the first name leads).
+    for round in 0..3 {
+        finished_challenge(&tt, &["Sam", "Jess", "Kim"], 2, None);
+        tt.settle_challenges().unwrap();
+        let sam = tt.drivers().unwrap().into_iter().find(|d| d.name == "Sam").unwrap().id;
+        assert_eq!(earned(&tt, sam, "hat-trick"), round == 2, "after win {}", round + 1);
+    }
 }

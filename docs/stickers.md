@@ -77,6 +77,18 @@ A sticker with a `reward` overrides any part of that. Leave a field out to keep 
 | `thisLapWithinOfAnotherDriversTime` | this lap was within `ms` of another driver's best, but not equal | `ms` |
 | `thisLapEqualsAnotherDriversTime` | this lap equals another driver's best exactly | none |
 | `recordHeldForDays` | you have held the best time on a track and car for `days` days, with another driver on the board | `days` |
+| `thisLapHasNoSpin` | this lap had no spin (a game that reports no physics counts as none) | none |
+| `thisLapSetBetweenLocalTimes` | the lap was set between two local times of day on the rig's PC (`from` up to `to`, like `"12:00"` and `"14:00"`; `"24:00"` is the end of the day), on any of `days` (`mon` to `sun`; leave out for every day) | `from`, `to`, optional `days` |
+| `thisLapIsPersonalBestAfterLapsWithoutOne` | a new personal best after `n` laps in a row on that track and car that did not beat the best before them | `n` |
+| `thisCutLapEndsARunWithinPercentOfAnotherDriversBest` | a cut lap that ends a run of `n` cut laps in a row on that track and car, each within `percent` of another driver's best | `n`, `percent` |
+| `driftDistanceInTotalAtLeast` | the driver has drifted `metres` in total (only laps recorded after distance was measured count) | `metres` |
+| `thisLapHandbrakeDriftsAtLeast` | `n` drifts began with the handbrake pulled (within a second before) | `n` |
+| `thisLapFinishesFacingBackwards` | slip of `slipDeg` or more at the last sample before the line, at `minSpeedKmh` or more | `slipDeg`, `minSpeedKmh` |
+| `thisLapStoppedFacingTheWrongWay` | the car stopped (under `belowKmh`) pointing `degrees` or more away from the direction the track's learned map runs | `belowKmh`, `degrees` |
+| `challengeFinishedInTopPlaces` | when a challenge ends: finished in its top `places`, with at least `minEntrants` drivers | `places`, `minEntrants` |
+| `challengeFinishedOutsideTopPlaces` | when a challenge ends: finished outside its top `places` | `places`, `minEntrants` |
+| `challengesWonInARow` | won the last `n` challenges in a row (counting only ones with `minEntrants` drivers) | `n`, `minEntrants` |
+| `challengeFinishedWithEveryLapClean` | when a challenge ends: at least `minLaps` timed laps in it and not one cut lap | `minLaps` |
 | `allOtherStickers` | every other sticker is earned | none |
 
 `on` is a list of tracks, each `{ "track": "Nurburgring", "layout": "Touristenfahrten" }` (`layout` is optional). Spelling,
@@ -119,20 +131,18 @@ hidden sticker with no hint, and a reward item that is not in the shop all fail 
 
 ## What can be detected today, and what cannot
 
-Of the 54 designed stickers, 39 have a rule today. The 15 that do not are listed in `stickers.json` with `"rule": null` and
-need a decision or new data; the open questions are in the "Sticker rules: questions for you" document.
+All 54 stickers have a rule. Some depend on what a game reports, and a few need testing against real play:
 
-* **Need a decision first:** Skid marks (the app stores how long a slide lasted, not how far), Tidy lap (identical to First
-  lap today), One more go (no session boundary), Rule bender (needs cut-lap times).
-* **A time zone:** Lunch break, Early bird, Night owl and Friday feeling. Laps are stored in UTC; the plan is to store the
-  PC's local time on each lap when it is recorded.
-* **Challenge results:** On the podium, Participation trophy, Hat trick and Spotless unlock when a challenge ends and
-  pays out, not when a lap is recorded.
-* **New telemetry:** Moonwalk and Wrong way round (the trace has heading and slip, so they are doable), and Handbrake hero
-  (the handbrake is not in the trace yet).
-
-The drift and spin stickers only work for games that report physics (AC EVO so far); the board stickers need another driver on
-the board, and only look at timed laps.
+* **Drifting and spins** (Sideways, Tyre fryer, Drift king, Spinning top, Skid marks, Handbrake hero, Tidy lap's "no spin")
+  need a game that reports physics (AC EVO so far). Skid marks and Handbrake hero count only laps recorded since drift
+  distance and the handbrake were added to the slide stats.
+* **Time of day** uses the PC's local clock when a lap is recorded, daylight saving included. The windows are in
+  `stickers.json`, so changing "after 19:00" is an edit there. Laps recorded before this existed are not looked at.
+* **Challenge stickers** unlock when a challenge ends and is settled (the same moment its coins are paid), including for
+  challenges that ended before this existed. Where each driver finished is kept in `challenge_results` (schema 15).
+* **Moonwalk and Wrong way round** read the lap trace (and, for Wrong way round, the track's learned map for which way the
+  track runs). They were built from the trace format and tested on made-up laps, so they need trying on a real lap.
+* **Rule bender** needs cut laps to carry the game's lap time; they are recorded, but check one on real data.
 
 ## In the app
 

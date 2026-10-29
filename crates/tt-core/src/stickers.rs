@@ -126,6 +126,14 @@ pub enum Rule {
     /// During this lap the car stopped (under `below_kmh`) pointing at least `degrees` away from the direction the
     /// track runs there, and the lap was still finished. The way the track runs is its learned map's.
     ThisLapStoppedFacingTheWrongWay { below_kmh: f32, degrees: f32 },
+    /// A challenge ended and the driver finished in its top `places`, with at least `min_entrants` drivers.
+    ChallengeFinishedInTopPlaces { places: u32, min_entrants: u32 },
+    /// A challenge ended and the driver finished outside its top `places` (with at least `min_entrants` drivers).
+    ChallengeFinishedOutsideTopPlaces { places: u32, min_entrants: u32 },
+    /// The driver won their last `n` challenges in a row (only challenges with at least `min_entrants` drivers count).
+    ChallengesWonInARow { n: u32, min_entrants: u32 },
+    /// A challenge ended and the driver had at least `min_laps` timed laps in it and not one cut lap.
+    ChallengeFinishedWithEveryLapClean { min_laps: u32 },
     /// Every other sticker in the book.
     AllOtherStickers,
 }
@@ -375,6 +383,20 @@ struct Ctx<'a> {
     slides: crate::LiveSlideStats,
     /// What this lap's trace and its track's learned map say about how the car sat on the road.
     road: Road,
+    /// How a challenge that has just ended went for the driver (only when a challenge is being settled).
+    challenge: Option<&'a ChallengeCtx>,
+}
+
+/// How one driver got on in a challenge that has just ended.
+#[derive(Debug, Clone)]
+struct ChallengeCtx {
+    position: u32,
+    entrants: u32,
+    /// Timed laps and cut laps they set in it.
+    timed_laps: u32,
+    cut_laps: u32,
+    /// `(position, entrants)` of the challenges they finished, the one just ended first.
+    recent: Vec<(u32, u32)>,
 }
 
 /// Facts read from a lap's trace and its track's map, worked out once per lap (only when a sticker needs them).
@@ -541,6 +563,16 @@ fn measure(rule: &Rule, c: &Ctx) -> (u32, u32) {
             (on_lap(&|_| c.road.finish_slip_deg.is_some_and(|s| s.abs() >= *slip_deg) && c.road.finish_speed_kmh >= *min_speed_kmh), 1)
         }
         Rule::ThisLapStoppedFacingTheWrongWay { below_kmh, degrees } => (on_lap(&|_| c.road.stopped_worst_off_deg >= *degrees && c.road.stopped_at_kmh < *below_kmh), 1),
+        Rule::ChallengeFinishedInTopPlaces { places, min_entrants } => {
+            (u32::from(c.challenge.is_some_and(|x| x.entrants >= *min_entrants && (1..=*places).contains(&x.position))), 1)
+        }
+        Rule::ChallengeFinishedOutsideTopPlaces { places, min_entrants } => (u32::from(c.challenge.is_some_and(|x| x.entrants >= *min_entrants && x.position > *places)), 1),
+        Rule::ChallengesWonInARow { n, min_entrants } => {
+            let Some(x) = c.challenge else { return (0, *n) };
+            let wins = x.recent.iter().filter(|(_, entrants)| entrants >= min_entrants).take_while(|(position, _)| *position == 1).count() as u32;
+            (wins.min(*n), *n)
+        }
+        Rule::ChallengeFinishedWithEveryLapClean { min_laps } => (u32::from(c.challenge.is_some_and(|x| x.timed_laps >= *min_laps && x.cut_laps == 0)), 1),
         Rule::AllOtherStickers => (c.others_earned, c.others_total),
     }
 }
@@ -618,7 +650,7 @@ pub fn book(store: &Store, driver: DriverId, now: Timestamp) -> Result<StickerBo
     let earned: HashMap<String, Timestamp> = store.driver_stickers(driver)?.into_iter().collect();
     let total = cat.stickers.len() as u32;
     let board = board_for(store, driver, None, &laps, now)?;
-    let ctx = Ctx { laps: &laps, lap: None, flags: LapFlags::default(), now, others_earned: earned.len() as u32, others_total: total.saturating_sub(1), board: &board, slides: Default::default(), road: Road::default() };
+    let ctx = Ctx { laps: &laps, lap: None, flags: LapFlags::default(), now, others_earned: earned.len() as u32, others_total: total.saturating_sub(1), board: &board, slides: Default::default(), road: Road::default(), challenge: None };
     let stickers: Vec<StickerView> = cat
         .stickers
         .iter()
@@ -626,7 +658,7 @@ pub fn book(store: &Store, driver: DriverId, now: Timestamp) -> Result<StickerBo
             let at = earned.get(&s.id).copied();
             let shown = at.is_some() || !s.hidden;
             let pay = cat.pay(s);
-            let one_off = matches!(s.rule, Some(Rule::ThisLapIsPersonalBest | Rule::ThisLapIsTrackRecord | Rule::ThisLapInChallenge | Rule::ThisLapTimeEndsIn { .. } | Rule::ThisLapTimeIsPalindrome | Rule::ThisLapFasterThan { .. } | Rule::ThisLapTimeEndsInSecondsAndMs { .. } | Rule::ThisLapLongestDriftAtLeast { .. } | Rule::ThisLapDriftTimeShareAtLeast { .. } | Rule::ThisLapSpinsAtLeast { .. } | Rule::ThisLapSlowerThanYourBestBy { .. } | Rule::ThisLapSectorFasterThanEveryoneElse | Rule::ThisLapWithinPercentOfAnotherDriversBest { .. } | Rule::ThisLapWinsFromBottomHalf { .. } | Rule::ThisLapPassesAnotherDriver | Rule::ThisLapWithinOfAnotherDriversTime { .. } | Rule::ThisLapEqualsAnotherDriversTime | Rule::ThisLapHasNoSpin | Rule::ThisLapSetBetweenLocalTimes { .. } | Rule::ThisLapIsPersonalBestAfterLapsWithoutOne { .. } | Rule::ThisLapHandbrakeDriftsAtLeast { .. } | Rule::ThisLapFinishesFacingBackwards { .. } | Rule::ThisLapStoppedFacingTheWrongWay { .. }));
+            let one_off = matches!(s.rule, Some(Rule::ThisLapIsPersonalBest | Rule::ThisLapIsTrackRecord | Rule::ThisLapInChallenge | Rule::ThisLapTimeEndsIn { .. } | Rule::ThisLapTimeIsPalindrome | Rule::ThisLapFasterThan { .. } | Rule::ThisLapTimeEndsInSecondsAndMs { .. } | Rule::ThisLapLongestDriftAtLeast { .. } | Rule::ThisLapDriftTimeShareAtLeast { .. } | Rule::ThisLapSpinsAtLeast { .. } | Rule::ThisLapSlowerThanYourBestBy { .. } | Rule::ThisLapSectorFasterThanEveryoneElse | Rule::ThisLapWithinPercentOfAnotherDriversBest { .. } | Rule::ThisLapWinsFromBottomHalf { .. } | Rule::ThisLapPassesAnotherDriver | Rule::ThisLapWithinOfAnotherDriversTime { .. } | Rule::ThisLapEqualsAnotherDriversTime | Rule::ThisLapHasNoSpin | Rule::ThisLapSetBetweenLocalTimes { .. } | Rule::ThisLapIsPersonalBestAfterLapsWithoutOne { .. } | Rule::ThisLapHandbrakeDriftsAtLeast { .. } | Rule::ThisLapFinishesFacingBackwards { .. } | Rule::ThisLapStoppedFacingTheWrongWay { .. } | Rule::ChallengeFinishedInTopPlaces { .. } | Rule::ChallengeFinishedOutsideTopPlaces { .. } | Rule::ChallengesWonInARow { .. } | Rule::ChallengeFinishedWithEveryLapClean { .. }));
             let progress = match &s.rule {
                 Some(rule) if at.is_none() && !one_off && shown => {
                     let (cur, max) = measure(rule, &ctx);
@@ -680,6 +712,75 @@ pub fn award_lap(store: &Store, driver: DriverId, lap: &Lap, flags: LapFlags, no
     Ok(out)
 }
 
+/// Records how everyone on a finished challenge's board finished and unlocks (and pays for) the challenge stickers.
+/// Returns how many stickers were unlocked. Guest entries (no driver) are ignored.
+pub fn award_challenge(store: &Store, challenge: &crate::Challenge, board: &[crate::LeaderboardEntry], now: Timestamp) -> Result<usize> {
+    let cat = catalogue();
+    let ended_at = challenge.ends_at.unwrap_or(now);
+    let drivers: Vec<(DriverId, u32)> = board.iter().filter_map(|e| e.driver_id.map(|d| (d, e.position))).collect();
+    let entrants = drivers.len() as u32;
+    for (driver, position) in &drivers {
+        store.insert_challenge_result(challenge.id, *driver, *position, entrants, ended_at)?;
+    }
+    let mut unlocked = 0;
+    for (driver, position) in drivers {
+        // Their laps in it: timed, and cut (a cut lap is one the game flagged; anything else was not a try).
+        let mut laps: Vec<Lap> = store
+            .driver_laps(driver)?
+            .into_iter()
+            .filter(|l| {
+                l.combo.game == challenge.game
+                    && l.combo.track == challenge.track
+                    && l.combo.layout == challenge.layout
+                    && challenge.car.as_ref().is_none_or(|car| car == &l.combo.car)
+                    && l.recorded_at >= challenge.starts_at
+                    && challenge.ends_at.is_none_or(|end| l.recorded_at <= end)
+            })
+            .collect();
+        if let Some(max) = challenge.max_laps {
+            laps.truncate(max as usize);
+        }
+        let ctx_challenge = ChallengeCtx {
+            position,
+            entrants,
+            timed_laps: laps.iter().filter(|l| l.valid).count() as u32,
+            cut_laps: laps.iter().filter(|l| l.untimed_reason.as_deref() == Some("cut")).count() as u32,
+            recent: store.driver_challenge_results(driver)?,
+        };
+        let earned: HashSet<String> = store.driver_stickers(driver)?.into_iter().map(|(id, _)| id).collect();
+        let board_ctx = Board::default();
+        for s in &cat.stickers {
+            let Some(rule) = &s.rule else { continue };
+            if earned.contains(&s.id) {
+                continue;
+            }
+            let ctx = Ctx {
+                laps: &laps,
+                lap: None,
+                flags: LapFlags::default(),
+                now,
+                others_earned: 0,
+                others_total: 0,
+                board: &board_ctx,
+                slides: Default::default(),
+                road: Road::default(),
+                challenge: Some(&ctx_challenge),
+            };
+            let (cur, max) = measure(rule, &ctx);
+            if cur < max || max == 0 || !store.insert_sticker(driver, &s.id, None, now)? {
+                continue;
+            }
+            let pay = cat.pay(s);
+            store.insert_point_event(driver, &format!("sticker:{}", s.id), pay.xp, pay.coins, None, now)?;
+            if let Some(item) = cat.item(s) {
+                store.grant_item(driver, item, now)?;
+            }
+            unlocked += 1;
+        }
+    }
+    Ok(unlocked)
+}
+
 /// One-off pass over everyone's history so nobody starts at zero: unlocks what the laps already prove, and pays for it
 /// (the driver would have had the reward anyway had the stickers existed).
 pub fn backfill(store: &Store) -> Result<()> {
@@ -727,7 +828,7 @@ fn unlock_pass(store: &Store, driver: DriverId, laps: &[Lap], lap: Option<&Lap>,
             if earned.contains(&s.id) || (*rule == Rule::AllOtherStickers) != completionist {
                 continue;
             }
-            let ctx = Ctx { laps, lap, flags, now, others_earned: earned.len() as u32, others_total: total.saturating_sub(1), board: &board, slides, road };
+            let ctx = Ctx { laps, lap, flags, now, others_earned: earned.len() as u32, others_total: total.saturating_sub(1), board: &board, slides, road, challenge: None };
             let (cur, max) = measure(rule, &ctx);
             if cur < max || max == 0 {
                 continue;
@@ -827,7 +928,7 @@ mod tests {
         let lap = timed_lap(time_ms);
         let laps = [lap.clone()];
         let board = Board::default();
-        let ctx = Ctx { laps: &laps, lap: Some(&lap), flags: LapFlags::default(), now: 0, others_earned: 0, others_total: 0, board: &board, slides, road: Road::default() };
+        let ctx = Ctx { laps: &laps, lap: Some(&lap), flags: LapFlags::default(), now: 0, others_earned: 0, others_total: 0, board: &board, slides, road: Road::default(), challenge: None };
         let (cur, max) = measure(rule, &ctx);
         cur >= max
     }

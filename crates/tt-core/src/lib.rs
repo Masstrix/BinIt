@@ -1062,6 +1062,9 @@ impl BinIt {
                 };
                 store.settle_challenge(&flag, &payouts, c.ends_at.unwrap_or(now))?;
                 paid += payouts.len();
+                // The challenge stickers: where each driver finished, whether or not coins were paid for it.
+                let board = store.leaderboard(&challenge_query(c))?;
+                stickers::award_challenge(&store, c, &board, now)?;
             }
             if first_run {
                 store.set_setting(STARTED, Some("1"))?;
