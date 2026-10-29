@@ -1514,7 +1514,7 @@ fn a_sticker_unlocks_once_pays_through_the_ledger_and_shows_in_the_book() {
     assert!(view("first-lap").earned && view("first-lap").earned_at.is_some());
     // Counting stickers show how far along they are; designed-but-not-detectable ones say so.
     assert_eq!(view("ten-laps").progress.map(|p| (p.cur, p.max)), Some((2, 10)));
-    assert!(!view("handbrake-hero").detectable && view("handbrake-hero").progress.is_none());
+    assert!(!view("hat-trick").detectable && view("hat-trick").progress.is_none());
 }
 
 #[test]
@@ -1869,4 +1869,86 @@ fn time_of_day_stickers_follow_the_rigs_local_clock_and_the_json_windows() {
         let awards = local_lap_at(&tt, y, mo, d, h, mi);
         assert_eq!(sticker_ids(&awards).contains(&name), expected, "{name} at {h}:{mi:02} on {y}-{mo}-{d}");
     }
+}
+
+
+// ---- stickers that read slides and the lap trace ---------------------------------------------------
+
+fn sliding(drift_m: f32, handbrake_drifts: u32) -> LiveSlideStats {
+    LiveSlideStats { drifts: 1, spins: 0, drift_ms: 8_000, longest_ms: 8_000, peak_slip_deg: 30.0, drift_m, handbrake_drifts }
+}
+
+#[test]
+fn skid_marks_add_up_the_distance_drifted_across_laps_and_a_handbrake_drift_is_a_hero() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    let now = now_ms();
+    let first = tt.record_lap_for(&lap(100_000, true), now, None, Some(sliding(600.0, 0))).unwrap().awards;
+    assert!(!sticker_ids(&first).contains(&"skid-marks") && !sticker_ids(&first).contains(&"handbrake-hero"));
+    let skid = tt.sticker_book(sam.id).unwrap().stickers.into_iter().find(|s| s.id == "skid-marks").unwrap();
+    assert_eq!(skid.progress.map(|p| (p.cur, p.max)), Some((600, 1000)));
+    let second = tt.record_lap_for(&lap(100_100, true), now + 1, None, Some(sliding(450.0, 1))).unwrap().awards;
+    let ids = sticker_ids(&second);
+    assert!(ids.contains(&"skid-marks") && ids.contains(&"handbrake-hero"), "{ids:?}");
+}
+
+fn trace_point(i: u32, n: u32, speed: f32, heading: f32, slip: f32) -> tt_games::timing::TracePoint {
+    tt_games::timing::TracePoint {
+        progress: i as f32 / n as f32,
+        elapsed_ms: i * 1_000,
+        speed_kmh: speed,
+        throttle: 1.0,
+        brake: 0.0,
+        clutch: 0.0,
+        steering: 0.0,
+        gear: 3,
+        position: Some([i as f32, 0.0]),
+        heading_deg: Some(heading),
+        slip_deg: Some(slip),
+        aids: None,
+        boost: None,
+    }
+}
+
+#[test]
+fn crossing_the_line_facing_backwards_is_a_moonwalk() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    let with_end = |slip: f32, speed: f32| {
+        let n = 60;
+        let pts = (0..n).map(|i| if i == n - 1 { trace_point(i, n, speed, 0.0, slip) } else { trace_point(i, n, 90.0, 0.0, 1.0) }).collect();
+        CompletedLap { trace: Some(tt_games::timing::LapTrace(pts)), ..lap(100_000, true) }
+    };
+    assert!(!sticker_ids(&tt.record_lap(&with_end(5.0, 90.0)).unwrap().awards).contains(&"moonwalk"), "facing forward");
+    assert!(!sticker_ids(&tt.record_lap(&with_end(170.0, 3.0)).unwrap().awards).contains(&"moonwalk"), "stopped, not moving at the line");
+    assert!(sticker_ids(&tt.record_lap(&with_end(-170.0, 60.0)).unwrap().awards).contains(&"moonwalk"), "backwards and moving");
+}
+
+#[test]
+fn stopping_pointing_against_the_track_and_carrying_on_is_wrong_way_round() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    // A learned map: a circle, driven the way the points run.
+    let n = 400;
+    let map: Vec<[f32; 2]> = (0..n).map(|i| { let a = i as f32 / n as f32 * std::f32::consts::TAU; [a.cos() * 500.0, a.sin() * 500.0] }).collect();
+    tt.store().set_track_map("acevo", "Imola", "", &map, true, 1).unwrap();
+    // Which way the map runs at a point, as the game's heading would say it (heading = atan2(-vx, vz)).
+    let along = |progress: f32| {
+        let i = (progress * n as f32) as usize % n;
+        let (a, b) = (map[i], map[(i + 2) % n]);
+        (-(b[0] - a[0])).atan2(b[1] - a[1]).to_degrees()
+    };
+    let lap_with_stop = |facing_offset: f32| {
+        let pts = (0..100u32)
+            .map(|i| {
+                let p = i as f32 / 100.0;
+                // Stopped for a few samples at 30% of the lap, pointing `facing_offset` degrees off the track's direction.
+                if (30..34).contains(&i) { trace_point(i, 100, 1.0, along(p) + facing_offset, 0.0) } else { trace_point(i, 100, 120.0, along(p), 0.0) }
+            })
+            .collect();
+        CompletedLap { trace: Some(tt_games::timing::LapTrace(pts)), ..lap(100_000, true) }
+    };
+    assert!(!sticker_ids(&tt.record_lap(&lap_with_stop(0.0)).unwrap().awards).contains(&"wrong-way-round"), "stopped but pointing the right way");
+    assert!(!sticker_ids(&tt.record_lap(&lap_with_stop(90.0)).unwrap().awards).contains(&"wrong-way-round"), "sideways is not backwards");
+    assert!(sticker_ids(&tt.record_lap(&lap_with_stop(180.0)).unwrap().awards).contains(&"wrong-way-round"));
 }

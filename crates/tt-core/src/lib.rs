@@ -138,6 +138,12 @@ pub struct LiveSlideStats {
     pub drift_ms: u64,
     pub longest_ms: u64,
     pub peak_slip_deg: f32,
+    /// Metres drifted (laps recorded before this was measured have none).
+    #[serde(default)]
+    pub drift_m: f32,
+    /// Drifts that began with the handbrake pulled.
+    #[serde(default)]
+    pub handbrake_drifts: u32,
 }
 
 impl LiveSlideStats {
@@ -149,7 +155,7 @@ impl LiveSlideStats {
 
 impl From<tt_games::dynamics::SlideStats> for LiveSlideStats {
     fn from(s: tt_games::dynamics::SlideStats) -> Self {
-        Self { drifts: s.drifts, spins: s.spins, drift_ms: s.drift_ms, longest_ms: s.longest_ms, peak_slip_deg: s.peak_slip_deg }
+        Self { drifts: s.drifts, spins: s.spins, drift_ms: s.drift_ms, longest_ms: s.longest_ms, peak_slip_deg: s.peak_slip_deg, drift_m: s.drift_m, handbrake_drifts: s.handbrake_drifts }
     }
 }
 
@@ -1222,7 +1228,9 @@ impl BinIt {
                 rt.last_out_lap = out_lap;
                 // Sliding only counts while the car is being driven: a pause isn't a drift.
                 let sliding = inputs.and_then(|i| i.dynamics.map(|d| (d, i.speed_kmh))).filter(|_| driving);
-                let slide = rt.slides.update(sliding.as_ref().map(|(d, _)| d), sliding.map_or(0.0, |(_, speed)| speed), now_ms() as u64);
+                let at = now_ms() as u64;
+                rt.slides.note_handbrake(inputs.map_or(0.0, |i| i.handbrake), at);
+                let slide = rt.slides.update(sliding.as_ref().map(|(d, _)| d), sliding.map_or(0.0, |(_, speed)| speed), at);
                 let changed = rt.lap_driver_changed && !out_lap;
                 let lap_valid = lap_valid && !changed;
                 let live = LiveView { driving, phase: phase.key(), on_track: matches!(phase, tt_games::GamePhase::Driving | tt_games::GamePhase::Paused), resets: rt.resets, slide: slide.key(), slide_stats: rt.slides.stats().into(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };

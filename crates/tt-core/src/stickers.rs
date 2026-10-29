@@ -115,6 +115,17 @@ pub enum Rule {
     /// This is a cut lap, and it ends a run of `n` cut laps in a row on that track and car, each within `percent` of
     /// another driver's best there (needs one other driver).
     ThisCutLapEndsARunWithinPercentOfAnotherDriversBest { n: u32, percent: f32 },
+    /// The driver has drifted `metres` in total across all their laps (laps recorded before distance was measured count
+    /// for nothing).
+    DriftDistanceInTotalAtLeast { metres: u32 },
+    /// This lap had `n` drifts that began with the handbrake pulled.
+    ThisLapHandbrakeDriftsAtLeast { n: u32 },
+    /// This lap crossed the line with the car facing backwards: slip of `slip_deg` or more (heading minus direction of
+    /// travel) at `min_speed_kmh` or more. Reads the lap's trace.
+    ThisLapFinishesFacingBackwards { slip_deg: f32, min_speed_kmh: f32 },
+    /// During this lap the car stopped (under `below_kmh`) pointing at least `degrees` away from the direction the
+    /// track runs there, and the lap was still finished. The way the track runs is its learned map's.
+    ThisLapStoppedFacingTheWrongWay { below_kmh: f32, degrees: f32 },
     /// Every other sticker in the book.
     AllOtherStickers,
 }
@@ -316,6 +327,8 @@ struct Board {
     records_held: u32,
     /// How many days the longest-standing of those records has stood.
     longest_held_days: u32,
+    /// Metres drifted across all this driver's laps.
+    drift_m_total: f32,
 }
 
 fn board_for(store: &Store, driver: DriverId, lap: Option<&Lap>, laps: &[Lap], now: Timestamp) -> Result<Board> {
@@ -336,6 +349,7 @@ fn board_for(store: &Store, driver: DriverId, lap: Option<&Lap>, laps: &[Lap], n
         }
     }
     board.records_held = tracks.len() as u32;
+    board.drift_m_total = store.driver_slides(driver)?.iter().filter_map(|j| serde_json::from_str::<crate::LiveSlideStats>(j).ok()).map(|st| st.drift_m).sum();
     for combo in combos {
         let best = bests.iter().filter(|(c, d, _)| c == combo && *d == driver).map(|(_, _, t)| *t).min();
         // The lap that set it: the earliest valid lap with that time (nobody has beaten it since).
@@ -359,6 +373,58 @@ struct Ctx<'a> {
     board: &'a Board,
     /// The slides and spins this lap recorded, when the game reports them.
     slides: crate::LiveSlideStats,
+    /// What this lap's trace and its track's learned map say about how the car sat on the road.
+    road: Road,
+}
+
+/// Facts read from a lap's trace and its track's map, worked out once per lap (only when a sticker needs them).
+#[derive(Debug, Clone, Copy, Default)]
+struct Road {
+    /// Slip angle and speed of the last sample before the line.
+    finish_slip_deg: Option<f32>,
+    finish_speed_kmh: f32,
+    /// The most the car's heading pointed away from the track's direction while stopped (under 5 km/h), degrees.
+    stopped_worst_off_deg: f32,
+    /// The slowest the car was going while that happened (for the rule's own speed limit).
+    stopped_at_kmh: f32,
+}
+
+/// The smallest angle between two headings, 0 to 180.
+fn angle_between(a: f32, b: f32) -> f32 {
+    (((a - b) % 360.0 + 540.0) % 360.0 - 180.0).abs()
+}
+
+/// What the lap's trace and the track's map say, when a sticker is about to ask.
+fn road_for(store: &Store, lap: &Lap) -> Result<Road> {
+    let mut road = Road::default();
+    let Some(trace) = store.lap_trace(lap.id)? else { return Ok(road) };
+    if let Some(last) = trace.0.last() {
+        road.finish_slip_deg = last.slip_deg;
+        road.finish_speed_kmh = last.speed_kmh;
+    }
+    if let Some(map) = store.track_map(&lap.combo.game, &lap.combo.track, &lap.combo.layout)? {
+        let n = map.len();
+        if n >= 4 {
+            road.stopped_at_kmh = f32::MAX;
+            for p in trace.0.iter().filter(|p| p.speed_kmh < 5.0) {
+                let Some(heading) = p.heading_deg else { continue };
+                let i = ((p.progress.clamp(0.0, 0.9999) * n as f32) as usize).min(n - 1);
+                let (a, b) = (map[i], map[(i + 2) % n]);
+                let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+                if dx.abs() + dz.abs() < 0.01 {
+                    continue;
+                }
+                // The same convention the slip angle uses: heading = atan2(-vx, vz).
+                let along = (-dx).atan2(dz).to_degrees();
+                let off = angle_between(heading, along);
+                if off > road.stopped_worst_off_deg {
+                    road.stopped_worst_off_deg = off;
+                    road.stopped_at_kmh = p.speed_kmh;
+                }
+            }
+        }
+    }
+    Ok(road)
 }
 
 /// How far a driver is through a rule: `(so far, needed)`. Earned when so far reaches needed.
@@ -469,6 +535,12 @@ fn measure(rule: &Rule, c: &Ctx) -> (u32, u32) {
             let run = c.laps.iter().rev().take_while(|l| l.untimed_reason.as_deref() == Some("cut") && l.combo == cur.combo && l.time_ms > 0 && f64::from(l.time_ms) <= limit);
             (run.count() as u32, *n)
         }
+        Rule::DriftDistanceInTotalAtLeast { metres } => (c.board.drift_m_total.round() as u32, *metres),
+        Rule::ThisLapHandbrakeDriftsAtLeast { n } => (on_lap(&|_| c.slides.handbrake_drifts >= *n), 1),
+        Rule::ThisLapFinishesFacingBackwards { slip_deg, min_speed_kmh } => {
+            (on_lap(&|_| c.road.finish_slip_deg.is_some_and(|s| s.abs() >= *slip_deg) && c.road.finish_speed_kmh >= *min_speed_kmh), 1)
+        }
+        Rule::ThisLapStoppedFacingTheWrongWay { below_kmh, degrees } => (on_lap(&|_| c.road.stopped_worst_off_deg >= *degrees && c.road.stopped_at_kmh < *below_kmh), 1),
         Rule::AllOtherStickers => (c.others_earned, c.others_total),
     }
 }
@@ -546,7 +618,7 @@ pub fn book(store: &Store, driver: DriverId, now: Timestamp) -> Result<StickerBo
     let earned: HashMap<String, Timestamp> = store.driver_stickers(driver)?.into_iter().collect();
     let total = cat.stickers.len() as u32;
     let board = board_for(store, driver, None, &laps, now)?;
-    let ctx = Ctx { laps: &laps, lap: None, flags: LapFlags::default(), now, others_earned: earned.len() as u32, others_total: total.saturating_sub(1), board: &board, slides: Default::default() };
+    let ctx = Ctx { laps: &laps, lap: None, flags: LapFlags::default(), now, others_earned: earned.len() as u32, others_total: total.saturating_sub(1), board: &board, slides: Default::default(), road: Road::default() };
     let stickers: Vec<StickerView> = cat
         .stickers
         .iter()
@@ -554,7 +626,7 @@ pub fn book(store: &Store, driver: DriverId, now: Timestamp) -> Result<StickerBo
             let at = earned.get(&s.id).copied();
             let shown = at.is_some() || !s.hidden;
             let pay = cat.pay(s);
-            let one_off = matches!(s.rule, Some(Rule::ThisLapIsPersonalBest | Rule::ThisLapIsTrackRecord | Rule::ThisLapInChallenge | Rule::ThisLapTimeEndsIn { .. } | Rule::ThisLapTimeIsPalindrome | Rule::ThisLapFasterThan { .. } | Rule::ThisLapTimeEndsInSecondsAndMs { .. } | Rule::ThisLapLongestDriftAtLeast { .. } | Rule::ThisLapDriftTimeShareAtLeast { .. } | Rule::ThisLapSpinsAtLeast { .. } | Rule::ThisLapSlowerThanYourBestBy { .. } | Rule::ThisLapSectorFasterThanEveryoneElse | Rule::ThisLapWithinPercentOfAnotherDriversBest { .. } | Rule::ThisLapWinsFromBottomHalf { .. } | Rule::ThisLapPassesAnotherDriver | Rule::ThisLapWithinOfAnotherDriversTime { .. } | Rule::ThisLapEqualsAnotherDriversTime | Rule::ThisLapHasNoSpin | Rule::ThisLapSetBetweenLocalTimes { .. } | Rule::ThisLapIsPersonalBestAfterLapsWithoutOne { .. }));
+            let one_off = matches!(s.rule, Some(Rule::ThisLapIsPersonalBest | Rule::ThisLapIsTrackRecord | Rule::ThisLapInChallenge | Rule::ThisLapTimeEndsIn { .. } | Rule::ThisLapTimeIsPalindrome | Rule::ThisLapFasterThan { .. } | Rule::ThisLapTimeEndsInSecondsAndMs { .. } | Rule::ThisLapLongestDriftAtLeast { .. } | Rule::ThisLapDriftTimeShareAtLeast { .. } | Rule::ThisLapSpinsAtLeast { .. } | Rule::ThisLapSlowerThanYourBestBy { .. } | Rule::ThisLapSectorFasterThanEveryoneElse | Rule::ThisLapWithinPercentOfAnotherDriversBest { .. } | Rule::ThisLapWinsFromBottomHalf { .. } | Rule::ThisLapPassesAnotherDriver | Rule::ThisLapWithinOfAnotherDriversTime { .. } | Rule::ThisLapEqualsAnotherDriversTime | Rule::ThisLapHasNoSpin | Rule::ThisLapSetBetweenLocalTimes { .. } | Rule::ThisLapIsPersonalBestAfterLapsWithoutOne { .. } | Rule::ThisLapHandbrakeDriftsAtLeast { .. } | Rule::ThisLapFinishesFacingBackwards { .. } | Rule::ThisLapStoppedFacingTheWrongWay { .. }));
             let progress = match &s.rule {
                 Some(rule) if at.is_none() && !one_off && shown => {
                     let (cur, max) = measure(rule, &ctx);
@@ -641,6 +713,13 @@ fn unlock_pass(store: &Store, driver: DriverId, laps: &[Lap], lap: Option<&Lap>,
         Some(l) => store.lap_slides(l.id)?.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default(),
         None => Default::default(),
     };
+    // Only read the trace and the map when a sticker still to earn is about them.
+    let needs_road = lap.is_some()
+        && cat.stickers.iter().any(|st| !earned.contains(&st.id) && matches!(st.rule, Some(Rule::ThisLapFinishesFacingBackwards { .. } | Rule::ThisLapStoppedFacingTheWrongWay { .. })));
+    let road = match lap {
+        Some(l) if needs_road => road_for(store, l)?,
+        _ => Road::default(),
+    };
     // The Completionist goes last, so it sees what this very lap unlocked.
     for completionist in [false, true] {
         for s in &cat.stickers {
@@ -648,7 +727,7 @@ fn unlock_pass(store: &Store, driver: DriverId, laps: &[Lap], lap: Option<&Lap>,
             if earned.contains(&s.id) || (*rule == Rule::AllOtherStickers) != completionist {
                 continue;
             }
-            let ctx = Ctx { laps, lap, flags, now, others_earned: earned.len() as u32, others_total: total.saturating_sub(1), board: &board, slides };
+            let ctx = Ctx { laps, lap, flags, now, others_earned: earned.len() as u32, others_total: total.saturating_sub(1), board: &board, slides, road };
             let (cur, max) = measure(rule, &ctx);
             if cur < max || max == 0 {
                 continue;
@@ -740,7 +819,7 @@ mod tests {
     }
 
     fn slid(drift_ms: u64, longest_ms: u64, spins: u32) -> crate::LiveSlideStats {
-        crate::LiveSlideStats { drifts: u32::from(drift_ms > 0), spins, drift_ms, longest_ms, peak_slip_deg: 30.0 }
+        crate::LiveSlideStats { drifts: u32::from(drift_ms > 0), spins, drift_ms, longest_ms, peak_slip_deg: 30.0, drift_m: 0.0, handbrake_drifts: 0 }
     }
 
     /// Whether a rule is met by one lap that carried these slides.
@@ -748,7 +827,7 @@ mod tests {
         let lap = timed_lap(time_ms);
         let laps = [lap.clone()];
         let board = Board::default();
-        let ctx = Ctx { laps: &laps, lap: Some(&lap), flags: LapFlags::default(), now: 0, others_earned: 0, others_total: 0, board: &board, slides };
+        let ctx = Ctx { laps: &laps, lap: Some(&lap), flags: LapFlags::default(), now: 0, others_earned: 0, others_total: 0, board: &board, slides, road: Road::default() };
         let (cur, max) = measure(rule, &ctx);
         cur >= max
     }

@@ -620,6 +620,13 @@ impl Store {
         Ok(())
     }
 
+    /// The stored slide stats (JSON) of every lap a driver has that has any.
+    pub fn driver_slides(&self, driver_id: DriverId) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT slides FROM laps WHERE driver_id = ?1 AND slides IS NOT NULL")?;
+        let rows = stmt.query_map([driver_id], |r| r.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     pub fn lap_slides(&self, id: LapId) -> Result<Option<String>> {
         Ok(self.conn.query_row("SELECT slides FROM laps WHERE id = ?1", [id], |r| r.get(0)).optional()?.flatten())
     }

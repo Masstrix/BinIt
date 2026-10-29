@@ -370,8 +370,11 @@
       "name": "Skid marks",
       "group": "drifting",
       "rarity": "rare",
-      "how": "Slide a combined 1 km across all your laps.",
-      "rule": null
+      "how": "Drift a combined 1 km across all your laps. Counts from laps recorded after distance was added.",
+      "rule": {
+        "kind": "driftDistanceInTotalAtLeast",
+        "metres": 1000
+      }
     },
     {
       "id": "tyre-fryer",
@@ -401,8 +404,11 @@
       "name": "Handbrake hero",
       "group": "drifting",
       "rarity": "rare",
-      "how": "Start a slide with the handbrake and finish the lap clean.",
-      "rule": null
+      "how": "Start a drift with the handbrake and finish the lap clean.",
+      "rule": {
+        "kind": "thisLapHandbrakeDriftsAtLeast",
+        "n": 1
+      }
     },
     {
       "id": "spinning-top",
@@ -503,7 +509,11 @@
       "group": "funny",
       "rarity": "common",
       "how": "Stop dead facing backwards mid-lap, then carry on and finish it.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapStoppedFacingTheWrongWay",
+        "belowKmh": 5,
+        "degrees": 135
+      }
     },
     {
       "id": "slow-and-steady",
@@ -549,7 +559,11 @@
       "group": "funny",
       "rarity": "epic",
       "how": "Cross the finish line of a lap or stage facing backwards.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapFinishesFacingBackwards",
+        "slipDeg": 120,
+        "minSpeedKmh": 10
+      }
     },
     {
       "id": "marathon",
