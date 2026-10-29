@@ -551,6 +551,10 @@
         "on": [
           {
             "track": "Nurburgring",
+            "layout": "Nordschleife"
+          },
+          {
+            "track": "Nurburgring",
             "layout": "Touristenfahrten"
           },
           {
@@ -571,6 +575,10 @@
         "on": [
           {
             "track": "Nurburgring",
+            "layout": "Nordschleife"
+          },
+          {
+            "track": "Nurburgring",
             "layout": "Touristenfahrten"
           },
           {
@@ -589,6 +597,10 @@
         "kind": "thisLapFasterThan",
         "ms": 480000,
         "on": [
+          {
+            "track": "Nurburgring",
+            "layout": "Nordschleife"
+          },
           {
             "track": "Nurburgring",
             "layout": "Touristenfahrten"
@@ -623,6 +635,10 @@
         "on": [
           {
             "track": "Nurburgring",
+            "layout": "Nordschleife"
+          },
+          {
+            "track": "Nurburgring",
             "layout": "Touristenfahrten"
           },
           {
@@ -652,6 +668,10 @@
         "seconds": 20,
         "ms": 832,
         "on": [
+          {
+            "track": "Nurburgring",
+            "layout": "Nordschleife"
+          },
           {
             "track": "Nurburgring",
             "layout": "Touristenfahrten"

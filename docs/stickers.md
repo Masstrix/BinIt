@@ -67,8 +67,8 @@ A sticker with a `reward` overrides any part of that. Leave a field out to keep 
 | `allOtherStickers` | every other sticker is earned | none |
 
 `on` is a list of tracks, each `{ "track": "Nurburgring", "layout": "Touristenfahrten" }` (`layout` is optional). Spelling,
-case and punctuation do not matter, but list every name each game uses for the circuit: Assetto Corsa EVO stores the
-Nordschleife as `Nurburgring` / `Touristenfahrten`, Assetto Corsa as `ks_nordschleife`. A different layout of the same
+case and punctuation do not matter, but list every name each game uses for the circuit: Assetto Corsa EVO reports the
+Nordschleife as track `Nurburgring`, layout `Nordschleife` (its catalogue also calls it `Touristenfahrten`, so both are listed), Assetto Corsa as `ks_nordschleife`. A different layout of the same
 track (the Nurburgring GP circuit) does not match.
 
 `exceptCarClasses` stops cars that are far quicker than the sticker is about from earning it: Sub eight and Sub seven rule

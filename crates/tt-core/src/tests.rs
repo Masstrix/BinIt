@@ -1624,8 +1624,8 @@ fn the_nordschleife_stickers_count_only_on_the_nordschleife_in_either_game() {
     // The GP circuit at the same Nurburgring is not the Nordschleife.
     assert!(!sticker_ids(&tt.record_lap(&ring_lap("ks_nurburgring", Some("layout_gp_a"), 400_000)).unwrap().awards).iter().any(|id| id.starts_with("ring-")));
 
-    // Assetto Corsa EVO: Nurburgring, Touristenfahrten. Sub-eight but not sub-seven.
-    let evo = tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 470_000)).unwrap().awards;
+    // Assetto Corsa EVO reports the Nordschleife as track "Nurburgring", layout "Nordschleife". Sub-eight but not sub-seven.
+    let evo = tt.record_lap(&ring_lap("Nurburgring", Some("Nordschleife"), 470_000)).unwrap().awards;
     let ids = sticker_ids(&evo);
     assert!(ids.contains(&"ring-green-hell") && ids.contains(&"ring-sub-eight") && !ids.contains(&"ring-sub-seven"), "{ids:?}");
     // Assetto Corsa: ks_nordschleife, any layout. Sub-seven, paid with its own reward.
@@ -1633,6 +1633,10 @@ fn the_nordschleife_stickers_count_only_on_the_nordschleife_in_either_game() {
     let seven = ac.stickers.iter().find(|s| s.id == "ring-sub-seven").expect("sub seven");
     assert_eq!((seven.xp, seven.coins), (500, 750));
     assert!(!sticker_ids(&ac).contains(&"ring-sub-eight"), "already earned");
+    // The catalogue's own name for the EVO layout works too.
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Jess", None).unwrap();
+    assert!(sticker_ids(&tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 600_000)).unwrap().awards).contains(&"ring-green-hell"));
 }
 
 #[test]
