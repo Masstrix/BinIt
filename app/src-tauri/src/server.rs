@@ -55,6 +55,7 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/drivers/{id}/profile", get(driver_profile))
         .route("/drivers/{id}/stickers", get(driver_stickers))
         .route("/drivers/{id}/stickers/pinned", put(pin_stickers))
+        .route("/drivers/{id}/stats", get(driver_stats))
         .route("/drivers/{id}/parcel", get(driver_parcel))
         .route("/drivers/{id}/parcel/collect", post(collect_parcel))
         .route("/rewards", get(rewards))
@@ -310,6 +311,11 @@ async fn driver_profile(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiRe
 /// The achievement stickers: every one, what this driver has earned and their progress. Open to everyone, like the profile.
 async fn driver_stickers(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<tt_core::stickers::StickerBook> {
     Ok(Json(c.tt.sticker_book(id)?))
+}
+
+/// How far, how long, how sideways and where a driver stands. Open to everyone, like the profile.
+async fn driver_stats(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<tt_core::stats::DriverStats> {
+    Ok(Json(c.tt.driver_stats(id)?))
 }
 
 /// The stickers and rewards a driver has not been shown yet, or null. Open to everyone like the profile, but the app

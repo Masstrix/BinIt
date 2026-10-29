@@ -423,6 +423,32 @@ export interface StickerGroup {
   blurb: string;
 }
 
+/** How far, how long, how sideways and where a driver stands (crates/tt-core/src/stats.rs). */
+export interface DriverStats {
+  distanceM: number;
+  /** Laps that have a distance, out of the laps that count: laps from before it was measured, with no trace, are missing. */
+  lapsWithDistance: number;
+  lapsCounted: number;
+  timedLaps: number;
+  cleanPercent: number;
+  timeOnTrackMs: number;
+  tracks: number;
+  cars: number;
+  longestStreakDays: number;
+  driftM: number;
+  /** When the first drift distance was recorded: drift numbers only count from then. */
+  driftSince: number | null;
+  longestDriftMs: number;
+  drifts: number;
+  spins: number;
+  handbrakeDrifts: number;
+  peakSlipDeg: number;
+  recordsHeld: number;
+  challengesEntered: number;
+  podiums: number;
+  wins: number;
+}
+
 /** One sticker in a parcel. */
 export interface ParcelSticker {
   id: string;
@@ -639,6 +665,7 @@ export const api = {
   updateDriver: (id: DriverId, name: string, color: string) =>
     request<Driver>("PUT", `/drivers/${id}`, { name, color }),
   profile: (id: DriverId) => request<Profile>("GET", `/drivers/${id}/profile`),
+  driverStats: (id: DriverId) => request<DriverStats>("GET", `/drivers/${id}/stats`),
   /** The driver's waiting parcel, or null. */
   parcel: (id: DriverId) => request<Parcel | null>("GET", `/drivers/${id}/parcel`),
   collectParcel: (id: DriverId) => request<boolean>("POST", `/drivers/${id}/parcel/collect`),

@@ -172,6 +172,20 @@ button, so it cannot be missed.
   `stickers.json` without an icon there shows a star until one is added.
 * The progress bars are the profile's flat `.you-bar` (the driver's colour for the total, the rarity colour for one sticker).
 
+## Driving stats
+
+`GET /api/drivers/{id}/stats` (`crates/tt-core/src/stats.rs`) and the page at `#/you/{id}/stats`, with three tiles on the profile
+(Driven, Clean laps, Drifted). Nothing is stored except each lap's distance (`laps.distance_m`, schema 17):
+
+* **Distance** is the track's length for each whole lap (timed or cut; an out or in lap is not a lap), or measured from the lap's
+  trace when the game gives no length. When a database first gets the column, laps that already have a trace are filled in
+  from it; laps with neither stay empty, and the page says how many laps the distance covers.
+* **Time on track** adds up the lap times of timed and cut laps.
+* **Drift distance, handbrake drifts** come from each lap's slide stats and only exist for laps recorded since they were
+  measured; the page says since when.
+* **Records held, challenges entered, podiums, wins** come from the boards and `challenge_results`; podiums and wins count
+  challenges with at least three drivers.
+
 ## Not built yet
 
 * The unlock toast from `awards.stickers` (the parcel now covers telling the driver), and the helmet slot for wearing a sticker. The overlay still toasts the

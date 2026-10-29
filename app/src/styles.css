@@ -1726,3 +1726,19 @@ a.garage-coins { text-decoration: none; }
   .pc-lid { transform: translateY(-58px) rotate(-16deg) !important; }
   .pc-burst, .pc-spark { display: none; }
 }
+
+/* ---- driving stats -------------------------------------------------------------------------------------------- */
+.you-stats .stat-tile .mono small { font-size: 13px; font-weight: 600; color: var(--muted); }
+.you-more { align-self: flex-end; min-height: 44px; display: inline-flex; align-items: center; color: var(--peri-1); font-weight: 600; font-size: 14px; text-decoration: none; }
+.stats-hero { display: flex; flex-direction: column; gap: 6px; padding: 22px 20px; border-radius: 28px; background: var(--panel); }
+.stats-hero .big { font: 800 clamp(44px, 8vw, 64px)/1 var(--font-display); letter-spacing: -0.03em; }
+.stats-hero .big small { font-size: 0.45em; font-weight: 600; color: var(--muted); }
+.stats-group { display: flex; flex-direction: column; gap: 10px; }
+.stats-group h2 { margin: 0; }
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.stats-cell { background: var(--panel); border-radius: 22px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.stats-label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #a9b2ca; }
+.stats-value { font: 700 24px var(--font-display); letter-spacing: -0.02em; }
+.stats-value small { font-size: 14px; font-weight: 600; color: var(--muted); }
+.stats-note { font: 500 11.5px var(--font-mono); color: var(--muted); min-height: 16px; }
+.stats-foot { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--muted); }

@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { api, isTauri, useAppState, useFetch, type Driver, type Profile } from "../api";
+import { api, isTauri, useAppState, useFetch, type DriverStats, type Driver, type Profile } from "../api";
 import { WhoAreYou } from "../components/MeBar";
 import { Coin } from "../components/Coin";
 import { Helmet } from "../components/Helmet";
-import { carName, lapTime, trackName, ago } from "../format";
+import { carName, lapTime, trackName, ago, km } from "../format";
 import { GameIcon } from "../components/GameIcon";
 import { Modal } from "../components/Modal";
 import { useSeatSwitcher } from "../components/SeatSwitcher";
@@ -143,6 +143,7 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
   const { status } = useAppState();
   // Customize and the Shop belong to the driver signed in on this device (or, on the PC, the one in the seat).
   const canDress = mine || (manage && status?.seat === p.driver.id);
+  const stats = useFetch<DriverStats>(() => api.driverStats(p.driver.id), [p.driver.id, p.cleanLaps]);
   const into = p.xp - p.levelStartXp;
   const span = Math.max(1, p.nextLevelXp - p.levelStartXp);
   return (
@@ -185,10 +186,11 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
       </section>
 
       <div className="you-stats">
+        <div className="stat-tile"><span className="mono">{stats ? km(stats.distanceM) : "–"}<small> km</small></span><span className="label">Driven</span></div>
         <div className="stat-tile"><span className="mono">{p.cleanLaps}</span><span className="label">Clean laps</span></div>
-        <div className="stat-tile"><span className="mono">{p.cleanPercent}%</span><span className="label">Clean</span></div>
-        <div className="stat-tile"><span className="mono">{p.tracks}</span><span className="label">Tracks</span></div>
+        <div className="stat-tile"><span className="mono">{stats && stats.driftM > 0 ? km(stats.driftM) : "–"}<small> km</small></span><span className="label">Drifted</span></div>
       </div>
+      <a className="you-more" href={`#/you/${p.driver.id}/stats`}>All driving stats ›</a>
 
       <div className="manage-list">
         <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Progress over time" sub="Bests and speed score on every track" href={`#/you/${p.driver.id}/progress`} />

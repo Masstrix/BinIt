@@ -7,6 +7,7 @@ pub mod model;
 pub mod pairing;
 pub mod progress;
 pub mod shop;
+pub mod stats;
 pub mod stickers;
 mod store;
 pub mod trackmap;
@@ -664,6 +665,15 @@ impl BinIt {
         stickers::book(&store, driver_id, now_ms())
     }
 
+    /// How far, how long, how sideways and where they stand: the stats page.
+    pub fn driver_stats(&self, driver_id: DriverId) -> Result<stats::DriverStats> {
+        let store = self.store();
+        if store.driver(driver_id)?.is_none() {
+            anyhow::bail!("no such driver");
+        }
+        stats::driver_stats(&store, driver_id, now_ms())
+    }
+
     /// What this driver has earned and not been shown yet (see `stickers::Parcel`), if anything.
     pub fn parcel(&self, driver_id: DriverId) -> Result<Option<stickers::Parcel>> {
         stickers::parcel(&self.store(), driver_id)
@@ -968,6 +978,13 @@ impl BinIt {
             recorded_at: now,
         };
         lap.id = store.insert_lap(&lap, completed.profile.as_ref(), completed.trace.as_ref())?;
+        // How far this lap went: the track's length when the game gives it (a whole lap), else measured from the trace.
+        if lap.valid || completed.untimed == Some(UntimedReason::Cut) || completed.untimed.is_none() {
+            let metres = completed.session.length_m.filter(|m| *m > 0).or_else(|| completed.trace.as_ref().and_then(stats::trace_distance_m));
+            if let Some(m) = metres {
+                store.set_lap_distance(lap.id, m)?;
+            }
+        }
         if let Some(slides) = slides.filter(LiveSlideStats::any) {
             store.set_lap_slides(lap.id, &serde_json::to_string(&slides)?)?;
         }

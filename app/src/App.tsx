@@ -20,6 +20,7 @@ import { Overlay } from "./pages/Overlay";
 import { DriverProgress } from "./pages/DriverProgress";
 import { YouPage } from "./pages/You";
 import { StickerBookPage } from "./pages/Stickers";
+import { StatsPage } from "./pages/Stats";
 import { ParcelGate } from "./components/Parcel";
 import { CustomizePage } from "./pages/Customize";
 import { ShopPage } from "./pages/Shop";
@@ -148,6 +149,7 @@ export function App() {
   else if (path.startsWith("/advanced")) page = <AdvancedPage />;
   else if (/^\/you\/\d+\/progress/.test(path)) page = <DriverProgress id={Number(path.split("/")[2])} />;
   else if (/^\/you\/\d+\/stickers/.test(path)) page = <StickerBookPage id={Number(path.split("/")[2])} />;
+  else if (/^\/you\/\d+\/stats/.test(path)) page = <StatsPage id={Number(path.split("/")[2])} />;
   else if (path.startsWith("/you")) page = <YouPage path={path} />;
   else if (path.startsWith("/customize")) page = <CustomizePage />;
   else if (path.startsWith("/shop")) page = <ShopPage />;

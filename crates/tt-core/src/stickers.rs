@@ -324,6 +324,11 @@ pub struct LapFlags {
     pub purple_sector: bool,
 }
 
+/// On how many tracks the driver holds the best time, with another driver on the board.
+pub(crate) fn records_held(store: &Store, driver: DriverId, laps: &[Lap], now: Timestamp) -> Result<u32> {
+    Ok(board_for(store, driver, None, laps, now)?.records_held)
+}
+
 /// What the board looks like around a driver, for stickers that compare drivers.
 #[derive(Debug, Clone, Default)]
 struct Board {

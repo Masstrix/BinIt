@@ -2088,3 +2088,60 @@ fn stickers_from_before_parcels_are_already_seen_but_caught_up_ones_arrive_in_a_
     let parcel = tt.parcel(sam).unwrap().expect("caught-up stickers wait in a parcel");
     assert!(parcel.stickers.iter().any(|s| s.id == "first-lap"));
 }
+
+
+// ---- driving stats -----------------------------------------------------------------------------------
+
+#[test]
+fn stats_add_up_distance_time_sliding_and_where_a_driver_stands() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    let now = now_ms();
+    // Two timed laps of a 4,909 m track (the test session's length), one cut lap, and an out lap that is not a lap.
+    tt.record_lap_for(&lap(100_000, true), now - 2 * progress::DAY_MS, None, Some(sliding(300.0, 1))).unwrap();
+    tt.record_lap_for(&lap(99_000, true), now - progress::DAY_MS, None, Some(LiveSlideStats { spins: 2, longest_ms: 12_000, peak_slip_deg: 70.0, ..sliding(200.0, 0) })).unwrap();
+    tt.record_lap_for(&untimed_lap(98_000, UntimedReason::Cut), now, None, None).unwrap();
+    tt.record_lap_for(&untimed_lap(90_000, UntimedReason::OutLap), now, None, None).unwrap();
+
+    let st = tt.driver_stats(sam.id).unwrap();
+    assert_eq!((st.timed_laps, st.laps_counted, st.laps_with_distance), (2, 3, 3), "the out lap is not counted");
+    assert_eq!(st.distance_m, 3 * 4_909);
+    assert_eq!(st.time_on_track_ms, 100_000 + 99_000 + 98_000);
+    assert_eq!(st.clean_percent, 67);
+    assert_eq!((st.tracks, st.cars, st.longest_streak_days), (1, 1, 2));
+    assert!((st.drift_m - 500.0).abs() < 0.1 && st.drift_since.is_some());
+    assert_eq!((st.drifts, st.spins, st.handbrake_drifts, st.longest_drift_ms), (2, 2, 1, 12_000));
+    assert_eq!(st.peak_slip_deg, 70.0);
+    assert_eq!((st.records_held, st.challenges_entered, st.podiums, st.wins), (0, 0, 0, 0));
+    assert!(tt.driver_stats(9_999).is_err());
+}
+
+#[test]
+fn a_lap_with_no_track_length_is_measured_from_its_trace_and_old_laps_are_filled_in_by_the_migration() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("binit.db");
+    let sam = {
+        let tt = BinIt::open(&path).unwrap();
+        let sam = tt.add_and_seat("Sam", None).unwrap();
+        let mut completed = lap(100_000, true);
+        completed.session.length_m = None;
+        let pts = (0..100u32).map(|i| trace_point(i, 100, 100.0, 0.0, 0.0)).collect();
+        completed.trace = Some(tt_games::timing::LapTrace(pts));
+        tt.record_lap(&completed).unwrap();
+        // A lap that has neither a length nor a trace has no distance, and is said to be short.
+        let mut bare = lap(101_000, true);
+        bare.session.length_m = None;
+        tt.record_lap(&bare).unwrap();
+        let st = tt.driver_stats(sam.id).unwrap();
+        assert_eq!((st.distance_m, st.laps_with_distance, st.laps_counted), (99, 1, 2));
+        sam.id
+    };
+    // A database from before distances: the laps that have a trace get one back, the rest stay empty.
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("UPDATE laps SET distance_m = NULL; PRAGMA user_version = 16;").unwrap();
+    }
+    let tt = BinIt::open(&path).unwrap();
+    let st = tt.driver_stats(sam).unwrap();
+    assert_eq!((st.distance_m, st.laps_with_distance, st.laps_counted), (99, 1, 2));
+}

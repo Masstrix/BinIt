@@ -400,6 +400,14 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
     emit({ type: "driversChanged" });
     return ok(i >= 0);
   }
+  if ((r = m(/^\/drivers\/(\d+)\/stats$/))) {
+    const mine = laps.filter((l) => l.driverId === +r![1] && l.valid);
+    return ok({
+      distanceM: mine.length * 4909, lapsWithDistance: mine.length, lapsCounted: mine.length, timedLaps: mine.length, cleanPercent: 91, timeOnTrackMs: mine.reduce((a, l) => a + l.timeMs, 0),
+      tracks: 1, cars: 1, longestStreakDays: 3, driftM: 3400, driftSince: Date.now() - 5 * 86_400_000, longestDriftMs: 14_200, drifts: 38, spins: 9, handbrakeDrifts: 4, peakSlipDeg: 62,
+      recordsHeld: 1, challengesEntered: 5, podiums: 3, wins: 1,
+    });
+  }
   if ((r = m(/^\/drivers\/(\d+)\/parcel$/))) return ok(collectedParcels.has(+r[1]) ? null : MOCK_PARCEL);
   if ((r = m(/^\/drivers\/(\d+)\/parcel\/collect$/))) {
     collectedParcels.add(+r[1]);

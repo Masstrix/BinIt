@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 16;
+const SCHEMA_VERSION: i32 = 17;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -295,6 +295,25 @@ impl Store {
                 conn.execute_batch("ALTER TABLE driver_stickers ADD COLUMN seen_at INTEGER;")?;
             }
             conn.execute_batch("UPDATE driver_stickers SET seen_at = at WHERE seen_at IS NULL;")?;
+        }
+        if version < 17 {
+            // How far each lap was driven, in metres (see stats.rs). Laps recorded before this get it from their trace
+            // when they have one; the rest stay empty rather than guessed.
+            let has_column = conn.query_row("SELECT COUNT(*) FROM pragma_table_info('laps') WHERE name = 'distance_m'", [], |r| r.get::<_, i64>(0))? > 0;
+            if !has_column {
+                conn.execute_batch("ALTER TABLE laps ADD COLUMN distance_m INTEGER;")?;
+            }
+            let rows: Vec<(i64, Vec<u8>)> = {
+                let mut stmt = conn.prepare(
+                    "SELECT id, trace FROM laps WHERE distance_m IS NULL AND trace IS NOT NULL AND (valid = 1 OR untimed_reason = 'cut' OR untimed_reason IS NULL)",
+                )?;
+                stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?
+            };
+            for (id, bytes) in rows {
+                if let Some(m) = LapTrace::from_bytes(&bytes).and_then(|t| crate::stats::trace_distance_m(&t)) {
+                    conn.execute("UPDATE laps SET distance_m = ?2 WHERE id = ?1", params![id, m])?;
+                }
+            }
         }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         let store = Self { conn };
@@ -657,6 +676,23 @@ impl Store {
             ],
         )?;
         Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Records how far a lap was driven, in metres.
+    pub fn set_lap_distance(&self, id: LapId, metres: u32) -> Result<()> {
+        self.conn.execute("UPDATE laps SET distance_m = ?2 WHERE id = ?1", params![id, metres])?;
+        Ok(())
+    }
+
+    /// `(metres driven, laps that have a distance, laps that count)` and the time on track in ms, over a driver's
+    /// attempts: timed laps and cut laps (an out or in lap is not a lap).
+    pub fn driver_distance_totals(&self, driver_id: DriverId) -> Result<(u64, u32, u32, u64)> {
+        Ok(self.conn.query_row(
+            "SELECT COALESCE(SUM(distance_m), 0), COUNT(distance_m), COUNT(*), COALESCE(SUM(time_ms), 0) FROM laps
+             WHERE driver_id = ?1 AND (valid = 1 OR untimed_reason = 'cut' OR untimed_reason IS NULL)",
+            [driver_id],
+            |r| Ok((r.get::<_, i64>(0)? as u64, r.get(1)?, r.get(2)?, r.get::<_, i64>(3)? as u64)),
+        )?)
     }
 
     /// A lap's timing profile (elapsed ms at each 0.5% of the lap), if it has one.
