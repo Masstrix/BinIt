@@ -1772,3 +1772,7 @@ html[data-nav="back"]::view-transition-new(page) { animation-name: page-in-left;
 .fav-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--peri-1); }
 .stats-group > .card, .stats-group > .how-doing { margin: 0; }
 .stats-group { gap: 12px; }
+
+/* more air between the stats sections, most of all on a phone */
+.content > .stats-group, .content > .stk-close, .content > .stats-hero { margin-top: 10px; }
+@media (max-width: 760px) { .content > .stats-group, .content > .stk-close, .content > .stats-hero { margin-top: 18px; } .stats-group { gap: 14px; } .stats-grid, .fav-grid { gap: 12px; } .stats-foot { margin-top: 10px; } }
