@@ -1633,10 +1633,15 @@ fn the_nordschleife_stickers_count_only_on_the_nordschleife_in_either_game() {
     let seven = ac.stickers.iter().find(|s| s.id == "ring-sub-seven").expect("sub seven");
     assert_eq!((seven.xp, seven.coins), (500, 750));
     assert!(!sticker_ids(&ac).contains(&"ring-sub-eight"), "already earned");
-    // The catalogue's own name for the EVO layout works too.
+    // Touristenfahrten (the public layout) counts for Green Hell, but a fast time there is not a Nordschleife time.
     let tt = BinIt::in_memory().unwrap();
     tt.add_and_seat("Jess", None).unwrap();
-    assert!(sticker_ids(&tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 600_000)).unwrap().awards).contains(&"ring-green-hell"));
+    let tourist = tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 400_000)).unwrap().awards;
+    let ids = sticker_ids(&tourist);
+    assert!(ids.contains(&"ring-green-hell") && !ids.contains(&"ring-sub-eight") && !ids.contains(&"ring-sub-seven"), "{ids:?}");
+    // Assetto Corsa's combined endurance layout is not the Nordschleife layout either.
+    let endurance = tt.record_lap(&ring_lap("ks_nordschleife", Some("endurance"), 400_000)).unwrap().awards;
+    assert!(!sticker_ids(&endurance).contains(&"ring-sub-seven"));
 }
 
 #[test]
@@ -1647,26 +1652,31 @@ fn a_lap_time_that_ends_in_the_rings_length_is_a_hidden_egg_and_ten_laps_make_a_
     assert_eq!((hidden.name.as_str(), hidden.earned), ("Hidden sticker", false));
     // 7:20.832 on the Nordschleife; the same time elsewhere does nothing.
     assert!(!sticker_ids(&tt.record_lap(&lap(440_832, true)).unwrap().awards).contains(&"ring-20-832"));
+    // Ten laps count on either layout.
     for i in 0..9 {
-        tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 600_000 + i)).unwrap();
+        let layout = if i % 2 == 0 { "Touristenfahrten" } else { "Nordschleife" };
+        tt.record_lap(&ring_lap("Nurburgring", Some(layout), 600_000 + i)).unwrap();
     }
-    let egg = tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 440_832)).unwrap().awards;
-    let ids = sticker_ids(&egg);
-    assert!(ids.contains(&"ring-20-832") && ids.contains(&"ring-regular"), "{ids:?}");
+    // Public layout: not the egg. Closed layout: the egg.
+    let tourist = tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 440_832)).unwrap().awards;
+    let ids = sticker_ids(&tourist);
+    assert!(ids.contains(&"ring-regular") && !ids.contains(&"ring-20-832"), "the tenth lap makes a regular: {ids:?}");
+    let egg = tt.record_lap(&ring_lap("Nurburgring", Some("Nordschleife"), 440_832)).unwrap().awards;
+    assert!(sticker_ids(&egg).contains(&"ring-20-832"), "{:?}", sticker_ids(&egg));
 }
 
 #[test]
 fn an_open_wheel_car_cannot_earn_the_nordschleife_time_stickers() {
     let tt = BinIt::in_memory().unwrap();
     tt.add_and_seat("Sam", None).unwrap();
-    let mut f1 = ring_lap("Nurburgring", Some("Touristenfahrten"), 330_000);
+    let mut f1 = ring_lap("Nurburgring", Some("Nordschleife"), 330_000);
     f1.session.car = "Ferrari F2004".into();
     let ids = sticker_ids(&tt.record_lap(&f1).unwrap().awards).into_iter().map(String::from).collect::<Vec<_>>();
     // It still counts as a lap on the Ring, just not as a sub-eight or sub-seven.
     assert!(ids.contains(&"ring-green-hell".to_string()), "{ids:?}");
     assert!(!ids.contains(&"ring-sub-eight".to_string()) && !ids.contains(&"ring-sub-seven".to_string()), "{ids:?}");
     // The same time in a GT3 car does earn them.
-    let gt3 = tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 330_000)).unwrap().awards;
+    let gt3 = tt.record_lap(&ring_lap("Nurburgring", Some("Nordschleife"), 330_000)).unwrap().awards;
     let ids = sticker_ids(&gt3);
     assert!(ids.contains(&"ring-sub-eight") && ids.contains(&"ring-sub-seven"), "{ids:?}");
 }

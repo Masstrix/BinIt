@@ -68,8 +68,10 @@ A sticker with a `reward` overrides any part of that. Leave a field out to keep 
 
 `on` is a list of tracks, each `{ "track": "Nurburgring", "layout": "Touristenfahrten" }` (`layout` is optional). Spelling,
 case and punctuation do not matter, but list every name each game uses for the circuit: Assetto Corsa EVO reports the
-Nordschleife as track `Nurburgring`, layout `Nordschleife` (its catalogue also calls it `Touristenfahrten`, so both are listed), Assetto Corsa as `ks_nordschleife`. A different layout of the same
-track (the Nurburgring GP circuit) does not match.
+Nordschleife as track `Nurburgring`, layout `Nordschleife` ; `Touristenfahrten` is its public layout (shared with other cars on track), Assetto Corsa as `ks_nordschleife`. A different layout of the same
+track does not match: the Nurburgring GP circuit is not the Nordschleife. The Green Hell stickers split it: Green Hell and Ring
+regular accept any Nordschleife layout (including Touristenfahrten and Assetto Corsa's endurance layout), while the timed
+ones (Sub eight, Sub seven, 20.832) need the closed Nordschleife layout, so a time set among tourists doesn't count.
 
 `exceptCarClasses` stops cars that are far quicker than the sticker is about from earning it: Sub eight and Sub seven rule
 out `Open wheel`, `Formula`, `LMP1`, `LMP2`, `Prototype` and `Hypercar`, so a Formula 1 car cannot take them. Classes are the

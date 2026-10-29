@@ -544,7 +544,7 @@
       "name": "Green Hell",
       "group": "nordschleife",
       "rarity": "rare",
-      "how": "Finish a timed lap of the Nordschleife.",
+      "how": "Finish a timed lap of the Nordschleife, on any of its layouts.",
       "rule": {
         "kind": "timedLapsOnTrack",
         "n": 1,
@@ -568,7 +568,7 @@
       "name": "Ring regular",
       "group": "nordschleife",
       "rarity": "rare",
-      "how": "Ten timed laps of the Nordschleife.",
+      "how": "Ten timed laps of the Nordschleife, on any of its layouts.",
       "rule": {
         "kind": "timedLapsOnTrack",
         "n": 10,
@@ -592,7 +592,7 @@
       "name": "Sub eight",
       "group": "nordschleife",
       "rarity": "epic",
-      "how": "Lap the Nordschleife in under 8:00. Open-wheel and prototype cars do not count.",
+      "how": "Lap the Nordschleife in under 8:00, on the closed Nordschleife layout. Open-wheel and prototype cars do not count.",
       "rule": {
         "kind": "thisLapFasterThan",
         "ms": 480000,
@@ -602,11 +602,8 @@
             "layout": "Nordschleife"
           },
           {
-            "track": "Nurburgring",
-            "layout": "Touristenfahrten"
-          },
-          {
-            "track": "ks_nordschleife"
+            "track": "ks_nordschleife",
+            "layout": "nordschleife"
           }
         ],
         "exceptCarClasses": [
@@ -624,7 +621,7 @@
       "name": "Sub seven",
       "group": "nordschleife",
       "rarity": "legendary",
-      "how": "Lap the Nordschleife in under 7:00. Open-wheel and prototype cars do not count.",
+      "how": "Lap the Nordschleife in under 7:00, on the closed Nordschleife layout. Open-wheel and prototype cars do not count.",
       "reward": {
         "xp": 500,
         "coins": 750
@@ -638,11 +635,8 @@
             "layout": "Nordschleife"
           },
           {
-            "track": "Nurburgring",
-            "layout": "Touristenfahrten"
-          },
-          {
-            "track": "ks_nordschleife"
+            "track": "ks_nordschleife",
+            "layout": "nordschleife"
           }
         ],
         "exceptCarClasses": [
@@ -660,7 +654,7 @@
       "name": "20.832",
       "group": "nordschleife",
       "rarity": "epic",
-      "how": "A Nordschleife lap time that ends in :20.832, like 7:20.832. The circuit is 20.832 km long.",
+      "how": "A lap time that ends in :20.832, like 7:20.832, on the closed Nordschleife layout. The circuit is 20.832 km long.",
       "hidden": true,
       "hint": "Hidden. How long the Ring is, on the stopwatch.",
       "rule": {
@@ -673,11 +667,8 @@
             "layout": "Nordschleife"
           },
           {
-            "track": "Nurburgring",
-            "layout": "Touristenfahrten"
-          },
-          {
-            "track": "ks_nordschleife"
+            "track": "ks_nordschleife",
+            "layout": "nordschleife"
           }
         ]
       }
