@@ -1036,6 +1036,11 @@ fn logging_out_forgets_the_phone_and_signing_everyone_out_frees_the_driver() {
 
 // ---- XP, coins and the profile ----------------------------------------------------------------
 
+/// What a lap paid for the lap itself, leaving out the stickers it also unlocked.
+fn lap_pay(a: &Awards) -> (i64, i64) {
+    (a.xp - a.stickers.iter().map(|s| s.xp).sum::<i64>(), a.coins - a.stickers.iter().map(|s| s.coins).sum::<i64>())
+}
+
 #[test]
 fn laps_earn_xp_and_coins_for_what_they_are() {
     let tt = BinIt::in_memory().unwrap();
@@ -1043,13 +1048,14 @@ fn laps_earn_xp_and_coins_for_what_they_are() {
 
     // First lap on a new track and car: the welcome bonus plus the lap itself.
     let first = tt.record_lap(&lap(103_000, true)).unwrap().awards;
-    assert_eq!((first.xp, first.coins), (progress::rewards().first_lap.xp + progress::rewards().clean_lap.xp, progress::rewards().first_lap.coins + progress::rewards().clean_lap.coins));
+    assert_eq!(lap_pay(&first), (progress::rewards().first_lap.xp + progress::rewards().clean_lap.xp, progress::rewards().first_lap.coins + progress::rewards().clean_lap.coins));
     // A slower lap is just a lap.
     let slower = tt.record_lap(&lap(104_000, true)).unwrap().awards;
     assert_eq!((slower.xp, slower.reasons.clone()), (progress::rewards().clean_lap.xp, vec!["Clean lap".to_string()]));
+    assert!(slower.stickers.is_empty());
     // A personal best pays extra. Nobody else has driven here, so it is not a track record.
     let pb = tt.record_lap(&lap(102_000, true)).unwrap().awards;
-    assert_eq!(pb.xp, progress::rewards().clean_lap.xp + progress::rewards().personal_best.xp);
+    assert_eq!(lap_pay(&pb).0, progress::rewards().clean_lap.xp + progress::rewards().personal_best.xp);
     assert!(!pb.reasons.contains(&"Track record".to_string()));
     // Cut laps and out laps earn nothing.
     assert_eq!(tt.record_lap(&lap(101_000, false)).unwrap().awards, Awards::default());
@@ -1068,7 +1074,7 @@ fn a_track_record_needs_someone_else_to_beat_and_guests_earn_nothing() {
     let jess = tt.add_and_seat("Jess", None).unwrap();
     let beat = tt.record_lap(&lap(102_000, true)).unwrap().awards;
     assert!(beat.reasons.contains(&"Track record".to_string()), "{:?}", beat.reasons);
-    assert_eq!(beat.xp, progress::rewards().first_lap.xp + progress::rewards().clean_lap.xp + progress::rewards().track_record.xp);
+    assert_eq!(lap_pay(&beat).0, progress::rewards().first_lap.xp + progress::rewards().clean_lap.xp + progress::rewards().track_record.xp);
 
     tt.set_seat(None).unwrap();
     assert_eq!(tt.record_lap(&lap(99_000, true)).unwrap().awards, Awards::default());
@@ -1466,4 +1472,130 @@ fn a_database_from_before_slides_gains_the_column_and_keeps_its_laps() {
     assert_eq!(tt.recent_laps(5).unwrap().len(), 1);
     assert_eq!(tt.lap_slides(id).unwrap(), None);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+
+// ---- achievement stickers -------------------------------------------------------------------------
+
+fn sticker_ids(a: &Awards) -> Vec<&str> {
+    a.stickers.iter().map(|s| s.id.as_str()).collect()
+}
+
+#[test]
+fn a_sticker_unlocks_once_pays_through_the_ledger_and_shows_in_the_book() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    let cat = stickers::catalogue();
+    let first = cat.stickers.iter().find(|s| s.id == "first-lap").unwrap();
+
+    let a = tt.record_lap(&lap(103_000, true)).unwrap().awards;
+    assert_eq!(sticker_ids(&a), vec!["first-lap"]);
+    assert!(a.reasons.contains(&"Sticker: First lap".to_string()), "{:?}", a.reasons);
+    let pay = cat.pay(first);
+    assert_eq!((a.stickers[0].xp, a.stickers[0].coins), (pay.xp, pay.coins));
+    assert!(tt.profile(sam.id).unwrap().recent.iter().any(|e| e.kind == "sticker:first-lap" && e.coins == pay.coins));
+
+    // The same sticker is never paid twice.
+    assert!(tt.record_lap(&lap(104_000, true)).unwrap().awards.stickers.is_empty());
+    let book = tt.sticker_book(sam.id).unwrap();
+    assert_eq!((book.earned, book.total), (1, cat.stickers.len() as u32));
+    let view = |id: &str| book.stickers.iter().find(|s| s.id == id).unwrap().clone();
+    assert!(view("first-lap").earned && view("first-lap").earned_at.is_some());
+    // Counting stickers show how far along they are; designed-but-not-detectable ones say so.
+    assert_eq!(view("ten-laps").progress.map(|p| (p.cur, p.max)), Some((2, 10)));
+    assert!(!view("sideways").detectable && view("sideways").progress.is_none());
+}
+
+#[test]
+fn laps_that_do_not_count_and_guests_unlock_nothing() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    assert!(tt.record_lap(&lap(103_000, false)).unwrap().awards.stickers.is_empty());
+    tt.set_seat(None).unwrap();
+    assert!(tt.record_lap(&lap(103_000, true)).unwrap().awards.stickers.is_empty());
+    assert_eq!(tt.sticker_book(sam.id).unwrap().earned, 0);
+    assert!(tt.sticker_book(9_999).is_err());
+}
+
+#[test]
+fn personal_best_and_track_record_stickers_need_the_moment_not_just_the_history() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    assert!(!sticker_ids(&tt.record_lap(&lap(103_000, true)).unwrap().awards).contains(&"personal-best"));
+    assert!(sticker_ids(&tt.record_lap(&lap(102_000, true)).unwrap().awards).contains(&"personal-best"));
+    tt.add_and_seat("Jess", None).unwrap();
+    let ids = sticker_ids(&tt.record_lap(&lap(101_000, true)).unwrap().awards).into_iter().map(String::from).collect::<Vec<_>>();
+    assert!(ids.contains(&"crown".to_string()), "{ids:?}");
+}
+
+#[test]
+fn a_run_of_clean_laps_is_broken_by_a_cut_and_a_lucky_time_is_noticed() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    for i in 0..4 {
+        tt.record_lap(&lap(110_000 - i, true)).unwrap();
+    }
+    tt.record_lap(&lap(105_000, false)).unwrap(); // a cut
+    tt.record_lap(&lap(109_000, true)).unwrap();
+    assert!(!tt.sticker_book(sam.id).unwrap().stickers.iter().find(|s| s.id == "five-clean").unwrap().earned, "the cut broke the run");
+    for i in 0..4 {
+        tt.record_lap(&lap(108_000 - i, true)).unwrap();
+    }
+    assert!(tt.sticker_book(sam.id).unwrap().stickers.iter().find(|s| s.id == "five-clean").unwrap().earned);
+
+    let lucky = tt.record_lap(&lap(101_777, true)).unwrap().awards;
+    assert!(sticker_ids(&lucky).contains(&"lucky-seven"), "{:?}", sticker_ids(&lucky));
+    // A hidden sticker has no name in the book until it is earned.
+    let other = tt.add_driver("Jess", None).unwrap();
+    let hidden = tt.sticker_book(other.id).unwrap().stickers.into_iter().find(|s| s.id == "mirror-lap").unwrap();
+    assert_eq!((hidden.name.as_str(), hidden.how.as_str()), ("Hidden sticker", "Hidden. Read it backwards."));
+}
+
+#[test]
+fn a_reward_can_give_a_free_item_and_stickers_for_old_laps_arrive_quietly() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("binit.db");
+    let sam = {
+        let tt = BinIt::open(&path).unwrap();
+        let sam = tt.add_and_seat("Sam", None).unwrap();
+        tt.add_and_seat("Jess", None).unwrap();
+        tt.record_lap(&lap(103_000, true)).unwrap();
+        tt.set_seat(Some(sam.id)).unwrap();
+        // Sam beats Jess: the Crown sticker, whose reward includes a decal.
+        let a = tt.record_lap(&lap(102_000, true)).unwrap().awards;
+        let crown = a.stickers.iter().find(|s| s.id == "crown").expect("crown");
+        assert_eq!(crown.item.as_deref(), Some("decal:crown"));
+        assert!(tt.shop(sam.id).unwrap().owned.contains(&"decal:crown".to_string()));
+        (sam.id, tt.profile(sam.id).unwrap().coins)
+    };
+    let (sam, coins_before) = sam;
+    // Wipe the stickers and the flag, as a database from before stickers existed would look.
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("DELETE FROM driver_stickers; DELETE FROM settings WHERE key = 'stickers_backfilled_v1'; PRAGMA user_version = 12;").unwrap();
+    }
+    let tt = BinIt::open(&path).unwrap();
+    let book = tt.sticker_book(sam).unwrap();
+    assert!(book.stickers.iter().find(|s| s.id == "first-lap").unwrap().earned, "old laps count");
+    assert!(!book.stickers.iter().find(|s| s.id == "crown").unwrap().earned, "a one-off moment cannot be proven from history");
+    assert_eq!(tt.profile(sam).unwrap().coins, coins_before, "old unlocks pay nothing new");
+}
+
+#[test]
+fn a_driver_shows_up_to_three_earned_stickers_on_their_profile() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    tt.record_lap(&lap(103_000, true)).unwrap();
+    tt.record_lap(&lap(102_000, true)).unwrap(); // first-lap and personal-best
+    assert!(tt.sticker_book(sam.id).unwrap().pinned.is_empty());
+
+    let book = tt.pin_stickers(sam.id, &["personal-best".into(), "first-lap".into()]).unwrap();
+    assert_eq!(book.pinned, vec!["personal-best", "first-lap"], "order is kept");
+    // Not earned, repeated, or too many are refused and leave the choice as it was.
+    assert!(tt.pin_stickers(sam.id, &["crown".into()]).is_err());
+    assert!(tt.pin_stickers(sam.id, &["first-lap".into(), "first-lap".into()]).is_err());
+    assert!(tt.pin_stickers(sam.id, &["a".into(), "b".into(), "c".into(), "d".into()]).is_err());
+    assert!(tt.pin_stickers(9_999, &[]).is_err());
+    assert_eq!(tt.sticker_book(sam.id).unwrap().pinned, vec!["personal-best", "first-lap"]);
+    assert!(tt.pin_stickers(sam.id, &[]).unwrap().pinned.is_empty());
 }

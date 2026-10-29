@@ -235,6 +235,9 @@ pub struct Awards {
     pub level_up: Option<u32>,
     /// Short reasons in order, e.g. "Clean lap", "Personal best".
     pub reasons: Vec<String>,
+    /// Stickers this lap unlocked (their XP and coins are already in the totals above).
+    #[serde(default)]
+    pub stickers: Vec<crate::stickers::StickerUnlock>,
 }
 
 /// One row of the XP and coin ledger.

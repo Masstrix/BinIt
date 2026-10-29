@@ -53,6 +53,8 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/drivers/ratings", get(driver_ratings))
         .route("/drivers/{id}", put(update_driver))
         .route("/drivers/{id}/profile", get(driver_profile))
+        .route("/drivers/{id}/stickers", get(driver_stickers))
+        .route("/drivers/{id}/stickers/pinned", put(pin_stickers))
         .route("/rewards", get(rewards))
         .route("/drivers/{id}/shop", get(driver_shop))
         .route("/drivers/{id}/shop/buy", post(buy_item))
@@ -301,6 +303,31 @@ async fn update_driver(
 /// Level, XP, coins, bests and stickers: what the You page shows. Open to everyone, like the leaderboards.
 async fn driver_profile(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<tt_core::Profile> {
     Ok(Json(c.tt.profile(id)?))
+}
+
+/// The achievement stickers: every one, what this driver has earned and their progress. Open to everyone, like the profile.
+async fn driver_stickers(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<tt_core::stickers::StickerBook> {
+    Ok(Json(c.tt.sticker_book(id)?))
+}
+
+#[derive(serde::Deserialize)]
+struct PinBody {
+    ids: Vec<String>,
+}
+
+/// Chooses the (up to three) earned stickers shown on a driver's profile. Like the look, a driver with a paired phone
+/// can only be changed from that phone or the PC.
+async fn pin_stickers(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    State(c): State<Ctx>,
+    Path(id): Path<DriverId>,
+    Json(body): Json<PinBody>,
+) -> Result<Json<tt_core::stickers::StickerBook>, Response> {
+    if c.tt.driver_is_claimed(id).map_err(bad_request)? {
+        may_manage(&c, &headers, addr, id)?;
+    }
+    c.tt.pin_stickers(id, &body.ids).map(Json).map_err(bad_request)
 }
 
 /// What things pay and cost (`crates/tt-core/rewards.json`): the new-challenge page shows what a challenge pays.

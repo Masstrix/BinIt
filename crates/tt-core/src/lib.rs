@@ -7,6 +7,7 @@ pub mod model;
 pub mod pairing;
 pub mod progress;
 pub mod shop;
+pub mod stickers;
 mod store;
 pub mod trackmap;
 
@@ -648,6 +649,28 @@ impl BinIt {
         })
     }
 
+    /// Every achievement sticker with what this driver has earned and how far along the rest are.
+    pub fn sticker_book(&self, driver_id: DriverId) -> Result<stickers::StickerBook> {
+        let store = self.store();
+        if store.driver(driver_id)?.is_none() {
+            anyhow::bail!("no such driver");
+        }
+        stickers::book(&store, driver_id, now_ms())
+    }
+
+    /// Chooses which earned stickers show on a driver's profile (at most three, in order).
+    pub fn pin_stickers(&self, driver_id: DriverId, ids: &[String]) -> Result<stickers::StickerBook> {
+        {
+            let store = self.store();
+            if store.driver(driver_id)?.is_none() {
+                anyhow::bail!("no such driver");
+            }
+            stickers::pin(&store, driver_id, ids)?;
+        }
+        self.emit(AppEvent::DriversChanged);
+        self.sticker_book(driver_id)
+    }
+
     pub fn seat(&self) -> Result<Option<DriverId>> {
         Ok(self.store().setting(SEAT_KEY)?.and_then(|v| v.parse().ok()))
     }
@@ -957,7 +980,7 @@ impl BinIt {
             });
         }
         let awards = match driver_id {
-            Some(id) if lap.valid => award_lap(&store, id, &lap, &combo, personal_best, combo_record, now)?,
+            Some(id) if lap.valid => award_lap(&store, id, &lap, &combo, personal_best, combo_record, !challenges.is_empty(), now)?,
             _ => Awards::default(),
         };
         drop(store);
@@ -1369,7 +1392,8 @@ fn standing(store: &Store, c: &Challenge, driver_id: Option<DriverId>, now: Time
 mod tests;
 
 /// Pays a driver for a valid lap: see `progress` for what each thing is worth.
-fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal_best: bool, combo_record: bool, now: Timestamp) -> Result<Awards> {
+#[allow(clippy::too_many_arguments)]
+fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal_best: bool, combo_record: bool, in_challenge: bool, now: Timestamp) -> Result<Awards> {
     use progress::*;
     let first_here = store.best_valid_time(combo, Some(driver), lap.id)?.is_none();
     let xp_before = store.point_totals(driver)?.0;
@@ -1391,9 +1415,19 @@ fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal
     if personal_best && !first_here {
         give("pb", rw.personal_best.xp, rw.personal_best.coins, "Personal best")?;
     }
-    if combo_record && store.others_have_valid_lap(combo, driver, lap.id)? {
+    let beat_others = combo_record && store.others_have_valid_lap(combo, driver, lap.id)?;
+    if beat_others {
         give("record", rw.track_record.xp, rw.track_record.coins, "Track record")?;
     }
+    // Stickers this lap completed, paid on top and counted towards the level below.
+    let flags = stickers::LapFlags { personal_best: personal_best && !first_here, track_record: beat_others, in_challenge };
+    let unlocked = stickers::award_lap(store, driver, lap, flags, now)?;
+    for u in &unlocked {
+        awards.xp += u.xp;
+        awards.coins += u.coins;
+        awards.reasons.push(format!("Sticker: {}", u.name));
+    }
+    awards.stickers = unlocked;
     let level_after = level_of(xp_before + awards.xp);
     if level_after > level_of(xp_before) {
         awards.level_up = Some(level_after);
@@ -1402,7 +1436,7 @@ fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal
 }
 
 /// Consecutive days, ending today or yesterday, with at least one of `times` (UTC days).
-fn streak_days(times: impl Iterator<Item = Timestamp>, now: Timestamp) -> u32 {
+pub(crate) fn streak_days(times: impl Iterator<Item = Timestamp>, now: Timestamp) -> u32 {
     let mut days: Vec<i64> = times.map(|t| t.div_euclid(progress::DAY_MS)).collect();
     days.sort_unstable();
     days.dedup();

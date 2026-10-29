@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 12;
+const SCHEMA_VERSION: i32 = 14;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -245,9 +245,37 @@ impl Store {
             // What a lap's driver drifted and spun (JSON, see `LiveSlideStats`). NULL = nothing, or not known.
             conn.execute_batch("ALTER TABLE laps ADD COLUMN slides TEXT;")?;
         }
+        if version < 13 {
+            // Achievement stickers a driver has earned (see stickers.rs). Each is earned once and kept.
+            conn.execute_batch(
+                "
+                CREATE TABLE IF NOT EXISTS driver_stickers (
+                    driver_id  INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+                    sticker    TEXT NOT NULL,
+                    lap_id     INTEGER,
+                    at         INTEGER NOT NULL,
+                    PRIMARY KEY (driver_id, sticker)
+                );
+                ",
+            )?;
+        }
+        if version < 14 {
+            // The stickers a driver shows on their profile (up to three), in order.
+            conn.execute_batch(
+                "
+                CREATE TABLE IF NOT EXISTS driver_pins (
+                    driver_id  INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+                    sticker    TEXT NOT NULL,
+                    slot       INTEGER NOT NULL,
+                    PRIMARY KEY (driver_id, sticker)
+                );
+                ",
+            )?;
+        }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         let store = Self { conn };
         store.backfill_points()?;
+        crate::stickers::backfill(&store)?;
         Ok(store)
     }
 
@@ -355,6 +383,53 @@ impl Store {
                 Err(e)
             }
         }
+    }
+
+    /// Gives a driver a shop item for free (a sticker's reward). Owning it already is fine.
+    pub fn grant_item(&self, driver_id: DriverId, item: &str, at: Timestamp) -> Result<()> {
+        self.conn.execute("INSERT OR IGNORE INTO driver_items (driver_id, item, price, at) VALUES (?1, ?2, 0, ?3)", params![driver_id, item, at])?;
+        Ok(())
+    }
+
+    // ---- stickers --------------------------------------------------------------
+
+    /// The stickers a driver has earned and when.
+    pub fn driver_stickers(&self, driver_id: DriverId) -> Result<Vec<(String, Timestamp)>> {
+        let mut stmt = self.conn.prepare("SELECT sticker, at FROM driver_stickers WHERE driver_id = ?1 ORDER BY at, sticker")?;
+        let rows = stmt.query_map([driver_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// The stickers a driver shows on their profile, in order.
+    pub fn pinned_stickers(&self, driver_id: DriverId) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT sticker FROM driver_pins WHERE driver_id = ?1 ORDER BY slot")?;
+        let rows = stmt.query_map([driver_id], |r| r.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Replaces the stickers a driver shows on their profile.
+    pub fn set_pinned_stickers(&self, driver_id: DriverId, ids: &[String]) -> Result<()> {
+        self.conn.execute_batch("BEGIN")?;
+        let done = (|| -> Result<()> {
+            self.conn.execute("DELETE FROM driver_pins WHERE driver_id = ?1", [driver_id])?;
+            for (slot, id) in ids.iter().enumerate() {
+                self.conn.execute("INSERT INTO driver_pins (driver_id, sticker, slot) VALUES (?1, ?2, ?3)", params![driver_id, id, slot as i64])?;
+            }
+            Ok(())
+        })();
+        match done {
+            Ok(()) => Ok(self.conn.execute_batch("COMMIT")?),
+            Err(e) => {
+                let _ = self.conn.execute_batch("ROLLBACK");
+                Err(e)
+            }
+        }
+    }
+
+    /// Records an earned sticker. `false` when the driver already had it.
+    pub fn insert_sticker(&self, driver_id: DriverId, sticker: &str, lap_id: Option<LapId>, at: Timestamp) -> Result<bool> {
+        let n = self.conn.execute("INSERT OR IGNORE INTO driver_stickers (driver_id, sticker, lap_id, at) VALUES (?1, ?2, ?3, ?4)", params![driver_id, sticker, lap_id, at])?;
+        Ok(n > 0)
     }
 
     // ---- XP and coins ----------------------------------------------------------
