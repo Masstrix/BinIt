@@ -2024,3 +2024,67 @@ fn a_small_challenge_gives_no_podium_and_three_wins_in_a_row_is_a_hat_trick() {
         assert_eq!(earned(&tt, sam, "hat-trick"), round == 2, "after win {}", round + 1);
     }
 }
+
+
+// ---- the parcel --------------------------------------------------------------------------------------
+
+#[test]
+fn new_unlocks_wait_in_a_parcel_until_collected_and_the_parcel_lists_the_rarest_first() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    assert!(tt.parcel(sam.id).unwrap().is_none(), "nothing earned yet");
+
+    tt.add_and_seat("Jess", None).unwrap();
+    tt.record_lap(&lap(101_000, true)).unwrap();
+    tt.set_seat(Some(sam.id)).unwrap();
+    // First lap (common), then beating Jess: the Crown (epic, with a free decal).
+    tt.record_lap(&lap(102_000, true)).unwrap();
+    let paid_before = tt.profile(sam.id).unwrap().coins;
+    tt.record_lap(&lap(100_000, true)).unwrap();
+    let parcel = tt.parcel(sam.id).unwrap().expect("a parcel is waiting");
+    let ids: Vec<&str> = parcel.stickers.iter().map(|s| s.id.as_str()).collect();
+    assert!(ids.contains(&"first-lap") && ids.contains(&"crown"), "{ids:?}");
+    assert_eq!(parcel.stickers[0].rarity, "epic", "rarest first: {ids:?}");
+    assert_eq!(parcel.items, vec!["decal:crown".to_string()]);
+    assert_eq!(parcel.coins, parcel.stickers.iter().map(|s| s.coins).sum::<i64>());
+    assert!(tt.profile(sam.id).unwrap().coins > paid_before, "the rewards were paid when the stickers unlocked");
+
+    // Jess has her own, separate parcel.
+    let jess = tt.drivers().unwrap().into_iter().find(|d| d.name == "Jess").unwrap();
+    assert!(tt.parcel(jess.id).unwrap().is_some_and(|p| p.stickers.iter().all(|s| s.id != "crown")));
+
+    // Collecting empties Sam's, twice is fine, and the next unlock makes a new one.
+    tt.collect_parcel(sam.id).unwrap();
+    tt.collect_parcel(sam.id).unwrap();
+    assert!(tt.parcel(sam.id).unwrap().is_none());
+    assert!(tt.parcel(jess.id).unwrap().is_some(), "Sam's collecting does not touch Jess's");
+    assert!(tt.collect_parcel(9_999).is_err());
+}
+
+#[test]
+fn stickers_from_before_parcels_are_already_seen_but_caught_up_ones_arrive_in_a_parcel() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("binit.db");
+    let sam = {
+        let tt = BinIt::open(&path).unwrap();
+        let sam = tt.add_and_seat("Sam", None).unwrap();
+        tt.record_lap(&lap(100_000, true)).unwrap();
+        assert!(tt.parcel(sam.id).unwrap().is_some());
+        sam.id
+    };
+    // A database from before parcels: the stickers it already had are not news.
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("UPDATE driver_stickers SET seen_at = NULL; PRAGMA user_version = 15;").unwrap();
+    }
+    let tt = BinIt::open(&path).unwrap();
+    assert!(tt.parcel(sam).unwrap().is_none(), "the migration marks old unlocks as seen");
+    // The one-off catch-up (for a database that never ran it) does put what it finds in a parcel.
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("DELETE FROM driver_stickers; DELETE FROM settings WHERE key = 'stickers_backfilled_v1';").unwrap();
+    }
+    let tt = BinIt::open(&path).unwrap();
+    let parcel = tt.parcel(sam).unwrap().expect("caught-up stickers wait in a parcel");
+    assert!(parcel.stickers.iter().any(|s| s.id == "first-lap"));
+}

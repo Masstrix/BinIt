@@ -664,6 +664,24 @@ impl BinIt {
         stickers::book(&store, driver_id, now_ms())
     }
 
+    /// What this driver has earned and not been shown yet (see `stickers::Parcel`), if anything.
+    pub fn parcel(&self, driver_id: DriverId) -> Result<Option<stickers::Parcel>> {
+        stickers::parcel(&self.store(), driver_id)
+    }
+
+    /// The driver has opened their parcel: nothing waits for them any more. Safe to call twice.
+    pub fn collect_parcel(&self, driver_id: DriverId) -> Result<()> {
+        {
+            let store = self.store();
+            if store.driver(driver_id)?.is_none() {
+                anyhow::bail!("no such driver");
+            }
+            store.mark_stickers_seen(driver_id, now_ms())?;
+        }
+        self.emit(AppEvent::DriversChanged);
+        Ok(())
+    }
+
     /// Chooses which earned stickers show on a driver's profile (at most three, in order).
     pub fn pin_stickers(&self, driver_id: DriverId, ids: &[String]) -> Result<stickers::StickerBook> {
         {

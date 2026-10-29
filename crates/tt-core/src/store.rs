@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 15;
+const SCHEMA_VERSION: i32 = 16;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -287,6 +287,15 @@ impl Store {
                 ",
             )?;
         }
+        if version < 16 {
+            // Stickers a driver has not been shown yet wait in their parcel (see stickers::parcel). Ones earned before
+            // parcels existed count as already shown, so nobody is greeted by a parcel of old news.
+            let has_column = conn.query_row("SELECT COUNT(*) FROM pragma_table_info('driver_stickers') WHERE name = 'seen_at'", [], |r| r.get::<_, i64>(0))? > 0;
+            if !has_column {
+                conn.execute_batch("ALTER TABLE driver_stickers ADD COLUMN seen_at INTEGER;")?;
+            }
+            conn.execute_batch("UPDATE driver_stickers SET seen_at = at WHERE seen_at IS NULL;")?;
+        }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         let store = Self { conn };
         store.backfill_points()?;
@@ -457,6 +466,18 @@ impl Store {
                 Err(e)
             }
         }
+    }
+
+    /// Stickers a driver has earned but not been shown yet, oldest first.
+    pub fn unseen_stickers(&self, driver_id: DriverId) -> Result<Vec<(String, Timestamp)>> {
+        let mut stmt = self.conn.prepare("SELECT sticker, at FROM driver_stickers WHERE driver_id = ?1 AND seen_at IS NULL ORDER BY at, sticker")?;
+        let rows = stmt.query_map([driver_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Marks everything a driver has earned as shown.
+    pub fn mark_stickers_seen(&self, driver_id: DriverId, at: Timestamp) -> Result<usize> {
+        Ok(self.conn.execute("UPDATE driver_stickers SET seen_at = ?2 WHERE driver_id = ?1 AND seen_at IS NULL", params![driver_id, at])?)
     }
 
     /// Records an earned sticker. `false` when the driver already had it.

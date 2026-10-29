@@ -423,6 +423,29 @@ export interface StickerGroup {
   blurb: string;
 }
 
+/** One sticker in a parcel. */
+export interface ParcelSticker {
+  id: string;
+  name: string;
+  rarity: StickerRarity;
+  how: string;
+  xp: number;
+  coins: number;
+  /** A free shop item it also gave, e.g. `decal:crown`. */
+  item: string | null;
+}
+
+/** What a driver earned since they last looked, rarest first. Paid when each sticker unlocked; shown once, then collected. */
+export interface Parcel {
+  stickers: ParcelSticker[];
+  coins: number;
+  xp: number;
+  items: string[];
+  levelBefore: number;
+  levelAfter: number;
+  titleAfter: string;
+}
+
 /** Every achievement sticker for one driver (crates/tt-core/stickers.json). */
 export interface StickerBook {
   groups: StickerGroup[];
@@ -616,6 +639,9 @@ export const api = {
   updateDriver: (id: DriverId, name: string, color: string) =>
     request<Driver>("PUT", `/drivers/${id}`, { name, color }),
   profile: (id: DriverId) => request<Profile>("GET", `/drivers/${id}/profile`),
+  /** The driver's waiting parcel, or null. */
+  parcel: (id: DriverId) => request<Parcel | null>("GET", `/drivers/${id}/parcel`),
+  collectParcel: (id: DriverId) => request<boolean>("POST", `/drivers/${id}/parcel/collect`),
   stickerBook: (id: DriverId) => request<StickerBook>("GET", `/drivers/${id}/stickers`),
   /** Chooses the (up to three) earned stickers shown on a driver's profile. */
   pinStickers: (id: DriverId, ids: string[]) => request<StickerBook>("PUT", `/drivers/${id}/stickers/pinned`, { ids }),

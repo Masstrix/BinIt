@@ -144,6 +144,22 @@ All 54 stickers have a rule. Some depend on what a game reports, and a few need 
   track runs). They were built from the trace format and tested on made-up laps, so they need trying on a real lap.
 * **Rule bender** needs cut laps to carry the game's lap time; they are recorded, but check one on real data.
 
+## The parcel
+
+Everything a driver earns is paid the moment it unlocks, and also waits in their **parcel** until they have been shown it.
+The next time that driver is on the app as themselves (the phone or browser signed in as them, or the PC's seated driver, and
+not while they are driving) a full-screen takeover covers everything: open it, see what they got, collect. There is no close
+button, so it cannot be missed.
+
+* With three stickers or fewer it shows each as a card. With more it first walks through the three rarest, one at a time (Next,
+  or Skip to everything), then shows all of them in a compact grid, with the total coins and XP, any level reached and any free
+  items above **Collect**.
+* `GET /api/drivers/{id}/parcel` returns it (or null) and `POST /api/drivers/{id}/parcel/collect` marks everything seen.
+  Unseen is `driver_stickers.seen_at IS NULL` (schema 16). Stickers earned before parcels existed count as already seen.
+* The catch-up for old laps and challenge stickers also arrive in a parcel. Collecting does not pay anything (that already
+  happened); it only stops the parcel from showing again.
+* UI: `ParcelGate` and `ParcelOverlay` in `app/src/components/Parcel.tsx`. `?mock&idle` shows a twelve-sticker parcel in the mock.
+
 ## In the app
 
 * **Profile** (`app/src/pages/You.tsx`, `StickerHighlights` in `app/src/pages/Stickers.tsx`): the Stickers section shows how
@@ -158,7 +174,7 @@ All 54 stickers have a rule. Some depend on what a game reports, and a few need 
 
 ## Not built yet
 
-* The unlock toast from `awards.stickers`, and the helmet slot for wearing a sticker. The overlay still toasts the
+* The unlock toast from `awards.stickers` (the parcel now covers telling the driver), and the helmet slot for wearing a sticker. The overlay still toasts the
   original eight computed stickers (`Profile.stickers`) by comparing profiles; they should be replaced by the book, which
   would also stop a double toast for "First lap".
 * A mock for `?mock` UI work (the sticker routes are not in `app/src/mock/server.ts`, so the section is empty there).

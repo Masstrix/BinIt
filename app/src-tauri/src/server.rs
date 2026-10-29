@@ -55,6 +55,8 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/drivers/{id}/profile", get(driver_profile))
         .route("/drivers/{id}/stickers", get(driver_stickers))
         .route("/drivers/{id}/stickers/pinned", put(pin_stickers))
+        .route("/drivers/{id}/parcel", get(driver_parcel))
+        .route("/drivers/{id}/parcel/collect", post(collect_parcel))
         .route("/rewards", get(rewards))
         .route("/drivers/{id}/shop", get(driver_shop))
         .route("/drivers/{id}/shop/buy", post(buy_item))
@@ -308,6 +310,26 @@ async fn driver_profile(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiRe
 /// The achievement stickers: every one, what this driver has earned and their progress. Open to everyone, like the profile.
 async fn driver_stickers(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<tt_core::stickers::StickerBook> {
     Ok(Json(c.tt.sticker_book(id)?))
+}
+
+/// The stickers and rewards a driver has not been shown yet, or null. Open to everyone like the profile, but the app
+/// only shows it on a device that is that driver.
+async fn driver_parcel(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<Option<tt_core::stickers::Parcel>> {
+    Ok(Json(c.tt.parcel(id)?))
+}
+
+/// The driver has opened their parcel. Like the look, a driver with a paired phone can only be changed from that phone
+/// or the PC.
+async fn collect_parcel(
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    State(c): State<Ctx>,
+    Path(id): Path<DriverId>,
+) -> Result<Json<bool>, Response> {
+    if c.tt.driver_is_claimed(id).map_err(bad_request)? {
+        may_manage(&c, &headers, addr, id)?;
+    }
+    c.tt.collect_parcel(id).map(|()| Json(true)).map_err(bad_request)
 }
 
 #[derive(serde::Deserialize)]

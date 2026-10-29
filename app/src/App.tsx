@@ -20,6 +20,7 @@ import { Overlay } from "./pages/Overlay";
 import { DriverProgress } from "./pages/DriverProgress";
 import { YouPage } from "./pages/You";
 import { StickerBookPage } from "./pages/Stickers";
+import { ParcelGate } from "./components/Parcel";
 import { CustomizePage } from "./pages/Customize";
 import { ShopPage } from "./pages/Shop";
 import { Updater } from "./pages/Updater";
@@ -147,13 +148,13 @@ export function App() {
   else if (path.startsWith("/advanced")) page = <AdvancedPage />;
   else if (/^\/you\/\d+\/progress/.test(path)) page = <DriverProgress id={Number(path.split("/")[2])} />;
   else if (/^\/you\/\d+\/stickers/.test(path)) page = <StickerBookPage id={Number(path.split("/")[2])} />;
-  else if (/^\/you\/\d+\/stickers/.test(path)) page = <StickerBookPage id={Number(path.split("/")[2])} />;
   else if (path.startsWith("/you")) page = <YouPage path={path} />;
   else if (path.startsWith("/customize")) page = <CustomizePage />;
   else if (path.startsWith("/shop")) page = <ShopPage />;
   else page = <Home />;
 
   return (
+    <>
     <div className={`shell${collapsed ? " collapsed" : ""}`}>
       <Sidebar path={path} collapsed={collapsed} onToggle={() => setUserCollapsed(!userCollapsed)} />
       <div className="main-col">
@@ -167,6 +168,9 @@ export function App() {
       <ConnectionGate />
       <PickDriverHost />
     </div>
+    {/* Outside the shell: while a parcel is up the shell is inert, and the parcel must still work. */}
+    <ParcelGate />
+    </>
   );
 }
 

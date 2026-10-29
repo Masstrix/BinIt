@@ -643,6 +643,65 @@ pub struct StickerUnlock {
     pub item: Option<String>,
 }
 
+/// One sticker in a parcel.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParcelSticker {
+    pub id: String,
+    pub name: String,
+    pub rarity: String,
+    pub how: String,
+    pub xp: i64,
+    pub coins: i64,
+    /// A free shop item it also gave (`decal:crown`).
+    pub item: Option<String>,
+}
+
+/// What a driver has earned since they last looked: the stickers (rarest first), what they came with, and whether
+/// they crossed a level. They are paid when they unlock; the parcel is how they are shown, once, next time the driver
+/// is on the app.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Parcel {
+    pub stickers: Vec<ParcelSticker>,
+    pub coins: i64,
+    pub xp: i64,
+    pub items: Vec<String>,
+    pub level_before: u32,
+    pub level_after: u32,
+    pub title_after: String,
+}
+
+/// The driver's waiting parcel, or `None` when there is nothing they have not seen.
+pub fn parcel(store: &Store, driver: DriverId) -> Result<Option<Parcel>> {
+    let cat = catalogue();
+    let mut stickers: Vec<(usize, ParcelSticker)> = Vec::new();
+    for (id, _) in store.unseen_stickers(driver)? {
+        let Some(def) = cat.stickers.iter().find(|s| s.id == id) else { continue };
+        let pay = cat.pay(def);
+        let rank = ["legendary", "epic", "rare", "common"].iter().position(|r| *r == def.rarity).unwrap_or(4);
+        stickers.push((rank, ParcelSticker { id, name: def.name.clone(), rarity: def.rarity.clone(), how: def.how.clone(), xp: pay.xp, coins: pay.coins, item: cat.item(def).map(str::to_string) }));
+    }
+    if stickers.is_empty() {
+        return Ok(None);
+    }
+    // Rarest first; ties keep the order they unlocked in.
+    stickers.sort_by_key(|(rank, _)| *rank);
+    let stickers: Vec<ParcelSticker> = stickers.into_iter().map(|(_, s)| s).collect();
+    let xp: i64 = stickers.iter().map(|s| s.xp).sum();
+    let total_xp = store.point_totals(driver)?.0;
+    let level_after = crate::progress::level_of(total_xp);
+    Ok(Some(Parcel {
+        coins: stickers.iter().map(|s| s.coins).sum(),
+        items: stickers.iter().filter_map(|s| s.item.clone()).collect(),
+        xp,
+        level_before: crate::progress::level_of((total_xp - xp).max(0)),
+        level_after,
+        title_after: crate::progress::title_for(level_after).to_string(),
+        stickers,
+    }))
+}
+
 /// A driver's whole book: every sticker, what they have and how far along the rest are.
 pub fn book(store: &Store, driver: DriverId, now: Timestamp) -> Result<StickerBook> {
     let cat = catalogue();
