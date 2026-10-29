@@ -1,6 +1,11 @@
-import { api, useAppState, useFetch, type DriverId, type DriverStats, type StickerBook } from "../api";
-import { km, spanText } from "../format";
+import { useMemo } from "react";
+import { api, useAppState, useFetch, type DriverId, type DriverStats, type Lap, type StickerBook } from "../api";
+import { GameIcon } from "../components/GameIcon";
+import { Helmet } from "../components/Helmet";
+import { isTimed } from "../driverStats";
+import { carName, gameName, km, spanText, trackName } from "../format";
 import { RARITY } from "../stickers";
+import { ProgressSection } from "./DriverProgress";
 
 interface Cell {
   label: string;
@@ -67,16 +72,70 @@ function groups(s: DriverStats): { title: string; cells: Cell[] }[] {
   ];
 }
 
+interface Favourite {
+  name: string;
+  game?: string;
+  laps: number;
+  share: number;
+  timeMs: number;
+}
+
+/** The game, car and track a driver has spent the most timed laps on. */
+function favourites(laps: Lap[]): { game: Favourite | null; car: Favourite | null; track: Favourite | null } {
+  const timed = laps.filter(isTimed);
+  const top = (key: (l: Lap) => string, label: (l: Lap) => string, game?: (l: Lap) => string): Favourite | null => {
+    const m = new Map<string, { l: Lap; n: number; ms: number }>();
+    for (const l of timed) {
+      const k = key(l);
+      const e = m.get(k) ?? { l, n: 0, ms: 0 };
+      e.n++;
+      e.ms += l.timeMs;
+      m.set(k, e);
+    }
+    const best = [...m.values()].sort((a, b) => b.n - a.n || b.ms - a.ms)[0];
+    return best ? { name: label(best.l), game: game?.(best.l), laps: best.n, share: Math.round((best.n / timed.length) * 100), timeMs: best.ms } : null;
+  };
+  return {
+    game: top((l) => l.game, (l) => gameName(l.game), (l) => l.game),
+    car: top((l) => `${l.game}|${l.car}`, (l) => carName(l.car), (l) => l.game),
+    track: top((l) => `${l.game}|${l.track}|${l.layout}`, (l) => trackName(l.track, l.layout), (l) => l.game),
+  };
+}
+
+function FavCard({ label, fav }: { label: string; fav: Favourite | null }) {
+  const time = fav ? spanText(fav.timeMs) : null;
+  return (
+    <div className="fav-card">
+      <span className="stats-label">{label}</span>
+      {fav ? (
+        <>
+          <span className="fav-name">
+            {fav.game && <GameIcon game={fav.game} size={28} />}
+            <span>{fav.name}</span>
+          </span>
+          <span className="fav-bar" aria-hidden="true"><span style={{ width: `${fav.share}%` }} /></span>
+          <span className="stats-note">{fav.laps.toLocaleString()} timed {fav.laps === 1 ? "lap" : "laps"} · {fav.share}% · {time!.value} {time!.unit}</span>
+        </>
+      ) : (
+        <span className="muted">Nothing yet</span>
+      )}
+    </div>
+  );
+}
+
 /** Stickers whose progress is these numbers, so a driver can see what the stats are feeding. */
 const FEEDS = ["century", "marathon", "skid-marks", "tourist", "world-tour"];
 
-/** How far, how long, how sideways and where a driver stands. */
+/** Everything about a driver's driving in one place: what they drive most, how far, how sideways, and how they are improving. */
 export function StatsPage({ id }: { id: DriverId }) {
   const { drivers } = useAppState();
   const driver = drivers.find((d) => d.id === id);
   const stats = useFetch<DriverStats>(() => api.driverStats(id), [id]);
   const book = useFetch<StickerBook>(() => api.stickerBook(id), [id]);
+  const laps = useFetch<Lap[]>(() => api.driverLaps(id), [id]);
+  const fav = useMemo(() => favourites(laps ?? []), [laps]);
   const back = <a href={`#/you/${id}`} className="back-link">← {driver?.name ?? "Profile"}</a>;
+  if (!driver) return <>{back}<div className="empty">That driver isn't here (anymore).</div></>;
   if (!stats) return <>{back}<div className="empty">Loading…</div></>;
 
   const feeds = (book?.stickers ?? []).filter((s) => FEEDS.includes(s.id) && (s.earned || s.progress)).slice(0, 4);
@@ -84,13 +143,30 @@ export function StatsPage({ id }: { id: DriverId }) {
   return (
     <>
       {back}
-      <h1>Driving stats</h1>
+      <div className="head" style={{ alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
+          <Helmet color={driver.color} look={driver.look} size={64} seed={driver.id} />
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ overflowWrap: "anywhere" }}>{driver.name}</h1>
+            <span className="muted">Driver stats</span>
+          </div>
+        </div>
+      </div>
       <section className="stats-hero" aria-label="Distance driven">
         <span className="stats-label">DISTANCE DRIVEN</span>
         <span className="big">{stats.lapsWithDistance ? km(stats.distanceM) : "–"}<small> km</small></span>
         <span className="muted" style={{ fontSize: 14 }}>
           {stats.timedLaps.toLocaleString()} timed laps, {spanText(stats.timeOnTrackMs).value} {spanText(stats.timeOnTrackMs).unit} on track.
         </span>
+      </section>
+
+      <section className="stats-group" aria-label="Most driven">
+        <h2>Most driven</h2>
+        <div className="fav-grid">
+          <FavCard label="GAME" fav={fav.game} />
+          <FavCard label="CAR" fav={fav.car} />
+          <FavCard label="TRACK" fav={fav.track} />
+        </div>
       </section>
 
       {groups(stats).map((g) => (
@@ -127,6 +203,11 @@ export function StatsPage({ id }: { id: DriverId }) {
           ))}
         </section>
       )}
+
+      <section className="stats-group" aria-label="Progress over time">
+        <h2>Progress over time</h2>
+        {laps === null ? <div className="empty">Loading…</div> : <ProgressSection id={id} name={driver.name} laps={laps} />}
+      </section>
 
       <p className="stats-foot">
         {stats.driftSince ? `Drift and handbrake numbers count from laps recorded since ${shortDate(stats.driftSince)}, when they started being measured. ` : "Drift and handbrake numbers appear once a lap with a drift is recorded. "}

@@ -1762,3 +1762,13 @@ html[data-nav="back"]::view-transition-new(page) { animation-name: page-in-left;
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
+
+/* ---- most driven cards ---------------------------------------------------------------------------------------- */
+.fav-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.fav-card { background: var(--panel); border-radius: 24px; padding: 18px 20px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.fav-name { display: flex; align-items: center; gap: 12px; font: 700 clamp(20px, 3vw, 24px)/1.15 var(--font-display); letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.fav-name .game-icon { flex: none; }
+.fav-bar { height: 8px; border-radius: 999px; background: var(--panel-2); overflow: hidden; }
+.fav-bar > span { display: block; height: 100%; border-radius: inherit; background: var(--peri-1); }
+.stats-group > .card, .stats-group > .how-doing { margin: 0; }
+.stats-group { gap: 12px; }

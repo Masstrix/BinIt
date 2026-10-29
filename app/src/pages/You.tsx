@@ -190,10 +190,8 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
         <div className="stat-tile"><span className="mono">{p.cleanLaps}</span><span className="label">Clean laps</span></div>
         <div className="stat-tile"><span className="mono">{stats && stats.driftM > 0 ? km(stats.driftM) : "–"}<small> km</small></span><span className="label">Drifted</span></div>
       </div>
-      <a className="you-more" href={`#/you/${p.driver.id}/stats`}>All driving stats ›</a>
-
       <div className="manage-list">
-        <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Progress over time" sub="Bests and speed score on every track" href={`#/you/${p.driver.id}/progress`} />
+        <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Driver stats" sub="Most driven, distance, drifting and progress over time" href={`#/you/${p.driver.id}/stats`} />
       </div>
 
       {manage && <ManageDriver driver={p.driver} />}

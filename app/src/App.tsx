@@ -18,7 +18,6 @@ import { AdvancedPage } from "./pages/Advanced";
 import { DevMemoryPage } from "./pages/DevMemory";
 import { TelemetryPage } from "./pages/Telemetry";
 import { Overlay } from "./pages/Overlay";
-import { DriverProgress } from "./pages/DriverProgress";
 import { YouPage } from "./pages/You";
 import { StickerBookPage } from "./pages/Stickers";
 import { StatsPage } from "./pages/Stats";
@@ -176,9 +175,8 @@ export function App() {
   else if (path.startsWith("/telemetry")) page = <TelemetryPage path={path} />;
   else if (import.meta.env.DEV && path.startsWith("/dev/memory")) page = <DevMemoryPage />;
   else if (path.startsWith("/advanced")) page = <AdvancedPage />;
-  else if (/^\/you\/\d+\/progress/.test(path)) page = <DriverProgress id={Number(path.split("/")[2])} />;
   else if (/^\/you\/\d+\/stickers/.test(path)) page = <StickerBookPage id={Number(path.split("/")[2])} />;
-  else if (/^\/you\/\d+\/stats/.test(path)) page = <StatsPage id={Number(path.split("/")[2])} />;
+  else if (/^\/you\/\d+\/(stats|progress)/.test(path)) page = <StatsPage id={Number(path.split("/")[2])} />;
   else if (path.startsWith("/you")) page = <YouPage path={path} />;
   else if (path.startsWith("/customize")) page = <CustomizePage />;
   else if (path.startsWith("/shop")) page = <ShopPage />;
