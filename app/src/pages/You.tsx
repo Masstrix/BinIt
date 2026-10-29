@@ -205,6 +205,8 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
       </div>
 
       <div className="you-side">
+      <StickerHighlights driverId={p.driver.id} color={p.driver.color} />
+
       <section className="you-section" aria-label="Bests">
         <div className="head"><h2>Bests</h2><span className="muted" style={{ fontSize: 13 }}>All games</span></div>
         {p.bests.length === 0 && <div className="empty">No times yet. Get out there!</div>}
@@ -221,8 +223,6 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
           ))}
         </div>
       </section>
-
-      <StickerHighlights driverId={p.driver.id} color={p.driver.color} />
 
       <section className="you-section" aria-label="Recent">
         <div className="head"><h2>Recent</h2></div>
