@@ -1497,16 +1497,19 @@ fn a_sticker_unlocks_once_pays_through_the_ledger_and_shows_in_the_book() {
     let first = cat.stickers.iter().find(|s| s.id == "first-lap").unwrap();
 
     let a = tt.record_lap(&lap(103_000, true)).unwrap().awards;
-    assert_eq!(sticker_ids(&a), vec!["first-lap"]);
+    // (Tidy lap, and a time-of-day sticker when the tests run at the wrong hour, may come with it.)
+    assert!(sticker_ids(&a).contains(&"first-lap"), "{:?}", sticker_ids(&a));
     assert!(a.reasons.contains(&"Sticker: First lap".to_string()), "{:?}", a.reasons);
     let pay = cat.pay(first);
-    assert_eq!((a.stickers[0].xp, a.stickers[0].coins), (pay.xp, pay.coins));
+    let unlocked = a.stickers.iter().find(|s| s.id == "first-lap").unwrap();
+    assert_eq!((unlocked.xp, unlocked.coins), (pay.xp, pay.coins));
     assert!(tt.profile(sam.id).unwrap().recent.iter().any(|e| e.kind == "sticker:first-lap" && e.coins == pay.coins));
 
     // The same sticker is never paid twice.
-    assert!(tt.record_lap(&lap(104_000, true)).unwrap().awards.stickers.is_empty());
+    assert!(!sticker_ids(&tt.record_lap(&lap(104_000, true)).unwrap().awards).contains(&"first-lap"));
     let book = tt.sticker_book(sam.id).unwrap();
-    assert_eq!((book.earned, book.total), (1, cat.stickers.len() as u32));
+    assert_eq!(book.total, cat.stickers.len() as u32);
+    assert!(book.earned >= 1);
     let view = |id: &str| book.stickers.iter().find(|s| s.id == id).unwrap().clone();
     assert!(view("first-lap").earned && view("first-lap").earned_at.is_some());
     // Counting stickers show how far along they are; designed-but-not-detectable ones say so.
@@ -1560,7 +1563,7 @@ fn a_run_of_clean_laps_is_broken_by_a_cut_and_a_lucky_time_is_noticed() {
 }
 
 #[test]
-fn a_reward_can_give_a_free_item_and_stickers_for_old_laps_arrive_quietly() {
+fn a_reward_can_give_a_free_item_and_stickers_for_old_laps_are_caught_up_and_paid() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("binit.db");
     let sam = {
@@ -1586,7 +1589,7 @@ fn a_reward_can_give_a_free_item_and_stickers_for_old_laps_arrive_quietly() {
     let book = tt.sticker_book(sam).unwrap();
     assert!(book.stickers.iter().find(|s| s.id == "first-lap").unwrap().earned, "old laps count");
     assert!(!book.stickers.iter().find(|s| s.id == "crown").unwrap().earned, "a one-off moment cannot be proven from history");
-    assert_eq!(tt.profile(sam).unwrap().coins, coins_before, "old unlocks pay nothing new");
+    assert!(tt.profile(sam).unwrap().coins > coins_before, "stickers caught up from old laps are paid too");
 }
 
 #[test]
@@ -1791,4 +1794,79 @@ fn own_history_stickers_perfectionist_and_scenic_route() {
     // Half as slow again as your best.
     assert!(!sticker_ids(&tt.record_lap(&lap(140_000, true)).unwrap().awards).contains(&"scenic-route"), "40% slower");
     assert!(sticker_ids(&tt.record_lap(&lap(150_001, true)).unwrap().awards).contains(&"scenic-route"));
+}
+
+
+// ---- tidy lap, one more go, rule bender and the time-of-day stickers ----------------------------------
+
+#[test]
+fn a_new_pb_after_five_laps_that_did_not_beat_the_best_is_one_more_go() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    tt.record_lap(&lap(100_000, true)).unwrap();
+    // Four laps that do not beat it, then a new best: not enough.
+    for t in [100_500, 101_000, 100_800, 100_100] {
+        assert!(!sticker_ids(&tt.record_lap(&lap(t, true)).unwrap().awards).contains(&"one-more-go"));
+    }
+    assert!(!sticker_ids(&tt.record_lap(&lap(99_000, true)).unwrap().awards).contains(&"one-more-go"), "only four laps before it");
+    // Five that do not beat 99.000, then a new best: yes.
+    for t in [99_500, 100_000, 99_900, 101_000, 99_100] {
+        assert!(!sticker_ids(&tt.record_lap(&lap(t, true)).unwrap().awards).contains(&"one-more-go"));
+    }
+    assert!(sticker_ids(&tt.record_lap(&lap(98_000, true)).unwrap().awards).contains(&"one-more-go"));
+}
+
+#[test]
+fn five_cut_laps_in_a_row_that_were_nearly_the_record_is_a_rule_bender() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Jess", None).unwrap();
+    tt.record_lap(&lap(100_000, true)).unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    // 1.5% off Jess, but cut: four of them, then a slow one that breaks the run, then five.
+    for _ in 0..4 {
+        assert!(!sticker_ids(&tt.record_lap(&untimed_lap(101_500, UntimedReason::Cut)).unwrap().awards).contains(&"rule-bender"));
+    }
+    assert!(!sticker_ids(&tt.record_lap(&untimed_lap(110_000, UntimedReason::Cut)).unwrap().awards).contains(&"rule-bender"), "too slow to count");
+    for _ in 0..4 {
+        assert!(!sticker_ids(&tt.record_lap(&untimed_lap(101_000, UntimedReason::Cut)).unwrap().awards).contains(&"rule-bender"));
+    }
+    let fifth = tt.record_lap(&untimed_lap(101_900, UntimedReason::Cut)).unwrap().awards;
+    assert!(sticker_ids(&fifth).contains(&"rule-bender"), "{:?}", sticker_ids(&fifth));
+    // A cut lap pays no lap XP, only its sticker.
+    assert_eq!(fifth.reasons, vec!["Sticker: Rule bender".to_string()]);
+}
+
+#[test]
+fn a_clean_lap_with_no_cut_and_no_spin_is_tidy() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    assert!(sticker_ids(&tt.record_lap(&lap(100_000, true)).unwrap().awards).contains(&"tidy-lap"));
+}
+
+/// A lap recorded at a given local time on the rig's PC, whatever time zone this machine is in.
+fn local_lap_at(tt: &BinIt, year: i32, month: u32, day: u32, hour: u32, minute: u32) -> Awards {
+    use chrono::TimeZone;
+    let at = chrono::Local.with_ymd_and_hms(year, month, day, hour, minute, 0).unwrap().timestamp_millis();
+    tt.record_lap_at(&lap(100_000, true), at).unwrap().awards
+}
+
+#[test]
+fn time_of_day_stickers_follow_the_rigs_local_clock_and_the_json_windows() {
+    // 2026-10-30 is a Friday and 2026-10-31 a Saturday.
+    for (name, (y, mo, d, h, mi), expected) in [
+        ("lunch-break", (2026, 10, 31, 12, 30), true),
+        ("lunch-break", (2026, 10, 31, 14, 0), false),
+        ("early-bird", (2026, 10, 31, 7, 59), true),
+        ("early-bird", (2026, 10, 31, 8, 0), false),
+        ("night-owl", (2026, 10, 31, 23, 59), true),
+        ("night-owl", (2026, 10, 31, 18, 59), false),
+        ("friday-feeling", (2026, 10, 30, 16, 0), true),
+        ("friday-feeling", (2026, 10, 31, 17, 0), false),
+        ("friday-feeling", (2026, 10, 30, 15, 59), false),
+    ] {
+        let tt = BinIt::in_memory().unwrap();
+        tt.add_and_seat("Sam", None).unwrap();
+        let awards = local_lap_at(&tt, y, mo, d, h, mi);
+        assert_eq!(sticker_ids(&awards).contains(&name), expected, "{name} at {h}:{mi:02} on {y}-{mo}-{d}");
+    }
 }

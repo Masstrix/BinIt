@@ -215,8 +215,10 @@
       "name": "Tidy lap",
       "group": "clean-driving",
       "rarity": "common",
-      "how": "A lap with no track-limit cuts.",
-      "rule": null
+      "how": "A timed lap with no cuts and no spin.",
+      "rule": {
+        "kind": "thisLapHasNoSpin"
+      }
     },
     {
       "id": "five-clean",
@@ -254,7 +256,11 @@
       "group": "clean-driving",
       "rarity": "epic",
       "how": "Cut the track on 5 laps in a row and still stay within 2% of the track record every time.",
-      "rule": null
+      "rule": {
+        "kind": "thisCutLapEndsARunWithinPercentOfAnotherDriversBest",
+        "n": 5,
+        "percent": 2.0
+      }
     },
     {
       "id": "tourist",
@@ -329,7 +335,11 @@
       "how": "Set a lap between 12 and 2. Secret until you do.",
       "hidden": true,
       "hint": "Hidden. Something to do with midday.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapSetBetweenLocalTimes",
+        "from": "12:00",
+        "to": "14:00"
+      }
     },
     {
       "id": "photo-finish",
@@ -430,7 +440,11 @@
       "group": "funny",
       "rarity": "rare",
       "how": "Set a lap before 8 am. Coffee first.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapSetBetweenLocalTimes",
+        "from": "00:00",
+        "to": "08:00"
+      }
     },
     {
       "id": "night-owl",
@@ -440,7 +454,11 @@
       "how": "Set a lap after 7 pm. Secret until you do.",
       "hidden": true,
       "hint": "Hidden. Something to do with the evening.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapSetBetweenLocalTimes",
+        "from": "19:00",
+        "to": "24:00"
+      }
     },
     {
       "id": "lucky-seven",
@@ -505,15 +523,25 @@
       "group": "funny",
       "rarity": "common",
       "how": "Set a lap after 4 pm on a Friday.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapSetBetweenLocalTimes",
+        "from": "16:00",
+        "to": "24:00",
+        "days": [
+          "fri"
+        ]
+      }
     },
     {
       "id": "one-more-go",
       "name": "One more go",
       "group": "funny",
       "rarity": "rare",
-      "how": "After your slowest lap of a session, drive five more straight away.",
-      "rule": null
+      "how": "Set a new personal best after five laps in a row on that track and car that did not beat the best before them.",
+      "rule": {
+        "kind": "thisLapIsPersonalBestAfterLapsWithoutOne",
+        "n": 5
+      }
     },
     {
       "id": "moonwalk",

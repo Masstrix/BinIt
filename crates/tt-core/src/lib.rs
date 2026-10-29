@@ -986,6 +986,8 @@ impl BinIt {
         }
         let awards = match driver_id {
             Some(id) if lap.valid => award_lap(&store, id, &lap, &combo, personal_best, combo_record, !challenges.is_empty(), purple_sector, now)?,
+            // A cut lap earns no XP, but a few stickers are about cut laps.
+            Some(id) if lap.untimed_reason.as_deref() == Some("cut") => award_cut_lap(&store, id, &lap, now)?,
             _ => Awards::default(),
         };
         drop(store);
@@ -1401,6 +1403,24 @@ fn standing(store: &Store, c: &Challenge, driver_id: Option<DriverId>, now: Time
 
 #[cfg(test)]
 mod tests;
+
+/// A cut lap pays no lap XP or coins, only the stickers it completes.
+fn award_cut_lap(store: &Store, driver: DriverId, lap: &Lap, now: Timestamp) -> Result<Awards> {
+    let xp_before = store.point_totals(driver)?.0;
+    let unlocked = stickers::award_lap(store, driver, lap, stickers::LapFlags::default(), now)?;
+    let mut awards = Awards::default();
+    for u in &unlocked {
+        awards.xp += u.xp;
+        awards.coins += u.coins;
+        awards.reasons.push(format!("Sticker: {}", u.name));
+    }
+    awards.stickers = unlocked;
+    let level_after = progress::level_of(xp_before + awards.xp);
+    if level_after > progress::level_of(xp_before) {
+        awards.level_up = Some(level_after);
+    }
+    Ok(awards)
+}
 
 /// Pays a driver for a valid lap: see `progress` for what each thing is worth.
 #[allow(clippy::too_many_arguments)]

@@ -98,8 +98,44 @@ pub enum Rule {
     ThisLapEqualsAnotherDriversTime,
     /// The driver has held the best time on a track and car for `days` days, with another driver on the board.
     RecordHeldForDays { days: u32 },
+    /// This lap had no spin. A game that reports no physics counts as having none.
+    ThisLapHasNoSpin,
+    /// This lap was set between two local times of day on the rig's PC (`from` up to but not including `to`, as
+    /// "12:00" and "14:00"; "24:00" is the end of the day), on one of `days` ("mon" to "sun"; empty = every day).
+    /// The local time and daylight saving are the PC's at the moment the lap was recorded.
+    ThisLapSetBetweenLocalTimes {
+        from: String,
+        to: String,
+        #[serde(default)]
+        days: Vec<String>,
+    },
+    /// This lap is a new personal best after at least `n` laps in a row on that track and car that did not beat the
+    /// best before them.
+    ThisLapIsPersonalBestAfterLapsWithoutOne { n: u32 },
+    /// This is a cut lap, and it ends a run of `n` cut laps in a row on that track and car, each within `percent` of
+    /// another driver's best there (needs one other driver).
+    ThisCutLapEndsARunWithinPercentOfAnotherDriversBest { n: u32, percent: f32 },
     /// Every other sticker in the book.
     AllOtherStickers,
+}
+
+/// A time of day as minutes since midnight: "08:30" is 510, "24:00" is 1440.
+fn parse_clock(s: &str) -> Option<u32> {
+    let (h, m) = s.split_once(':')?;
+    let (h, m): (u32, u32) = (h.trim().parse().ok()?, m.trim().parse().ok()?);
+    ((h < 24 && m < 60) || (h == 24 && m == 0)).then_some(h * 60 + m)
+}
+
+/// Monday is 0.
+fn day_index(s: &str) -> Option<u32> {
+    ["mon", "tue", "wed", "thu", "fri", "sat", "sun"].iter().position(|d| s.trim().to_lowercase().starts_with(d)).map(|i| i as u32)
+}
+
+/// The rig's local minute of the day and weekday (Monday is 0) at a moment, daylight saving included.
+fn local_clock(ms: Timestamp) -> Option<(u32, u32)> {
+    use chrono::{Datelike, TimeZone, Timelike};
+    let t = chrono::Local.timestamp_millis_opt(ms).single()?;
+    Some((t.hour() * 60 + t.minute(), t.weekday().num_days_from_monday()))
 }
 
 /// A track, by the name the app stores laps under, and optionally one layout of it. Spelling, case and punctuation do
@@ -217,6 +253,14 @@ impl Catalogue {
             }
             if s.hidden && s.hint.is_none() {
                 return Err(format!("hidden sticker {} needs a hint", s.id));
+            }
+            if let Some(Rule::ThisLapSetBetweenLocalTimes { from, to, days }) = &s.rule {
+                if parse_clock(from).is_none() || parse_clock(to).is_none() {
+                    return Err(format!("sticker {} needs times like \"12:00\", not {from:?} to {to:?}", s.id));
+                }
+                if let Some(bad) = days.iter().find(|d| day_index(d).is_none()) {
+                    return Err(format!("sticker {} has day {bad:?}; use mon, tue, wed, thu, fri, sat or sun", s.id));
+                }
             }
             if let Some(item) = s.reward.as_ref().and_then(|r| r.item.as_deref())
                 && crate::shop::parse_key(item).is_none()
@@ -400,6 +444,31 @@ fn measure(rule: &Rule, c: &Ctx) -> (u32, u32) {
         Rule::ThisLapWithinOfAnotherDriversTime { ms } => (on_lap(&|l| c.board.others.iter().any(|&t| t != l.time_ms && t.abs_diff(l.time_ms) <= *ms)), 1),
         Rule::ThisLapEqualsAnotherDriversTime => (on_lap(&|l| c.board.others.contains(&l.time_ms)), 1),
         Rule::RecordHeldForDays { days } => (c.board.longest_held_days.min(*days), *days),
+        Rule::ThisLapHasNoSpin => (on_lap(&|_| c.slides.spins == 0), 1),
+        Rule::ThisLapSetBetweenLocalTimes { from, to, days } => {
+            let (Some(from), Some(to)) = (parse_clock(from), parse_clock(to)) else { return (0, 1) };
+            let days: Vec<u32> = days.iter().filter_map(|d| day_index(d)).collect();
+            (on_lap(&|l| local_clock(l.recorded_at).is_some_and(|(minute, day)| minute >= from && minute < to && (days.is_empty() || days.contains(&day)))), 1)
+        }
+        Rule::ThisLapIsPersonalBestAfterLapsWithoutOne { n } => {
+            let Some(cur) = c.lap.filter(|_| c.flags.personal_best) else { return (0, 1) };
+            let (mut best, mut run): (Option<u32>, u32) = (None, 0);
+            for l in c.laps.iter().filter(|l| l.valid && l.combo == cur.combo && l.id != cur.id) {
+                match best {
+                    Some(b) if l.time_ms >= b => run += 1,
+                    _ => run = 0,
+                }
+                best = Some(best.map_or(l.time_ms, |b| b.min(l.time_ms)));
+            }
+            (u32::from(run >= *n), 1)
+        }
+        Rule::ThisCutLapEndsARunWithinPercentOfAnotherDriversBest { n, percent } => {
+            let Some(cur) = c.lap.filter(|l| l.untimed_reason.as_deref() == Some("cut")) else { return (0, *n) };
+            let Some(&record) = c.board.others.iter().min() else { return (0, *n) };
+            let limit = f64::from(record) * (1.0 + f64::from(*percent) / 100.0);
+            let run = c.laps.iter().rev().take_while(|l| l.untimed_reason.as_deref() == Some("cut") && l.combo == cur.combo && l.time_ms > 0 && f64::from(l.time_ms) <= limit);
+            (run.count() as u32, *n)
+        }
         Rule::AllOtherStickers => (c.others_earned, c.others_total),
     }
 }
@@ -485,7 +554,7 @@ pub fn book(store: &Store, driver: DriverId, now: Timestamp) -> Result<StickerBo
             let at = earned.get(&s.id).copied();
             let shown = at.is_some() || !s.hidden;
             let pay = cat.pay(s);
-            let one_off = matches!(s.rule, Some(Rule::ThisLapIsPersonalBest | Rule::ThisLapIsTrackRecord | Rule::ThisLapInChallenge | Rule::ThisLapTimeEndsIn { .. } | Rule::ThisLapTimeIsPalindrome | Rule::ThisLapFasterThan { .. } | Rule::ThisLapTimeEndsInSecondsAndMs { .. } | Rule::ThisLapLongestDriftAtLeast { .. } | Rule::ThisLapDriftTimeShareAtLeast { .. } | Rule::ThisLapSpinsAtLeast { .. } | Rule::ThisLapSlowerThanYourBestBy { .. } | Rule::ThisLapSectorFasterThanEveryoneElse | Rule::ThisLapWithinPercentOfAnotherDriversBest { .. } | Rule::ThisLapWinsFromBottomHalf { .. } | Rule::ThisLapPassesAnotherDriver | Rule::ThisLapWithinOfAnotherDriversTime { .. } | Rule::ThisLapEqualsAnotherDriversTime));
+            let one_off = matches!(s.rule, Some(Rule::ThisLapIsPersonalBest | Rule::ThisLapIsTrackRecord | Rule::ThisLapInChallenge | Rule::ThisLapTimeEndsIn { .. } | Rule::ThisLapTimeIsPalindrome | Rule::ThisLapFasterThan { .. } | Rule::ThisLapTimeEndsInSecondsAndMs { .. } | Rule::ThisLapLongestDriftAtLeast { .. } | Rule::ThisLapDriftTimeShareAtLeast { .. } | Rule::ThisLapSpinsAtLeast { .. } | Rule::ThisLapSlowerThanYourBestBy { .. } | Rule::ThisLapSectorFasterThanEveryoneElse | Rule::ThisLapWithinPercentOfAnotherDriversBest { .. } | Rule::ThisLapWinsFromBottomHalf { .. } | Rule::ThisLapPassesAnotherDriver | Rule::ThisLapWithinOfAnotherDriversTime { .. } | Rule::ThisLapEqualsAnotherDriversTime | Rule::ThisLapHasNoSpin | Rule::ThisLapSetBetweenLocalTimes { .. } | Rule::ThisLapIsPersonalBestAfterLapsWithoutOne { .. }));
             let progress = match &s.rule {
                 Some(rule) if at.is_none() && !one_off && shown => {
                     let (cur, max) = measure(rule, &ctx);
@@ -539,7 +608,8 @@ pub fn award_lap(store: &Store, driver: DriverId, lap: &Lap, flags: LapFlags, no
     Ok(out)
 }
 
-/// One-off pass over everyone's history so nobody starts at zero: unlocks what the laps already prove, pays nothing.
+/// One-off pass over everyone's history so nobody starts at zero: unlocks what the laps already prove, and pays for it
+/// (the driver would have had the reward anyway had the stickers existed).
 pub fn backfill(store: &Store) -> Result<()> {
     const FLAG: &str = "stickers_backfilled_v1";
     if store.setting(FLAG)?.is_some() {
@@ -552,7 +622,7 @@ pub fn backfill(store: &Store) -> Result<()> {
             continue;
         }
         let mut sink = Vec::new();
-        unlock_pass(store, d.id, &laps, None, LapFlags::default(), now, None, &mut sink)?;
+        unlock_pass(store, d.id, &laps, None, LapFlags::default(), now, laps.last(), &mut sink)?;
     }
     store.set_setting(FLAG, Some("1"))?;
     Ok(())
@@ -698,4 +768,21 @@ mod tests {
         assert!(met(&top, 100_000, slid(0, 0, 1)) && !met(&top, 100_000, slid(3_000, 3_000, 0)));
         assert!(!met(&sideways, 100_000, Default::default()), "a game that reports no slides cannot earn them");
     }
+
+    #[test]
+    fn times_of_day_are_checked_when_the_file_loads() {
+        let ok = include_str!("../stickers.json");
+        let with = |from: &str, to: &str| {
+            let mut v: serde_json::Value = serde_json::from_str(ok).unwrap();
+            let i = v["stickers"].as_array().unwrap().iter().position(|s| s["id"] == "lunch-break").unwrap();
+            v["stickers"][i]["rule"]["from"] = from.into();
+            v["stickers"][i]["rule"]["to"] = to.into();
+            v.to_string()
+        };
+        assert!(Catalogue::from_json(&with("11:30", "13:45")).is_ok());
+        assert!(Catalogue::from_json(&with("12:00", "24:00")).is_ok());
+        assert!(Catalogue::from_json(&with("noon", "14:00")).unwrap_err().contains("lunch-break"));
+        assert!(Catalogue::from_json(&with("12:00", "25:00")).is_err());
+    }
 }
+
