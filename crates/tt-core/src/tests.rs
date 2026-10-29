@@ -351,8 +351,16 @@ fn a_clean_lap_teaches_the_track_map_once_and_flags_the_catalogue() {
     tt.handle_game_event(GameEvent::LapCompleted(lap(99_000, true))).unwrap();
     let maps = tt.track_maps("acevo").unwrap();
     assert_eq!(maps.len(), 1);
-    assert_eq!((maps[0].track.as_str(), maps[0].points.len()), ("Imola", 400));
+    // Imola is 4.9 km, so one point every 10 m.
+    assert_eq!((maps[0].track.as_str(), maps[0].points.len()), ("Imola", 490));
     assert!((maps[0].points[0][0] - 400.0).abs() < 5.0);
+
+    // A coarse map from before maps scaled with track length is replaced by the next clean lap, not kept for ever.
+    let coarse: Vec<[f32; 2]> = (0..200).map(|i| [i as f32, 0.0]).collect();
+    tt.store().set_track_map("acevo", "Imola", "", &coarse, true, 1).unwrap();
+    drive(&tt, 400.0);
+    tt.handle_game_event(GameEvent::LapCompleted(lap(98_000, true))).unwrap();
+    assert_eq!(tt.track_maps("acevo").unwrap()[0].points.len(), 490);
 
     let cat = tt.catalogue("acevo").unwrap();
     let imola = cat.tracks.iter().find(|t| t.name == "Imola").unwrap();
@@ -1036,6 +1044,11 @@ fn logging_out_forgets_the_phone_and_signing_everyone_out_frees_the_driver() {
 
 // ---- XP, coins and the profile ----------------------------------------------------------------
 
+/// What a lap paid for the lap itself, leaving out the stickers it also unlocked.
+fn lap_pay(a: &Awards) -> (i64, i64) {
+    (a.xp - a.stickers.iter().map(|s| s.xp).sum::<i64>(), a.coins - a.stickers.iter().map(|s| s.coins).sum::<i64>())
+}
+
 #[test]
 fn laps_earn_xp_and_coins_for_what_they_are() {
     let tt = BinIt::in_memory().unwrap();
@@ -1043,13 +1056,14 @@ fn laps_earn_xp_and_coins_for_what_they_are() {
 
     // First lap on a new track and car: the welcome bonus plus the lap itself.
     let first = tt.record_lap(&lap(103_000, true)).unwrap().awards;
-    assert_eq!((first.xp, first.coins), (progress::rewards().first_lap.xp + progress::rewards().clean_lap.xp, progress::rewards().first_lap.coins + progress::rewards().clean_lap.coins));
+    assert_eq!(lap_pay(&first), (progress::rewards().first_lap.xp + progress::rewards().clean_lap.xp, progress::rewards().first_lap.coins + progress::rewards().clean_lap.coins));
     // A slower lap is just a lap.
     let slower = tt.record_lap(&lap(104_000, true)).unwrap().awards;
     assert_eq!((slower.xp, slower.reasons.clone()), (progress::rewards().clean_lap.xp, vec!["Clean lap".to_string()]));
+    assert!(slower.stickers.is_empty());
     // A personal best pays extra. Nobody else has driven here, so it is not a track record.
     let pb = tt.record_lap(&lap(102_000, true)).unwrap().awards;
-    assert_eq!(pb.xp, progress::rewards().clean_lap.xp + progress::rewards().personal_best.xp);
+    assert_eq!(lap_pay(&pb).0, progress::rewards().clean_lap.xp + progress::rewards().personal_best.xp);
     assert!(!pb.reasons.contains(&"Track record".to_string()));
     // Cut laps and out laps earn nothing.
     assert_eq!(tt.record_lap(&lap(101_000, false)).unwrap().awards, Awards::default());
@@ -1068,7 +1082,7 @@ fn a_track_record_needs_someone_else_to_beat_and_guests_earn_nothing() {
     let jess = tt.add_and_seat("Jess", None).unwrap();
     let beat = tt.record_lap(&lap(102_000, true)).unwrap().awards;
     assert!(beat.reasons.contains(&"Track record".to_string()), "{:?}", beat.reasons);
-    assert_eq!(beat.xp, progress::rewards().first_lap.xp + progress::rewards().clean_lap.xp + progress::rewards().track_record.xp);
+    assert_eq!(lap_pay(&beat).0, progress::rewards().first_lap.xp + progress::rewards().clean_lap.xp + progress::rewards().track_record.xp);
 
     tt.set_seat(None).unwrap();
     assert_eq!(tt.record_lap(&lap(99_000, true)).unwrap().awards, Awards::default());
@@ -1316,14 +1330,14 @@ fn a_finished_challenge_pays_once_and_old_ones_are_left_alone() {
     for (i, id) in ids.iter().enumerate() {
         tt.record_lap_for(&lap(100_000 + i as u32 * 1000, true), now - 3000, Some(Some(*id)), None).unwrap();
     }
-    let before: Vec<i64> = ids.iter().map(|id| tt.profile(*id).unwrap().coins).collect();
     assert_eq!(tt.settle_challenges().unwrap(), 3);
     assert_eq!(tt.settle_challenges().unwrap(), 0, "never paid twice");
-    let after: Vec<i64> = ids.iter().map(|id| tt.profile(*id).unwrap().coins).collect();
+    // What the challenge itself paid (its stickers pay on top, under their own ledger kinds).
+    let paid = |i: usize| tt.profile(ids[i]).unwrap().recent.iter().filter(|e| e.kind.starts_with("challenge:")).map(|e| e.coins).sum::<i64>();
     let rules = &progress::rewards().challenge;
     let scale = rules.scale(3);
-    assert_eq!(after[0] - before[0], (rules.placings[0].coins as f64 * scale).round() as i64);
-    assert_eq!(after[2] - before[2], (rules.placings[2].coins as f64 * scale).round() as i64);
+    assert_eq!(paid(0), (rules.placings[0].coins as f64 * scale).round() as i64);
+    assert_eq!(paid(2), (rules.placings[2].coins as f64 * scale).round() as i64);
     assert!(tt.profile(ids[0]).unwrap().recent.iter().any(|e| e.kind == "challenge:1:Hot Lap"));
 }
 
@@ -1466,4 +1480,668 @@ fn a_database_from_before_slides_gains_the_column_and_keeps_its_laps() {
     assert_eq!(tt.recent_laps(5).unwrap().len(), 1);
     assert_eq!(tt.lap_slides(id).unwrap(), None);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+
+// ---- achievement stickers -------------------------------------------------------------------------
+
+fn sticker_ids(a: &Awards) -> Vec<&str> {
+    a.stickers.iter().map(|s| s.id.as_str()).collect()
+}
+
+#[test]
+fn a_sticker_unlocks_once_pays_through_the_ledger_and_shows_in_the_book() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    let cat = stickers::catalogue();
+    let first = cat.stickers.iter().find(|s| s.id == "first-lap").unwrap();
+
+    let a = tt.record_lap(&lap(103_000, true)).unwrap().awards;
+    // (Tidy lap, and a time-of-day sticker when the tests run at the wrong hour, may come with it.)
+    assert!(sticker_ids(&a).contains(&"first-lap"), "{:?}", sticker_ids(&a));
+    assert!(a.reasons.contains(&"Sticker: First lap".to_string()), "{:?}", a.reasons);
+    let pay = cat.pay(first);
+    let unlocked = a.stickers.iter().find(|s| s.id == "first-lap").unwrap();
+    assert_eq!((unlocked.xp, unlocked.coins), (pay.xp, pay.coins));
+    assert!(tt.profile(sam.id).unwrap().recent.iter().any(|e| e.kind == "sticker:first-lap" && e.coins == pay.coins));
+
+    // The same sticker is never paid twice.
+    assert!(!sticker_ids(&tt.record_lap(&lap(104_000, true)).unwrap().awards).contains(&"first-lap"));
+    let book = tt.sticker_book(sam.id).unwrap();
+    assert_eq!(book.total, cat.stickers.len() as u32);
+    assert!(book.earned >= 1);
+    let view = |id: &str| book.stickers.iter().find(|s| s.id == id).unwrap().clone();
+    assert!(view("first-lap").earned && view("first-lap").earned_at.is_some());
+    // Counting stickers show how far along they are; designed-but-not-detectable ones say so.
+    assert_eq!(view("ten-laps").progress.map(|p| (p.cur, p.max)), Some((2, 10)));
+    assert!(view("moonwalk").detectable && view("moonwalk").progress.is_none(), "a one-off moment has no progress bar");
+    assert!(stickers::catalogue().stickers.iter().all(|s| s.rule.is_some()), "every sticker has a rule now");
+}
+
+#[test]
+fn laps_that_do_not_count_and_guests_unlock_nothing() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    assert!(tt.record_lap(&lap(103_000, false)).unwrap().awards.stickers.is_empty());
+    tt.set_seat(None).unwrap();
+    assert!(tt.record_lap(&lap(103_000, true)).unwrap().awards.stickers.is_empty());
+    assert_eq!(tt.sticker_book(sam.id).unwrap().earned, 0);
+    assert!(tt.sticker_book(9_999).is_err());
+}
+
+#[test]
+fn personal_best_and_track_record_stickers_need_the_moment_not_just_the_history() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    assert!(!sticker_ids(&tt.record_lap(&lap(103_000, true)).unwrap().awards).contains(&"personal-best"));
+    assert!(sticker_ids(&tt.record_lap(&lap(102_000, true)).unwrap().awards).contains(&"personal-best"));
+    tt.add_and_seat("Jess", None).unwrap();
+    let ids = sticker_ids(&tt.record_lap(&lap(101_000, true)).unwrap().awards).into_iter().map(String::from).collect::<Vec<_>>();
+    assert!(ids.contains(&"crown".to_string()), "{ids:?}");
+}
+
+#[test]
+fn a_run_of_clean_laps_is_broken_by_a_cut_and_a_lucky_time_is_noticed() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    for i in 0..4 {
+        tt.record_lap(&lap(110_000 - i, true)).unwrap();
+    }
+    tt.record_lap(&lap(105_000, false)).unwrap(); // a cut
+    tt.record_lap(&lap(109_000, true)).unwrap();
+    assert!(!tt.sticker_book(sam.id).unwrap().stickers.iter().find(|s| s.id == "five-clean").unwrap().earned, "the cut broke the run");
+    for i in 0..4 {
+        tt.record_lap(&lap(108_000 - i, true)).unwrap();
+    }
+    assert!(tt.sticker_book(sam.id).unwrap().stickers.iter().find(|s| s.id == "five-clean").unwrap().earned);
+
+    let lucky = tt.record_lap(&lap(101_777, true)).unwrap().awards;
+    assert!(sticker_ids(&lucky).contains(&"lucky-seven"), "{:?}", sticker_ids(&lucky));
+    // A hidden sticker has no name in the book until it is earned.
+    let other = tt.add_driver("Jess", None).unwrap();
+    let hidden = tt.sticker_book(other.id).unwrap().stickers.into_iter().find(|s| s.id == "mirror-lap").unwrap();
+    assert_eq!((hidden.name.as_str(), hidden.how.as_str()), ("Hidden sticker", "Hidden. Read it backwards."));
+}
+
+#[test]
+fn a_reward_can_give_a_free_item_and_stickers_for_old_laps_are_caught_up_and_paid() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("binit.db");
+    let sam = {
+        let tt = BinIt::open(&path).unwrap();
+        let sam = tt.add_and_seat("Sam", None).unwrap();
+        tt.add_and_seat("Jess", None).unwrap();
+        tt.record_lap(&lap(103_000, true)).unwrap();
+        tt.set_seat(Some(sam.id)).unwrap();
+        // Sam beats Jess: the Crown sticker, whose reward includes a decal.
+        let a = tt.record_lap(&lap(102_000, true)).unwrap().awards;
+        let crown = a.stickers.iter().find(|s| s.id == "crown").expect("crown");
+        assert_eq!(crown.item.as_deref(), Some("decal:crown"));
+        assert!(tt.shop(sam.id).unwrap().owned.contains(&"decal:crown".to_string()));
+        (sam.id, tt.profile(sam.id).unwrap().coins)
+    };
+    let (sam, coins_before) = sam;
+    // Wipe the stickers and the flag, as a database from before stickers existed would look.
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("DELETE FROM driver_stickers; DELETE FROM settings WHERE key = 'stickers_backfilled_v1'; PRAGMA user_version = 12;").unwrap();
+    }
+    let tt = BinIt::open(&path).unwrap();
+    let book = tt.sticker_book(sam).unwrap();
+    assert!(book.stickers.iter().find(|s| s.id == "first-lap").unwrap().earned, "old laps count");
+    assert!(!book.stickers.iter().find(|s| s.id == "crown").unwrap().earned, "a one-off moment cannot be proven from history");
+    assert!(tt.profile(sam).unwrap().coins > coins_before, "stickers caught up from old laps are paid too");
+}
+
+#[test]
+fn a_driver_shows_up_to_three_earned_stickers_on_their_profile() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    tt.record_lap(&lap(103_000, true)).unwrap();
+    tt.record_lap(&lap(102_000, true)).unwrap(); // first-lap and personal-best
+    assert!(tt.sticker_book(sam.id).unwrap().pinned.is_empty());
+
+    let book = tt.pin_stickers(sam.id, &["personal-best".into(), "first-lap".into()]).unwrap();
+    assert_eq!(book.pinned, vec!["personal-best", "first-lap"], "order is kept");
+    // Not earned, repeated, or too many are refused and leave the choice as it was.
+    assert!(tt.pin_stickers(sam.id, &["crown".into()]).is_err());
+    assert!(tt.pin_stickers(sam.id, &["first-lap".into(), "first-lap".into()]).is_err());
+    assert!(tt.pin_stickers(sam.id, &["a".into(), "b".into(), "c".into(), "d".into()]).is_err());
+    assert!(tt.pin_stickers(9_999, &[]).is_err());
+    assert_eq!(tt.sticker_book(sam.id).unwrap().pinned, vec!["personal-best", "first-lap"]);
+    assert!(tt.pin_stickers(sam.id, &[]).unwrap().pinned.is_empty());
+}
+
+fn ring_lap(track: &str, layout: Option<&str>, time_ms: u32) -> CompletedLap {
+    let mut l = lap(time_ms, true);
+    l.session.track = track.into();
+    l.session.layout = layout.map(Into::into);
+    l
+}
+
+#[test]
+fn the_nordschleife_stickers_count_only_on_the_nordschleife_in_either_game() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    // A quick lap somewhere else is just a lap.
+    assert!(!sticker_ids(&tt.record_lap(&lap(400_000, true)).unwrap().awards).iter().any(|id| id.starts_with("ring-")));
+    // The GP circuit at the same Nurburgring is not the Nordschleife.
+    assert!(!sticker_ids(&tt.record_lap(&ring_lap("ks_nurburgring", Some("layout_gp_a"), 400_000)).unwrap().awards).iter().any(|id| id.starts_with("ring-")));
+
+    // Assetto Corsa EVO reports the Nordschleife as track "Nurburgring", layout "Nordschleife". Sub-eight but not sub-seven.
+    let evo = tt.record_lap(&ring_lap("Nurburgring", Some("Nordschleife"), 470_000)).unwrap().awards;
+    let ids = sticker_ids(&evo);
+    assert!(ids.contains(&"ring-green-hell") && ids.contains(&"ring-sub-eight") && !ids.contains(&"ring-sub-seven"), "{ids:?}");
+    // Assetto Corsa: ks_nordschleife, any layout. Sub-seven, paid with its own reward.
+    let ac = tt.record_lap(&ring_lap("ks_nordschleife", Some("nordschleife"), 419_000)).unwrap().awards;
+    let seven = ac.stickers.iter().find(|s| s.id == "ring-sub-seven").expect("sub seven");
+    assert_eq!((seven.xp, seven.coins), (500, 750));
+    assert!(!sticker_ids(&ac).contains(&"ring-sub-eight"), "already earned");
+    // Touristenfahrten (the public layout) counts for Green Hell, but a fast time there is not a Nordschleife time.
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Jess", None).unwrap();
+    let tourist = tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 400_000)).unwrap().awards;
+    let ids = sticker_ids(&tourist);
+    assert!(ids.contains(&"ring-green-hell") && !ids.contains(&"ring-sub-eight") && !ids.contains(&"ring-sub-seven"), "{ids:?}");
+    // Assetto Corsa's combined endurance layout is not the Nordschleife layout either.
+    let endurance = tt.record_lap(&ring_lap("ks_nordschleife", Some("endurance"), 400_000)).unwrap().awards;
+    assert!(!sticker_ids(&endurance).contains(&"ring-sub-seven"));
+}
+
+#[test]
+fn a_lap_time_that_ends_in_the_rings_length_is_a_hidden_egg_and_ten_laps_make_a_regular() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    let hidden = tt.sticker_book(sam.id).unwrap().stickers.into_iter().find(|s| s.id == "ring-20-832").unwrap();
+    assert_eq!((hidden.name.as_str(), hidden.earned), ("Hidden sticker", false));
+    // 7:20.832 on the Nordschleife; the same time elsewhere does nothing.
+    assert!(!sticker_ids(&tt.record_lap(&lap(440_832, true)).unwrap().awards).contains(&"ring-20-832"));
+    // Ten laps count on either layout.
+    for i in 0..9 {
+        let layout = if i % 2 == 0 { "Touristenfahrten" } else { "Nordschleife" };
+        tt.record_lap(&ring_lap("Nurburgring", Some(layout), 600_000 + i)).unwrap();
+    }
+    // Public layout: not the egg. Closed layout: the egg.
+    let tourist = tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 440_832)).unwrap().awards;
+    let ids = sticker_ids(&tourist);
+    assert!(ids.contains(&"ring-regular") && !ids.contains(&"ring-20-832"), "the tenth lap makes a regular: {ids:?}");
+    let egg = tt.record_lap(&ring_lap("Nurburgring", Some("Nordschleife"), 440_832)).unwrap().awards;
+    assert!(sticker_ids(&egg).contains(&"ring-20-832"), "{:?}", sticker_ids(&egg));
+}
+
+#[test]
+fn an_open_wheel_car_cannot_earn_the_nordschleife_time_stickers() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    let mut f1 = ring_lap("Nurburgring", Some("Nordschleife"), 330_000);
+    f1.session.car = "Ferrari F2004".into();
+    let ids = sticker_ids(&tt.record_lap(&f1).unwrap().awards).into_iter().map(String::from).collect::<Vec<_>>();
+    // It still counts as a lap on the Ring, just not as a sub-eight or sub-seven.
+    assert!(ids.contains(&"ring-green-hell".to_string()), "{ids:?}");
+    assert!(!ids.contains(&"ring-sub-eight".to_string()) && !ids.contains(&"ring-sub-seven".to_string()), "{ids:?}");
+    // The same time in a GT3 car does earn them.
+    let gt3 = tt.record_lap(&ring_lap("Nurburgring", Some("Nordschleife"), 330_000)).unwrap().awards;
+    let ids = sticker_ids(&gt3);
+    assert!(ids.contains(&"ring-sub-eight") && ids.contains(&"ring-sub-seven"), "{ids:?}");
+}
+
+// ---- stickers that compare drivers ------------------------------------------------------------------
+
+fn sectors_lap(time_ms: u32, sectors: [u32; 3]) -> CompletedLap {
+    CompletedLap { sectors_ms: sectors.to_vec(), ..lap(time_ms, true) }
+}
+
+#[test]
+fn passing_and_matching_another_drivers_time() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Jess", None).unwrap();
+    tt.record_lap(&lap(100_000, true)).unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    // Exactly Jess's time is a dead heat. Sam was never behind her, so it is not a rematch.
+    let tie = tt.record_lap(&lap(100_000, true)).unwrap().awards;
+    let ids = sticker_ids(&tie);
+    assert!(ids.contains(&"dead-heat") && !ids.contains(&"rematch") && !ids.contains(&"photo-finish"), "{ids:?}");
+    // Eight milliseconds off Jess is a photo finish, even though it is slower than Sam's own best.
+    let close = tt.record_lap(&lap(100_008, true)).unwrap().awards;
+    assert!(sticker_ids(&close).contains(&"photo-finish"), "{:?}", sticker_ids(&close));
+    // Fifty milliseconds off is not.
+    assert!(!sticker_ids(&tt.record_lap(&lap(100_050, true)).unwrap().awards).contains(&"photo-finish"));
+
+    // A newcomer starts behind both, then goes past both: a rematch.
+    tt.add_and_seat("Priya", None).unwrap();
+    assert!(!sticker_ids(&tt.record_lap(&lap(103_000, true)).unwrap().awards).contains(&"rematch"));
+    let pass = tt.record_lap(&lap(99_000, true)).unwrap().awards;
+    assert!(sticker_ids(&pass).contains(&"rematch"), "{:?}", sticker_ids(&pass));
+}
+
+#[test]
+fn on_the_pace_needs_another_driver_within_one_percent() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    // Alone on the board there is nobody to be close to.
+    assert!(!sticker_ids(&tt.record_lap(&lap(100_000, true)).unwrap().awards).contains(&"on-the-pace"));
+    tt.add_and_seat("Jess", None).unwrap();
+    assert!(!sticker_ids(&tt.record_lap(&lap(102_000, true)).unwrap().awards).contains(&"on-the-pace"), "2% off");
+    assert!(sticker_ids(&tt.record_lap(&lap(100_900, true)).unwrap().awards).contains(&"on-the-pace"), "0.9% off");
+}
+
+#[test]
+fn a_giant_is_beaten_from_the_bottom_half_of_a_board_of_four() {
+    let tt = BinIt::in_memory().unwrap();
+    for (name, time) in [("A", 100_000), ("B", 101_000), ("C", 102_000)] {
+        tt.add_and_seat(name, None).unwrap();
+        tt.record_lap(&lap(time, true)).unwrap();
+    }
+    tt.add_and_seat("Sam", None).unwrap();
+    assert!(!sticker_ids(&tt.record_lap(&lap(105_000, true)).unwrap().awards).contains(&"giant-killer"), "last place is not a win");
+    let win = tt.record_lap(&lap(99_000, true)).unwrap().awards;
+    assert!(sticker_ids(&win).contains(&"giant-killer"), "{:?}", sticker_ids(&win));
+
+    // On a board of three, even from last, it does not count.
+    let small = BinIt::in_memory().unwrap();
+    for (name, time) in [("A", 100_000), ("B", 102_000)] {
+        small.add_and_seat(name, None).unwrap();
+        small.record_lap(&lap(time, true)).unwrap();
+    }
+    small.add_and_seat("Sam", None).unwrap();
+    small.record_lap(&lap(105_000, true)).unwrap();
+    assert!(!sticker_ids(&small.record_lap(&lap(99_000, true)).unwrap().awards).contains(&"giant-killer"));
+}
+
+#[test]
+fn a_purple_sector_means_quicker_than_other_drivers_not_just_than_yourself() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    tt.record_lap(&sectors_lap(100_000, [30_000, 35_000, 35_000])).unwrap();
+    assert!(!sticker_ids(&tt.record_lap(&sectors_lap(99_000, [29_000, 35_000, 35_000])).unwrap().awards).contains(&"purple-sector"), "alone, there is only yourself to beat");
+    // Jess is slower in every sector but Sam's 30.500 here is still quicker than her 31.000.
+    tt.add_and_seat("Jess", None).unwrap();
+    tt.record_lap(&sectors_lap(101_000, [31_000, 35_500, 35_500])).unwrap();
+    tt.set_seat(Some(sam.id)).unwrap();
+    let ids = sticker_ids(&tt.record_lap(&sectors_lap(100_500, [30_500, 35_000, 35_000])).unwrap().awards).into_iter().map(String::from).collect::<Vec<_>>();
+    assert!(ids.contains(&"purple-sector".to_string()), "{ids:?}");
+}
+
+#[test]
+fn holding_records_on_five_tracks_and_for_a_week() {
+    let tt = BinIt::in_memory().unwrap();
+    let tracks = ["Imola", "Monza", "Spa", "Suzuka", "Brands Hatch"];
+    tt.add_and_seat("Jess", None).unwrap();
+    for t in tracks {
+        tt.record_lap(&ring_lap(t, None, 100_000)).unwrap();
+    }
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    let week_ago = now_ms() - 8 * progress::DAY_MS;
+    // The first record was set eight days ago; the rest are recent.
+    tt.record_lap_at(&ring_lap(tracks[0], None, 99_000), week_ago).unwrap();
+    for t in &tracks[1..4] {
+        assert!(!sticker_ids(&tt.record_lap(&ring_lap(t, None, 99_000)).unwrap().awards).contains(&"record-breaker"));
+    }
+    let fifth = tt.record_lap(&ring_lap(tracks[4], None, 99_000)).unwrap().awards;
+    assert!(sticker_ids(&fifth).contains(&"record-breaker"), "{:?}", sticker_ids(&fifth));
+    // Reigning came with the first lap after the eight-day-old record, on any track.
+    assert!(tt.sticker_book(sam.id).unwrap().stickers.iter().find(|s| s.id == "reigning").unwrap().earned);
+}
+
+#[test]
+fn own_history_stickers_perfectionist_and_scenic_route() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    tt.record_lap(&lap(100_000, true)).unwrap();
+    // 0.1% of 100.000 s is 100 ms.
+    assert!(!sticker_ids(&tt.record_lap(&lap(100_090, true)).unwrap().awards).contains(&"perfectionist"));
+    assert!(!sticker_ids(&tt.record_lap(&lap(100_300, true)).unwrap().awards).contains(&"perfectionist"), "0.3% off");
+    assert!(sticker_ids(&tt.record_lap(&lap(100_060, true)).unwrap().awards).contains(&"perfectionist"), "third lap within 0.1%");
+    // Half as slow again as your best.
+    assert!(!sticker_ids(&tt.record_lap(&lap(140_000, true)).unwrap().awards).contains(&"scenic-route"), "40% slower");
+    assert!(sticker_ids(&tt.record_lap(&lap(150_001, true)).unwrap().awards).contains(&"scenic-route"));
+}
+
+
+// ---- tidy lap, one more go, rule bender and the time-of-day stickers ----------------------------------
+
+#[test]
+fn a_new_pb_after_five_laps_that_did_not_beat_the_best_is_one_more_go() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    tt.record_lap(&lap(100_000, true)).unwrap();
+    // Four laps that do not beat it, then a new best: not enough.
+    for t in [100_500, 101_000, 100_800, 100_100] {
+        assert!(!sticker_ids(&tt.record_lap(&lap(t, true)).unwrap().awards).contains(&"one-more-go"));
+    }
+    assert!(!sticker_ids(&tt.record_lap(&lap(99_000, true)).unwrap().awards).contains(&"one-more-go"), "only four laps before it");
+    // Five that do not beat 99.000, then a new best: yes.
+    for t in [99_500, 100_000, 99_900, 101_000, 99_100] {
+        assert!(!sticker_ids(&tt.record_lap(&lap(t, true)).unwrap().awards).contains(&"one-more-go"));
+    }
+    assert!(sticker_ids(&tt.record_lap(&lap(98_000, true)).unwrap().awards).contains(&"one-more-go"));
+}
+
+#[test]
+fn five_cut_laps_in_a_row_that_were_nearly_the_record_is_a_rule_bender() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Jess", None).unwrap();
+    tt.record_lap(&lap(100_000, true)).unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    // 1.5% off Jess, but cut: four of them, then a slow one that breaks the run, then five.
+    for _ in 0..4 {
+        assert!(!sticker_ids(&tt.record_lap(&untimed_lap(101_500, UntimedReason::Cut)).unwrap().awards).contains(&"rule-bender"));
+    }
+    assert!(!sticker_ids(&tt.record_lap(&untimed_lap(110_000, UntimedReason::Cut)).unwrap().awards).contains(&"rule-bender"), "too slow to count");
+    for _ in 0..4 {
+        assert!(!sticker_ids(&tt.record_lap(&untimed_lap(101_000, UntimedReason::Cut)).unwrap().awards).contains(&"rule-bender"));
+    }
+    let fifth = tt.record_lap(&untimed_lap(101_900, UntimedReason::Cut)).unwrap().awards;
+    assert!(sticker_ids(&fifth).contains(&"rule-bender"), "{:?}", sticker_ids(&fifth));
+    // A cut lap pays no lap XP, only its sticker.
+    assert_eq!(fifth.reasons, vec!["Sticker: Rule bender".to_string()]);
+}
+
+#[test]
+fn a_clean_lap_with_no_cut_and_no_spin_is_tidy() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    assert!(sticker_ids(&tt.record_lap(&lap(100_000, true)).unwrap().awards).contains(&"tidy-lap"));
+}
+
+/// A lap recorded at a given local time on the rig's PC, whatever time zone this machine is in.
+fn local_lap_at(tt: &BinIt, year: i32, month: u32, day: u32, hour: u32, minute: u32) -> Awards {
+    use chrono::TimeZone;
+    let at = chrono::Local.with_ymd_and_hms(year, month, day, hour, minute, 0).unwrap().timestamp_millis();
+    tt.record_lap_at(&lap(100_000, true), at).unwrap().awards
+}
+
+#[test]
+fn time_of_day_stickers_follow_the_rigs_local_clock_and_the_json_windows() {
+    // 2026-10-30 is a Friday and 2026-10-31 a Saturday.
+    for (name, (y, mo, d, h, mi), expected) in [
+        ("lunch-break", (2026, 10, 31, 12, 30), true),
+        ("lunch-break", (2026, 10, 31, 14, 0), false),
+        ("early-bird", (2026, 10, 31, 7, 59), true),
+        ("early-bird", (2026, 10, 31, 8, 0), false),
+        ("night-owl", (2026, 10, 31, 23, 59), true),
+        ("night-owl", (2026, 10, 31, 18, 59), false),
+        ("friday-feeling", (2026, 10, 30, 16, 0), true),
+        ("friday-feeling", (2026, 10, 31, 17, 0), false),
+        ("friday-feeling", (2026, 10, 30, 15, 59), false),
+    ] {
+        let tt = BinIt::in_memory().unwrap();
+        tt.add_and_seat("Sam", None).unwrap();
+        let awards = local_lap_at(&tt, y, mo, d, h, mi);
+        assert_eq!(sticker_ids(&awards).contains(&name), expected, "{name} at {h}:{mi:02} on {y}-{mo}-{d}");
+    }
+}
+
+
+// ---- stickers that read slides and the lap trace ---------------------------------------------------
+
+fn sliding(drift_m: f32, handbrake_drifts: u32) -> LiveSlideStats {
+    LiveSlideStats { drifts: 1, spins: 0, drift_ms: 8_000, longest_ms: 8_000, peak_slip_deg: 30.0, drift_m, handbrake_drifts }
+}
+
+#[test]
+fn skid_marks_add_up_the_distance_drifted_across_laps_and_a_handbrake_drift_is_a_hero() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    let now = now_ms();
+    let first = tt.record_lap_for(&lap(100_000, true), now, None, Some(sliding(600.0, 0))).unwrap().awards;
+    assert!(!sticker_ids(&first).contains(&"skid-marks") && !sticker_ids(&first).contains(&"handbrake-hero"));
+    let skid = tt.sticker_book(sam.id).unwrap().stickers.into_iter().find(|s| s.id == "skid-marks").unwrap();
+    assert_eq!(skid.progress.map(|p| (p.cur, p.max)), Some((600, 1000)));
+    let second = tt.record_lap_for(&lap(100_100, true), now + 1, None, Some(sliding(450.0, 1))).unwrap().awards;
+    let ids = sticker_ids(&second);
+    assert!(ids.contains(&"skid-marks") && ids.contains(&"handbrake-hero"), "{ids:?}");
+}
+
+fn trace_point(i: u32, n: u32, speed: f32, heading: f32, slip: f32) -> tt_games::timing::TracePoint {
+    tt_games::timing::TracePoint {
+        progress: i as f32 / n as f32,
+        elapsed_ms: i * 1_000,
+        speed_kmh: speed,
+        throttle: 1.0,
+        brake: 0.0,
+        clutch: 0.0,
+        steering: 0.0,
+        gear: 3,
+        position: Some([i as f32, 0.0]),
+        heading_deg: Some(heading),
+        slip_deg: Some(slip),
+        aids: None,
+        boost: None,
+    }
+}
+
+#[test]
+fn crossing_the_line_facing_backwards_is_a_moonwalk() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    let with_end = |slip: f32, speed: f32| {
+        let n = 60;
+        let pts = (0..n).map(|i| if i == n - 1 { trace_point(i, n, speed, 0.0, slip) } else { trace_point(i, n, 90.0, 0.0, 1.0) }).collect();
+        CompletedLap { trace: Some(tt_games::timing::LapTrace(pts)), ..lap(100_000, true) }
+    };
+    assert!(!sticker_ids(&tt.record_lap(&with_end(5.0, 90.0)).unwrap().awards).contains(&"moonwalk"), "facing forward");
+    assert!(!sticker_ids(&tt.record_lap(&with_end(170.0, 3.0)).unwrap().awards).contains(&"moonwalk"), "stopped, not moving at the line");
+    assert!(sticker_ids(&tt.record_lap(&with_end(-170.0, 60.0)).unwrap().awards).contains(&"moonwalk"), "backwards and moving");
+}
+
+#[test]
+fn stopping_pointing_against_the_track_and_carrying_on_is_wrong_way_round() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    // A learned map: a circle, driven the way the points run.
+    let n = 400;
+    let map: Vec<[f32; 2]> = (0..n).map(|i| { let a = i as f32 / n as f32 * std::f32::consts::TAU; [a.cos() * 500.0, a.sin() * 500.0] }).collect();
+    tt.store().set_track_map("acevo", "Imola", "", &map, true, 1).unwrap();
+    // Which way the map runs at a point, as the game's heading would say it (heading = atan2(-vx, vz)).
+    let along = |progress: f32| {
+        let i = (progress * n as f32) as usize % n;
+        let (a, b) = (map[i], map[(i + 2) % n]);
+        (-(b[0] - a[0])).atan2(b[1] - a[1]).to_degrees()
+    };
+    let lap_with_stop = |facing_offset: f32| {
+        let pts = (0..100u32)
+            .map(|i| {
+                let p = i as f32 / 100.0;
+                // Stopped for a few samples at 30% of the lap, pointing `facing_offset` degrees off the track's direction.
+                if (30..34).contains(&i) { trace_point(i, 100, 1.0, along(p) + facing_offset, 0.0) } else { trace_point(i, 100, 120.0, along(p), 0.0) }
+            })
+            .collect();
+        CompletedLap { trace: Some(tt_games::timing::LapTrace(pts)), ..lap(100_000, true) }
+    };
+    assert!(!sticker_ids(&tt.record_lap(&lap_with_stop(0.0)).unwrap().awards).contains(&"wrong-way-round"), "stopped but pointing the right way");
+    assert!(!sticker_ids(&tt.record_lap(&lap_with_stop(90.0)).unwrap().awards).contains(&"wrong-way-round"), "sideways is not backwards");
+    assert!(sticker_ids(&tt.record_lap(&lap_with_stop(180.0)).unwrap().awards).contains(&"wrong-way-round"));
+}
+
+
+// ---- challenge stickers ----------------------------------------------------------------------------
+
+fn finished_challenge(tt: &BinIt, names: &[&str], laps_each: u32, cut_by: Option<usize>) -> Vec<DriverId> {
+    let ids: Vec<DriverId> = names
+        .iter()
+        .map(|n| tt.drivers().unwrap().into_iter().find(|d| d.name == *n).map_or_else(|| tt.add_driver(n, None).unwrap().id, |d| d.id))
+        .collect();
+    let now = now_ms();
+    let combo = combo_of(&session("Porsche 992 GT3 R"));
+    let n = tt.challenges().unwrap().len() as i64;
+    let start = now - 100_000 + n * 10;
+    tt.create_challenge(&NewChallenge {
+        reward_size: None, name: format!("Cup {n}"), game: combo.game.clone(), track: combo.track.clone(), layout: combo.layout.clone(), car: None,
+        starts_at: Some(start), ends_at: Some(start + 5_000), valid_only: true, max_laps: None, prizes: vec![],
+    })
+    .unwrap();
+    for (i, id) in ids.iter().enumerate() {
+        for k in 0..laps_each {
+            tt.record_lap_for(&lap(100_000 + i as u32 * 1000 + k, true), start + 1_000 + k as i64, Some(Some(*id)), None).unwrap();
+        }
+        if cut_by == Some(i) {
+            tt.record_lap_for(&untimed_lap(99_000, UntimedReason::Cut), start + 2_000, Some(Some(*id)), None).unwrap();
+        }
+    }
+    ids
+}
+
+fn earned(tt: &BinIt, driver: DriverId, id: &str) -> bool {
+    tt.sticker_book(driver).unwrap().stickers.iter().find(|s| s.id == id).unwrap().earned
+}
+
+#[test]
+fn finishing_a_challenge_gives_the_podium_or_the_participation_trophy_and_a_clean_run_is_spotless() {
+    let tt = BinIt::in_memory().unwrap();
+    // First run only marks what had already ended.
+    tt.settle_challenges().unwrap();
+    let ids = finished_challenge(&tt, &["Sam", "Jess", "Kim", "Priya"], 5, Some(1));
+    tt.settle_challenges().unwrap();
+    // Sam, Jess and Kim are the top three, Priya is fourth.
+    assert!(earned(&tt, ids[0], "on-the-podium") && earned(&tt, ids[1], "on-the-podium") && earned(&tt, ids[2], "on-the-podium"));
+    assert!(!earned(&tt, ids[3], "on-the-podium") && earned(&tt, ids[3], "participation-trophy"));
+    assert!(!earned(&tt, ids[0], "participation-trophy"));
+    // Jess cut a lap, so she is not spotless; Sam had five timed laps and no cut.
+    assert!(earned(&tt, ids[0], "spotless") && !earned(&tt, ids[1], "spotless"));
+    // The ledger shows each sticker once.
+    let sam = tt.profile(ids[0]).unwrap();
+    assert_eq!(sam.recent.iter().filter(|e| e.kind == "sticker:on-the-podium").count(), 1);
+    // Settling again changes nothing.
+    tt.settle_challenges().unwrap();
+    assert_eq!(tt.profile(ids[0]).unwrap().recent.iter().filter(|e| e.kind == "sticker:on-the-podium").count(), 1);
+}
+
+#[test]
+fn a_small_challenge_gives_no_podium_and_three_wins_in_a_row_is_a_hat_trick() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.settle_challenges().unwrap();
+    // Two drivers: below the three-driver minimum, so no podium for anyone.
+    let pair = finished_challenge(&tt, &["Sam", "Jess"], 3, None);
+    tt.settle_challenges().unwrap();
+    assert!(!earned(&tt, pair[0], "on-the-podium"));
+
+    // Sam wins three three-driver challenges in a row (the lowest lap time wins: the first name leads).
+    for round in 0..3 {
+        finished_challenge(&tt, &["Sam", "Jess", "Kim"], 2, None);
+        tt.settle_challenges().unwrap();
+        let sam = tt.drivers().unwrap().into_iter().find(|d| d.name == "Sam").unwrap().id;
+        assert_eq!(earned(&tt, sam, "hat-trick"), round == 2, "after win {}", round + 1);
+    }
+}
+
+
+// ---- the parcel --------------------------------------------------------------------------------------
+
+#[test]
+fn new_unlocks_wait_in_a_parcel_until_collected_and_the_parcel_lists_the_rarest_first() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    assert!(tt.parcel(sam.id).unwrap().is_none(), "nothing earned yet");
+
+    tt.add_and_seat("Jess", None).unwrap();
+    tt.record_lap(&lap(101_000, true)).unwrap();
+    tt.set_seat(Some(sam.id)).unwrap();
+    // First lap (common), then beating Jess: the Crown (epic, with a free decal).
+    tt.record_lap(&lap(102_000, true)).unwrap();
+    let paid_before = tt.profile(sam.id).unwrap().coins;
+    tt.record_lap(&lap(100_000, true)).unwrap();
+    let parcel = tt.parcel(sam.id).unwrap().expect("a parcel is waiting");
+    let ids: Vec<&str> = parcel.stickers.iter().map(|s| s.id.as_str()).collect();
+    assert!(ids.contains(&"first-lap") && ids.contains(&"crown"), "{ids:?}");
+    assert_eq!(parcel.stickers[0].rarity, "epic", "rarest first: {ids:?}");
+    assert_eq!(parcel.items, vec!["decal:crown".to_string()]);
+    assert_eq!(parcel.coins, parcel.stickers.iter().map(|s| s.coins).sum::<i64>());
+    assert!(tt.profile(sam.id).unwrap().coins > paid_before, "the rewards were paid when the stickers unlocked");
+
+    // Jess has her own, separate parcel.
+    let jess = tt.drivers().unwrap().into_iter().find(|d| d.name == "Jess").unwrap();
+    assert!(tt.parcel(jess.id).unwrap().is_some_and(|p| p.stickers.iter().all(|s| s.id != "crown")));
+
+    // Collecting empties Sam's, twice is fine, and the next unlock makes a new one.
+    tt.collect_parcel(sam.id).unwrap();
+    tt.collect_parcel(sam.id).unwrap();
+    assert!(tt.parcel(sam.id).unwrap().is_none());
+    assert!(tt.parcel(jess.id).unwrap().is_some(), "Sam's collecting does not touch Jess's");
+    assert!(tt.collect_parcel(9_999).is_err());
+}
+
+#[test]
+fn stickers_from_before_parcels_are_already_seen_but_caught_up_ones_arrive_in_a_parcel() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("binit.db");
+    let sam = {
+        let tt = BinIt::open(&path).unwrap();
+        let sam = tt.add_and_seat("Sam", None).unwrap();
+        tt.record_lap(&lap(100_000, true)).unwrap();
+        assert!(tt.parcel(sam.id).unwrap().is_some());
+        sam.id
+    };
+    // A database from before parcels: the stickers it already had are not news.
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("UPDATE driver_stickers SET seen_at = NULL; PRAGMA user_version = 15;").unwrap();
+    }
+    let tt = BinIt::open(&path).unwrap();
+    assert!(tt.parcel(sam).unwrap().is_none(), "the migration marks old unlocks as seen");
+    // The one-off catch-up (for a database that never ran it) does put what it finds in a parcel.
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("DELETE FROM driver_stickers; DELETE FROM settings WHERE key = 'stickers_backfilled_v1';").unwrap();
+    }
+    let tt = BinIt::open(&path).unwrap();
+    let parcel = tt.parcel(sam).unwrap().expect("caught-up stickers wait in a parcel");
+    assert!(parcel.stickers.iter().any(|s| s.id == "first-lap"));
+}
+
+
+// ---- driving stats -----------------------------------------------------------------------------------
+
+#[test]
+fn stats_add_up_distance_time_sliding_and_where_a_driver_stands() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    let now = now_ms();
+    // Two timed laps of a 4,909 m track (the test session's length), one cut lap, and an out lap that is not a lap.
+    tt.record_lap_for(&lap(100_000, true), now - 2 * progress::DAY_MS, None, Some(sliding(300.0, 1))).unwrap();
+    tt.record_lap_for(&lap(99_000, true), now - progress::DAY_MS, None, Some(LiveSlideStats { spins: 2, longest_ms: 12_000, peak_slip_deg: 70.0, ..sliding(200.0, 0) })).unwrap();
+    tt.record_lap_for(&untimed_lap(98_000, UntimedReason::Cut), now, None, None).unwrap();
+    tt.record_lap_for(&untimed_lap(90_000, UntimedReason::OutLap), now, None, None).unwrap();
+
+    let st = tt.driver_stats(sam.id).unwrap();
+    assert_eq!((st.timed_laps, st.laps_counted, st.laps_with_distance), (2, 3, 3), "the out lap is not counted");
+    assert_eq!(st.distance_m, 3 * 4_909);
+    assert_eq!(st.time_on_track_ms, 100_000 + 99_000 + 98_000);
+    assert_eq!(st.clean_percent, 67);
+    assert_eq!((st.tracks, st.cars, st.longest_streak_days), (1, 1, 2));
+    assert!((st.drift_m - 500.0).abs() < 0.1 && st.drift_since.is_some());
+    assert_eq!((st.drifts, st.spins, st.handbrake_drifts, st.longest_drift_ms), (2, 2, 1, 12_000));
+    assert_eq!(st.peak_slip_deg, 70.0);
+    assert_eq!((st.records_held, st.challenges_entered, st.podiums, st.wins), (0, 0, 0, 0));
+    assert!(tt.driver_stats(9_999).is_err());
+}
+
+#[test]
+fn a_lap_with_no_track_length_is_measured_from_its_trace_and_old_laps_are_filled_in_by_the_migration() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("binit.db");
+    let sam = {
+        let tt = BinIt::open(&path).unwrap();
+        let sam = tt.add_and_seat("Sam", None).unwrap();
+        let mut completed = lap(100_000, true);
+        completed.session.length_m = None;
+        let pts = (0..100u32).map(|i| trace_point(i, 100, 100.0, 0.0, 0.0)).collect();
+        completed.trace = Some(tt_games::timing::LapTrace(pts));
+        tt.record_lap(&completed).unwrap();
+        // A lap that has neither a length nor a trace has no distance, and is said to be short.
+        let mut bare = lap(101_000, true);
+        bare.session.length_m = None;
+        tt.record_lap(&bare).unwrap();
+        let st = tt.driver_stats(sam.id).unwrap();
+        assert_eq!((st.distance_m, st.laps_with_distance, st.laps_counted), (99, 1, 2));
+        sam.id
+    };
+    // A database from before distances: the laps that have a trace get one back, the rest stay empty.
+    {
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        conn.execute_batch("UPDATE laps SET distance_m = NULL; PRAGMA user_version = 16;").unwrap();
+    }
+    let tt = BinIt::open(&path).unwrap();
+    let st = tt.driver_stats(sam).unwrap();
+    assert_eq!((st.distance_m, st.laps_with_distance, st.laps_counted), (99, 1, 2));
 }

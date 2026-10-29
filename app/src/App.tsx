@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { api, isTauri, useAppState, useFetch } from "./api";
 import { GameIcon } from "./components/GameIcon";
 import { readStored, usePersistedState, writeStored } from "./persist";
@@ -17,8 +18,10 @@ import { AdvancedPage } from "./pages/Advanced";
 import { DevMemoryPage } from "./pages/DevMemory";
 import { TelemetryPage } from "./pages/Telemetry";
 import { Overlay } from "./pages/Overlay";
-import { DriverProgress } from "./pages/DriverProgress";
 import { YouPage } from "./pages/You";
+import { StickerBookPage } from "./pages/Stickers";
+import { StatsPage } from "./pages/Stats";
+import { ParcelGate } from "./components/Parcel";
 import { CustomizePage } from "./pages/Customize";
 import { ShopPage } from "./pages/Shop";
 import { Updater } from "./pages/Updater";
@@ -70,11 +73,39 @@ function PhoneSwitch({ path }: { path: string }) {
   );
 }
 
+/** How deep a page sits: the Shop and Customize open from the profile, so they are one step further in than it. */
+function pageDepth(path: string): number {
+  const base = path.split("/").filter(Boolean).length;
+  return base + (path.startsWith("/shop") || path.startsWith("/customize") ? 1 : 0);
+}
+
+type ViewTransitionDocument = Document & { startViewTransition?: (update: () => void) => { ready: Promise<unknown>; finished: Promise<unknown> } };
+
 function useHashPath() {
   const read = () => location.hash.replace(/^#/, "") || "/";
   const [path, setPath] = useState(read);
+  const current = useRef(path);
   useEffect(() => {
-    const onChange = () => setPath(read());
+    const onChange = () => {
+      const next = read();
+      const from = current.current;
+      current.current = next;
+      const doc = document as ViewTransitionDocument;
+      const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!doc.startViewTransition || calm || next === from) {
+        setPath(next);
+        return;
+      }
+      // The page area slides in from the right going deeper, from the left coming back, and rises in between sections
+      // (see `::view-transition-*(page)` in styles.css). Browsers without view transitions just change page.
+      const [a, b] = [pageDepth(from), pageDepth(next)];
+      const root = document.documentElement;
+      root.dataset.nav = b > a ? "forward" : b < a ? "back" : "across";
+      const t = doc.startViewTransition(() => flushSync(() => setPath(next)));
+      // A newer navigation skips this one mid-flight; that rejection is expected.
+      t.ready.catch(() => {});
+      t.finished.catch(() => {}).finally(() => delete root.dataset.nav);
+    };
     window.addEventListener("hashchange", onChange);
     return () => window.removeEventListener("hashchange", onChange);
   }, []);
@@ -144,13 +175,15 @@ export function App() {
   else if (path.startsWith("/telemetry")) page = <TelemetryPage path={path} />;
   else if (import.meta.env.DEV && path.startsWith("/dev/memory")) page = <DevMemoryPage />;
   else if (path.startsWith("/advanced")) page = <AdvancedPage />;
-  else if (/^\/you\/\d+\/progress/.test(path)) page = <DriverProgress id={Number(path.split("/")[2])} />;
+  else if (/^\/you\/\d+\/stickers/.test(path)) page = <StickerBookPage id={Number(path.split("/")[2])} />;
+  else if (/^\/you\/\d+\/(stats|progress)/.test(path)) page = <StatsPage id={Number(path.split("/")[2])} />;
   else if (path.startsWith("/you")) page = <YouPage path={path} />;
   else if (path.startsWith("/customize")) page = <CustomizePage />;
   else if (path.startsWith("/shop")) page = <ShopPage />;
   else page = <Home />;
 
   return (
+    <>
     <div className={`shell${collapsed ? " collapsed" : ""}`}>
       <Sidebar path={path} collapsed={collapsed} onToggle={() => setUserCollapsed(!userCollapsed)} />
       <div className="main-col">
@@ -164,6 +197,9 @@ export function App() {
       <ConnectionGate />
       <PickDriverHost />
     </div>
+    {/* Outside the shell: while a parcel is up the shell is inert, and the parcel must still work. */}
+    <ParcelGate />
+    </>
   );
 }
 

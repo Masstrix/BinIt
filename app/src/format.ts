@@ -138,3 +138,18 @@ export function gridMinWidth(cols: string, gap = 8, padding = 26): number {
   const sum = tracks.reduce((total, t) => total + Number(/(\d+(?:\.\d+)?)px/.exec(t)?.[1] ?? 0), 0);
   return Math.ceil(sum + gap * Math.max(0, tracks.length - 1) + padding);
 }
+
+/** Metres as kilometres: one decimal under 100 km, whole above ("3.4", "412"). */
+export function km(metres: number): string {
+  const k = metres / 1000;
+  return k >= 100 ? Math.round(k).toLocaleString() : k.toFixed(1);
+}
+
+/** A span of milliseconds as hours and minutes ("9:20"), or minutes and seconds under an hour ("6:12"). */
+export function spanText(ms: number): { value: string; unit: string } {
+  const total = Math.round(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  if (h > 0) return { value: `${h}:${String(m).padStart(2, "0")}`, unit: "h" };
+  return { value: `${m}:${String(total % 60).padStart(2, "0")}`, unit: "min" };
+}

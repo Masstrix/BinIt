@@ -1,19 +1,21 @@
 import { useState } from "react";
-import { api, isTauri, useAppState, useFetch, type Driver, type Profile } from "../api";
+import { api, isTauri, useAppState, useFetch, type DriverStats, type Driver, type Profile } from "../api";
 import { WhoAreYou } from "../components/MeBar";
 import { Coin } from "../components/Coin";
 import { Helmet } from "../components/Helmet";
-import { carName, lapTime, trackName, ago } from "../format";
+import { carName, lapTime, trackName, ago, km } from "../format";
 import { GameIcon } from "../components/GameIcon";
 import { Modal } from "../components/Modal";
 import { useSeatSwitcher } from "../components/SeatSwitcher";
 import { PhonesDialog } from "./Drivers";
+import { StickerHighlights } from "./Stickers";
 
 /** Why a ledger row paid out, in words. */
 const KIND: Record<string, string> = { lap: "Clean lap", first: "First lap here", pb: "Personal best", record: "Track record" };
 
 /** Ledger rows for a purchase carry the item: `buy:shell:aurora`. */
 function kindLabel(kind: string) {
+  if (kind.startsWith("sticker:")) return "Sticker unlocked";
   if (kind.startsWith("buy:")) return `Bought ${kind.split(":")[2] ?? "an item"}`;
   if (kind.startsWith("challenge:")) {
     // challenge:<place>:<name> or challenge:entry:<name>
@@ -23,17 +25,6 @@ function kindLabel(kind: string) {
   }
   return KIND[kind] ?? kind;
 }
-
-const STICKER_ICON: Record<string, string> = {
-  "first-lap": "M5 21V4M5 4h11l-2 4 2 4H5",
-  "ten-clean": "M5 12l5 5L20 7",
-  "fifty-clean": "M4 12l4 4 6-8M12 16l4 4 6-10",
-  explorer: "M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11zM12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
-  record: "M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3a3 3 0 0 1-3 4M7 5H4a3 3 0 0 0 3 4",
-  streak: "M13 2L5 14h6l-1 8 8-12h-6z",
-  "clean-sweep": "M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6L12 16.7 6.7 19.6l1.1-6L3.4 9.4l6-.8z",
-  regular: "M12 3l9 5v8l-9 5-9-5V8z",
-};
 
 /**
  * The page behind the phone banner: who you are, how far you have got and what you have done. It follows the
@@ -152,9 +143,9 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
   const { status } = useAppState();
   // Customize and the Shop belong to the driver signed in on this device (or, on the PC, the one in the seat).
   const canDress = mine || (manage && status?.seat === p.driver.id);
+  const stats = useFetch<DriverStats>(() => api.driverStats(p.driver.id), [p.driver.id, p.cleanLaps]);
   const into = p.xp - p.levelStartXp;
   const span = Math.max(1, p.nextLevelXp - p.levelStartXp);
-  const earned = p.stickers.filter((s) => s.earned).length;
   return (
     <div className="you-layout">
       <div className="you-main">
@@ -195,13 +186,12 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
       </section>
 
       <div className="you-stats">
+        <div className="stat-tile"><span className="mono">{stats ? km(stats.distanceM) : "–"}<small> km</small></span><span className="label">Driven</span></div>
         <div className="stat-tile"><span className="mono">{p.cleanLaps}</span><span className="label">Clean laps</span></div>
-        <div className="stat-tile"><span className="mono">{p.cleanPercent}%</span><span className="label">Clean</span></div>
-        <div className="stat-tile"><span className="mono">{p.tracks}</span><span className="label">Tracks</span></div>
+        <div className="stat-tile"><span className="mono">{stats && stats.driftM > 0 ? km(stats.driftM) : "–"}<small> km</small></span><span className="label">Drifted</span></div>
       </div>
-
       <div className="manage-list">
-        <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Progress over time" sub="Bests and speed score on every track" href={`#/you/${p.driver.id}/progress`} />
+        <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Driver stats" sub="Most driven, distance, drifting and progress over time" href={`#/you/${p.driver.id}/stats`} />
       </div>
 
       {manage && <ManageDriver driver={p.driver} />}
@@ -215,6 +205,8 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
       </div>
 
       <div className="you-side">
+      <StickerHighlights driverId={p.driver.id} color={p.driver.color} />
+
       <section className="you-section" aria-label="Bests">
         <div className="head"><h2>Bests</h2><span className="muted" style={{ fontSize: 13 }}>All games</span></div>
         {p.bests.length === 0 && <div className="empty">No times yet. Get out there!</div>}
@@ -227,22 +219,6 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
                 <span className="muted" style={{ fontSize: 13 }}>{carName(b.car)}{b.of > 1 ? ` · P${b.position} of ${b.of}` : ""}</span>
               </span>
               <span className="mono" style={{ color: "var(--mint)" }}>{lapTime(b.timeMs)}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="you-section" aria-label="Stickers">
-        <div className="head"><h2>Stickers</h2><span className="muted" style={{ fontSize: 13 }}>{earned} of {p.stickers.length}</span></div>
-        <div className="sticker-grid">
-          {p.stickers.map((s) => (
-            <div className="sticker" data-earned={s.earned || undefined} key={s.id} title={s.hint}>
-              <span className="sticker-icon">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d={STICKER_ICON[s.id] ?? STICKER_ICON.regular} />
-                </svg>
-              </span>
-              <span className="sticker-name">{s.name}</span>
             </div>
           ))}
         </div>

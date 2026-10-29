@@ -32,6 +32,8 @@ const devices: MockDevice[] = [{ id: 1, driverId: 2, token: "mock-jess-phone", l
 let nextDevice = 2;
 
 /** In the mock, a wide window is "the PC" (can manage everyone) and a phone-sized one is a phone. */
+/** `?mock&idle`: nobody is driving, so things that wait for the driver to stop (the parcel) show. */
+const idleMock = new URLSearchParams(location.search).has("idle");
 const isLocal = () => !window.matchMedia("(max-width: 640px)").matches;
 const callerDriver = (token?: string | null) => devices.find((d) => d.token === token)?.driverId ?? null;
 const claimed = (id: number) => devices.some((d) => d.driverId === id);
@@ -70,7 +72,7 @@ function liveView(): LiveView {
   const wrap = (d: number) => ((((d + 180) % 360) + 360) % 360) - 180;
   const sector = p < 0.31 ? 0 : p < 0.7 ? 1 : 2;
   return {
-    driving: true, phase: "driving", onTrack: true, resets: 0, slide: Math.abs(slipDeg) >= 12 ? "drift" : Math.abs(slipDeg) >= 4 ? "slide" : "none", slideStats: { drifts: 0, spins: 0, driftMs: 0, longestMs: 0, peakSlipDeg: 0 }, currentLapMs: ms, lapValid: true, outLap: false, voidReason: null, lapProgress: p,
+    driving: !idleMock, phase: idleMock ? "menu" : "driving", onTrack: !idleMock, resets: 0, slide: Math.abs(slipDeg) >= 12 ? "drift" : Math.abs(slipDeg) >= 4 ? "slide" : "none", slideStats: { drifts: 0, spins: 0, driftMs: 0, longestMs: 0, peakSlipDeg: 0 }, currentLapMs: ms, lapValid: true, outLap: false, voidReason: null, lapProgress: p,
     position: [pt[0], pt[1]],
     inputs: {
       throttle: corner > -0.4 ? 1 : 0.2, brake: corner < -0.6 ? 0.8 : 0, clutch: 0, handbrake: 0, steering: Math.sin(p * Math.PI * 2 * 9 + 1) * 0.5,
@@ -238,6 +240,31 @@ function ratings() {
   });
 }
 
+// ---- the parcel: twelve stickers, so the takeover can be tried (collect it and it is gone until the page reloads) ----
+const collectedParcels = new Set<number>();
+const MOCK_PARCEL = {
+  stickers: [
+    { id: "ring-sub-eight", name: "Sub eight", rarity: "epic", how: "Lap the Nordschleife in under 8:00.", xp: 120, coins: 150, item: null },
+    { id: "perfectionist", name: "Perfectionist", rarity: "epic", how: "Three laps within 0.1% of your best.", xp: 120, coins: 150, item: null },
+    { id: "crown", name: "Crown", rarity: "epic", how: "Take the crown on any board.", xp: 120, coins: 150, item: "decal:crown" },
+    { id: "ring-green-hell", name: "Green Hell", rarity: "rare", how: "Finish a timed lap of the Nordschleife.", xp: 50, coins: 60, item: null },
+    { id: "ring-regular", name: "Ring regular", rarity: "rare", how: "Ten timed laps of the Nordschleife.", xp: 50, coins: 60, item: null },
+    { id: "garage-queen", name: "Garage queen", rarity: "rare", how: "Drive 5 different cars.", xp: 50, coins: 60, item: null },
+    { id: "night-owl", name: "Night owl", rarity: "rare", how: "Set a lap after 7 pm.", xp: 50, coins: 60, item: null },
+    { id: "streak", name: "Streak", rarity: "rare", how: "Drive on 5 days in a row.", xp: 50, coins: 60, item: null },
+    { id: "purple-sector", name: "Purple sector", rarity: "rare", how: "Set the fastest sector on a board.", xp: 50, coins: 60, item: null },
+    { id: "tourist", name: "Tourist", rarity: "common", how: "Drive 3 different tracks.", xp: 20, coins: 20, item: null },
+    { id: "friday-feeling", name: "Friday feeling", rarity: "common", how: "Set a lap after 4 pm on a Friday.", xp: 20, coins: 20, item: null },
+    { id: "spinning-top", name: "Spinning top", rarity: "common", how: "Spin the car all the way round and finish the lap.", xp: 20, coins: 20, item: null },
+  ],
+  coins: 870,
+  xp: 720,
+  items: ["decal:crown"],
+  levelBefore: 5,
+  levelAfter: 6,
+  titleAfter: "Veteran",
+};
+
 // ---- XP and the profile (the same rules as tt-core/src/progress.rs, worked out from the laps) ----
 
 const xpForLevel = (l: number) => (100 * (l - 1) * l) / 2;
@@ -372,6 +399,19 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
     if (i >= 0) devices.splice(i, 1);
     emit({ type: "driversChanged" });
     return ok(i >= 0);
+  }
+  if ((r = m(/^\/drivers\/(\d+)\/stats$/))) {
+    const mine = laps.filter((l) => l.driverId === +r![1] && l.valid);
+    return ok({
+      distanceM: mine.length * 4909, lapsWithDistance: mine.length, lapsCounted: mine.length, timedLaps: mine.length, cleanPercent: 91, timeOnTrackMs: mine.reduce((a, l) => a + l.timeMs, 0),
+      tracks: 1, cars: 1, longestStreakDays: 3, driftM: 3400, driftSince: Date.now() - 5 * 86_400_000, longestDriftMs: 14_200, drifts: 38, spins: 9, handbrakeDrifts: 4, peakSlipDeg: 62,
+      recordsHeld: 1, challengesEntered: 5, podiums: 3, wins: 1,
+    });
+  }
+  if ((r = m(/^\/drivers\/(\d+)\/parcel$/))) return ok(collectedParcels.has(+r[1]) ? null : MOCK_PARCEL);
+  if ((r = m(/^\/drivers\/(\d+)\/parcel\/collect$/))) {
+    collectedParcels.add(+r[1]);
+    return ok(true);
   }
   if ((r = m(/^\/drivers\/(\d+)\/profile$/))) return ok(driverProfile(+r[1]));
   if ((r = m(/^\/drivers\/(\d+)\/devices$/))) {

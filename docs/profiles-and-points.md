@@ -208,3 +208,9 @@ The one-time pairing code is gone. A phone or browser signs in by picking a driv
 * This trades safety for ease: anyone on the network can sign in as anyone after one tap, and then spend that driver's coins
   or change their look. The desktop app's Connections list (on a driver's profile) shows every device and can sign one or
   all of them out (a lost phone, or someone who took the wrong name).
+
+## Status: achievement stickers (groundwork, 2026-10-29)
+
+Achievement stickers are data in `crates/tt-core/stickers.json`, unlocked and paid when a lap is recorded, stored in
+`driver_stickers` (schema 13) and served at `GET /api/drivers/{id}/stickers`. The old eight stickers on the You page
+are still computed as before. See [stickers.md](stickers.md).

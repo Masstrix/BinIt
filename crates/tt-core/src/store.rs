@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 12;
+const SCHEMA_VERSION: i32 = 17;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -245,9 +245,80 @@ impl Store {
             // What a lap's driver drifted and spun (JSON, see `LiveSlideStats`). NULL = nothing, or not known.
             conn.execute_batch("ALTER TABLE laps ADD COLUMN slides TEXT;")?;
         }
+        if version < 13 {
+            // Achievement stickers a driver has earned (see stickers.rs). Each is earned once and kept.
+            conn.execute_batch(
+                "
+                CREATE TABLE IF NOT EXISTS driver_stickers (
+                    driver_id  INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+                    sticker    TEXT NOT NULL,
+                    lap_id     INTEGER,
+                    at         INTEGER NOT NULL,
+                    PRIMARY KEY (driver_id, sticker)
+                );
+                ",
+            )?;
+        }
+        if version < 14 {
+            // The stickers a driver shows on their profile (up to three), in order.
+            conn.execute_batch(
+                "
+                CREATE TABLE IF NOT EXISTS driver_pins (
+                    driver_id  INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+                    sticker    TEXT NOT NULL,
+                    slot       INTEGER NOT NULL,
+                    PRIMARY KEY (driver_id, sticker)
+                );
+                ",
+            )?;
+        }
+        if version < 15 {
+            // Where each driver finished in each challenge that has ended (see stickers.rs: Hat trick and friends).
+            conn.execute_batch(
+                "
+                CREATE TABLE IF NOT EXISTS challenge_results (
+                    challenge_id  INTEGER NOT NULL,
+                    driver_id     INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+                    position      INTEGER NOT NULL,
+                    entrants      INTEGER NOT NULL,
+                    ended_at      INTEGER NOT NULL,
+                    PRIMARY KEY (challenge_id, driver_id)
+                );
+                ",
+            )?;
+        }
+        if version < 16 {
+            // Stickers a driver has not been shown yet wait in their parcel (see stickers::parcel). Ones earned before
+            // parcels existed count as already shown, so nobody is greeted by a parcel of old news.
+            let has_column = conn.query_row("SELECT COUNT(*) FROM pragma_table_info('driver_stickers') WHERE name = 'seen_at'", [], |r| r.get::<_, i64>(0))? > 0;
+            if !has_column {
+                conn.execute_batch("ALTER TABLE driver_stickers ADD COLUMN seen_at INTEGER;")?;
+            }
+            conn.execute_batch("UPDATE driver_stickers SET seen_at = at WHERE seen_at IS NULL;")?;
+        }
+        if version < 17 {
+            // How far each lap was driven, in metres (see stats.rs). Laps recorded before this get it from their trace
+            // when they have one; the rest stay empty rather than guessed.
+            let has_column = conn.query_row("SELECT COUNT(*) FROM pragma_table_info('laps') WHERE name = 'distance_m'", [], |r| r.get::<_, i64>(0))? > 0;
+            if !has_column {
+                conn.execute_batch("ALTER TABLE laps ADD COLUMN distance_m INTEGER;")?;
+            }
+            let rows: Vec<(i64, Vec<u8>)> = {
+                let mut stmt = conn.prepare(
+                    "SELECT id, trace FROM laps WHERE distance_m IS NULL AND trace IS NOT NULL AND (valid = 1 OR untimed_reason = 'cut' OR untimed_reason IS NULL)",
+                )?;
+                stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?
+            };
+            for (id, bytes) in rows {
+                if let Some(m) = LapTrace::from_bytes(&bytes).and_then(|t| crate::stats::trace_distance_m(&t)) {
+                    conn.execute("UPDATE laps SET distance_m = ?2 WHERE id = ?1", params![id, m])?;
+                }
+            }
+        }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         let store = Self { conn };
         store.backfill_points()?;
+        crate::stickers::backfill(&store)?;
         Ok(store)
     }
 
@@ -355,6 +426,83 @@ impl Store {
                 Err(e)
             }
         }
+    }
+
+    /// Gives a driver a shop item for free (a sticker's reward). Owning it already is fine.
+    pub fn grant_item(&self, driver_id: DriverId, item: &str, at: Timestamp) -> Result<()> {
+        self.conn.execute("INSERT OR IGNORE INTO driver_items (driver_id, item, price, at) VALUES (?1, ?2, 0, ?3)", params![driver_id, item, at])?;
+        Ok(())
+    }
+
+    // ---- challenge results -----------------------------------------------------
+
+    /// Records where a driver finished in a challenge that has ended.
+    pub fn insert_challenge_result(&self, challenge_id: ChallengeId, driver_id: DriverId, position: u32, entrants: u32, ended_at: Timestamp) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO challenge_results (challenge_id, driver_id, position, entrants, ended_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![challenge_id, driver_id, position, entrants, ended_at],
+        )?;
+        Ok(())
+    }
+
+    /// `(position, entrants)` of every challenge a driver finished, the most recent first.
+    pub fn driver_challenge_results(&self, driver_id: DriverId) -> Result<Vec<(u32, u32)>> {
+        let mut stmt = self.conn.prepare("SELECT position, entrants FROM challenge_results WHERE driver_id = ?1 ORDER BY ended_at DESC, challenge_id DESC")?;
+        let rows = stmt.query_map([driver_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    // ---- stickers --------------------------------------------------------------
+
+    /// The stickers a driver has earned and when.
+    pub fn driver_stickers(&self, driver_id: DriverId) -> Result<Vec<(String, Timestamp)>> {
+        let mut stmt = self.conn.prepare("SELECT sticker, at FROM driver_stickers WHERE driver_id = ?1 ORDER BY at, sticker")?;
+        let rows = stmt.query_map([driver_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// The stickers a driver shows on their profile, in order.
+    pub fn pinned_stickers(&self, driver_id: DriverId) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT sticker FROM driver_pins WHERE driver_id = ?1 ORDER BY slot")?;
+        let rows = stmt.query_map([driver_id], |r| r.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Replaces the stickers a driver shows on their profile.
+    pub fn set_pinned_stickers(&self, driver_id: DriverId, ids: &[String]) -> Result<()> {
+        self.conn.execute_batch("BEGIN")?;
+        let done = (|| -> Result<()> {
+            self.conn.execute("DELETE FROM driver_pins WHERE driver_id = ?1", [driver_id])?;
+            for (slot, id) in ids.iter().enumerate() {
+                self.conn.execute("INSERT INTO driver_pins (driver_id, sticker, slot) VALUES (?1, ?2, ?3)", params![driver_id, id, slot as i64])?;
+            }
+            Ok(())
+        })();
+        match done {
+            Ok(()) => Ok(self.conn.execute_batch("COMMIT")?),
+            Err(e) => {
+                let _ = self.conn.execute_batch("ROLLBACK");
+                Err(e)
+            }
+        }
+    }
+
+    /// Stickers a driver has earned but not been shown yet, oldest first.
+    pub fn unseen_stickers(&self, driver_id: DriverId) -> Result<Vec<(String, Timestamp)>> {
+        let mut stmt = self.conn.prepare("SELECT sticker, at FROM driver_stickers WHERE driver_id = ?1 AND seen_at IS NULL ORDER BY at, sticker")?;
+        let rows = stmt.query_map([driver_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Marks everything a driver has earned as shown.
+    pub fn mark_stickers_seen(&self, driver_id: DriverId, at: Timestamp) -> Result<usize> {
+        Ok(self.conn.execute("UPDATE driver_stickers SET seen_at = ?2 WHERE driver_id = ?1 AND seen_at IS NULL", params![driver_id, at])?)
+    }
+
+    /// Records an earned sticker. `false` when the driver already had it.
+    pub fn insert_sticker(&self, driver_id: DriverId, sticker: &str, lap_id: Option<LapId>, at: Timestamp) -> Result<bool> {
+        let n = self.conn.execute("INSERT OR IGNORE INTO driver_stickers (driver_id, sticker, lap_id, at) VALUES (?1, ?2, ?3, ?4)", params![driver_id, sticker, lap_id, at])?;
+        Ok(n > 0)
     }
 
     // ---- XP and coins ----------------------------------------------------------
@@ -530,6 +678,23 @@ impl Store {
         Ok(self.conn.last_insert_rowid())
     }
 
+    /// Records how far a lap was driven, in metres.
+    pub fn set_lap_distance(&self, id: LapId, metres: u32) -> Result<()> {
+        self.conn.execute("UPDATE laps SET distance_m = ?2 WHERE id = ?1", params![id, metres])?;
+        Ok(())
+    }
+
+    /// `(metres driven, laps that have a distance, laps that count)` and the time on track in ms, over a driver's
+    /// attempts: timed laps and cut laps (an out or in lap is not a lap).
+    pub fn driver_distance_totals(&self, driver_id: DriverId) -> Result<(u64, u32, u32, u64)> {
+        Ok(self.conn.query_row(
+            "SELECT COALESCE(SUM(distance_m), 0), COUNT(distance_m), COUNT(*), COALESCE(SUM(time_ms), 0) FROM laps
+             WHERE driver_id = ?1 AND (valid = 1 OR untimed_reason = 'cut' OR untimed_reason IS NULL)",
+            [driver_id],
+            |r| Ok((r.get::<_, i64>(0)? as u64, r.get(1)?, r.get(2)?, r.get::<_, i64>(3)? as u64)),
+        )?)
+    }
+
     /// A lap's timing profile (elapsed ms at each 0.5% of the lap), if it has one.
     pub fn lap_profile(&self, id: LapId) -> Result<Option<TimingProfile>> {
         let bytes: Option<Vec<u8>> = self
@@ -543,6 +708,13 @@ impl Store {
     pub fn set_lap_slides(&self, id: LapId, json: &str) -> Result<()> {
         self.conn.execute("UPDATE laps SET slides = ?1 WHERE id = ?2", params![json, id])?;
         Ok(())
+    }
+
+    /// The stored slide stats (JSON) of every lap a driver has that has any.
+    pub fn driver_slides(&self, driver_id: DriverId) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT slides FROM laps WHERE driver_id = ?1 AND slides IS NOT NULL")?;
+        let rows = stmt.query_map([driver_id], |r| r.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     pub fn lap_slides(&self, id: LapId) -> Result<Option<String>> {

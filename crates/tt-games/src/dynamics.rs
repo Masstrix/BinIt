@@ -123,7 +123,14 @@ pub struct SlideStats {
     pub longest_ms: u64,
     /// The biggest slip angle reached while drifting, degrees.
     pub peak_slip_deg: f32,
+    /// How far the car travelled while drifting, metres.
+    pub drift_m: f32,
+    /// Drifts that began with the handbrake pulled (within `HANDBRAKE_WINDOW_MS` before).
+    pub handbrake_drifts: u32,
 }
+
+/// A drift counts as a handbrake drift when the handbrake was pulled this recently before it began.
+pub const HANDBRAKE_WINDOW_MS: u64 = 1000;
 
 /// Turns the flicker of instant slip readings into steady drifts and spins, and totals them up. A drift starts at
 /// `DRIFT_SLIP_DEG`, and only ends once the slip has stayed under `DRIFT_EXIT_DEG` for `DRIFT_HOLD_MS`; a spin starts at
@@ -135,9 +142,19 @@ pub struct SlideTracker {
     below_since: Option<u64>,
     current_ms: u64,
     stats: SlideStats,
+    /// Metres drifted in the hold-off waiting to be sure a drift is over (taken back off when it ends).
+    hold_m: f32,
+    handbrake_at: Option<u64>,
 }
 
 impl SlideTracker {
+    /// Notes the handbrake as read now: pulled at all (half or more) is remembered for a drift that follows.
+    pub fn note_handbrake(&mut self, handbrake: f32, now_ms: u64) {
+        if handbrake >= 0.5 {
+            self.handbrake_at = Some(now_ms);
+        }
+    }
+
     pub fn state(&self) -> Slide {
         self.state
     }
@@ -161,7 +178,12 @@ impl SlideTracker {
         let dt = self.last_ms.map_or(0, |t| now_ms.saturating_sub(t)).min(MAX_GAP_MS);
         self.last_ms = Some(now_ms);
         if self.state == Slide::Drift {
+            let metres = speed_kmh.max(0.0) / 3.6 * (dt as f32 / 1000.0);
             self.stats.drift_ms += dt;
+            self.stats.drift_m += metres;
+            if self.below_since.is_some() {
+                self.hold_m += metres;
+            }
             self.current_ms += dt;
             // A reading at spin angle belongs to the spin, not to the drift that led into it.
             if slip < SPIN_SLIP_DEG {
@@ -221,6 +243,10 @@ impl SlideTracker {
     fn start_drift(&mut self, slip: f32) {
         self.state = Slide::Drift;
         self.stats.drifts += 1;
+        if self.handbrake_at.is_some_and(|at| self.last_ms.unwrap_or(0).saturating_sub(at) <= HANDBRAKE_WINDOW_MS) {
+            self.stats.handbrake_drifts += 1;
+        }
+        self.hold_m = 0.0;
         self.stats.peak_slip_deg = self.stats.peak_slip_deg.max(slip);
         self.current_ms = 0;
         self.below_since = None;
@@ -230,6 +256,8 @@ impl SlideTracker {
     fn end_drift(&mut self, trailing_ms: u64) {
         let length = self.current_ms.saturating_sub(trailing_ms);
         self.stats.drift_ms = self.stats.drift_ms.saturating_sub(trailing_ms);
+        self.stats.drift_m = (self.stats.drift_m - self.hold_m).max(0.0);
+        self.hold_m = 0.0;
         self.stats.longest_ms = self.stats.longest_ms.max(length);
         self.state = Slide::None;
         self.current_ms = 0;
@@ -407,4 +435,29 @@ mod tests {
         assert_eq!((at(3.0), at(4.0), at(11.9), at(12.0), at(89.9), at(90.0)), (Slide::None, Slide::Light, Slide::Light, Slide::Drift, Slide::Drift, Slide::Spin));
         assert_eq!(Slide::Light.key(), "slide");
     }
+
+    #[test]
+    fn the_distance_drifted_and_handbrake_drifts_are_counted() {
+        let dynamics = |slip: f32| Dynamics { slip_deg: slip, ..Dynamics::default() };
+        let mut t = SlideTracker::default();
+        t.update(Some(&dynamics(1.0)), 72.0, 0);
+        t.note_handbrake(1.0, 50);
+        // The drift starts at 100 ms (the handbrake was pulled 50 ms before), then ten more readings 100 ms apart at 20 m/s.
+        for i in 1..=11 {
+            t.update(Some(&dynamics(25.0)), 72.0, i * 100);
+        }
+        let s = t.stats();
+        assert_eq!((s.drifts, s.handbrake_drifts), (1, 1));
+        assert!((s.drift_m - 20.0).abs() < 0.01, "{}", s.drift_m);
+
+        // A drift long after the handbrake was pulled is not a handbrake drift; neither does the lap's total start again.
+        t.reset_stats();
+        let mut u = SlideTracker::default();
+        u.note_handbrake(1.0, 0);
+        u.update(Some(&dynamics(1.0)), 72.0, 5_000);
+        u.update(Some(&dynamics(25.0)), 72.0, 5_100);
+        assert_eq!(u.stats().handbrake_drifts, 0);
+        assert_eq!(t.stats(), SlideStats::default());
+    }
 }
+

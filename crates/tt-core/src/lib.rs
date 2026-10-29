@@ -7,6 +7,8 @@ pub mod model;
 pub mod pairing;
 pub mod progress;
 pub mod shop;
+pub mod stats;
+pub mod stickers;
 mod store;
 pub mod trackmap;
 
@@ -137,6 +139,12 @@ pub struct LiveSlideStats {
     pub drift_ms: u64,
     pub longest_ms: u64,
     pub peak_slip_deg: f32,
+    /// Metres drifted (laps recorded before this was measured have none).
+    #[serde(default)]
+    pub drift_m: f32,
+    /// Drifts that began with the handbrake pulled.
+    #[serde(default)]
+    pub handbrake_drifts: u32,
 }
 
 impl LiveSlideStats {
@@ -148,7 +156,7 @@ impl LiveSlideStats {
 
 impl From<tt_games::dynamics::SlideStats> for LiveSlideStats {
     fn from(s: tt_games::dynamics::SlideStats) -> Self {
-        Self { drifts: s.drifts, spins: s.spins, drift_ms: s.drift_ms, longest_ms: s.longest_ms, peak_slip_deg: s.peak_slip_deg }
+        Self { drifts: s.drifts, spins: s.spins, drift_ms: s.drift_ms, longest_ms: s.longest_ms, peak_slip_deg: s.peak_slip_deg, drift_m: s.drift_m, handbrake_drifts: s.handbrake_drifts }
     }
 }
 
@@ -648,6 +656,55 @@ impl BinIt {
         })
     }
 
+    /// Every achievement sticker with what this driver has earned and how far along the rest are.
+    pub fn sticker_book(&self, driver_id: DriverId) -> Result<stickers::StickerBook> {
+        let store = self.store();
+        if store.driver(driver_id)?.is_none() {
+            anyhow::bail!("no such driver");
+        }
+        stickers::book(&store, driver_id, now_ms())
+    }
+
+    /// How far, how long, how sideways and where they stand: the stats page.
+    pub fn driver_stats(&self, driver_id: DriverId) -> Result<stats::DriverStats> {
+        let store = self.store();
+        if store.driver(driver_id)?.is_none() {
+            anyhow::bail!("no such driver");
+        }
+        stats::driver_stats(&store, driver_id, now_ms())
+    }
+
+    /// What this driver has earned and not been shown yet (see `stickers::Parcel`), if anything.
+    pub fn parcel(&self, driver_id: DriverId) -> Result<Option<stickers::Parcel>> {
+        stickers::parcel(&self.store(), driver_id)
+    }
+
+    /// The driver has opened their parcel: nothing waits for them any more. Safe to call twice.
+    pub fn collect_parcel(&self, driver_id: DriverId) -> Result<()> {
+        {
+            let store = self.store();
+            if store.driver(driver_id)?.is_none() {
+                anyhow::bail!("no such driver");
+            }
+            store.mark_stickers_seen(driver_id, now_ms())?;
+        }
+        self.emit(AppEvent::DriversChanged);
+        Ok(())
+    }
+
+    /// Chooses which earned stickers show on a driver's profile (at most three, in order).
+    pub fn pin_stickers(&self, driver_id: DriverId, ids: &[String]) -> Result<stickers::StickerBook> {
+        {
+            let store = self.store();
+            if store.driver(driver_id)?.is_none() {
+                anyhow::bail!("no such driver");
+            }
+            stickers::pin(&store, driver_id, ids)?;
+        }
+        self.emit(AppEvent::DriversChanged);
+        self.sticker_book(driver_id)
+    }
+
     pub fn seat(&self) -> Result<Option<DriverId>> {
         Ok(self.store().setting(SEAT_KEY)?.and_then(|v| v.parse().ok()))
     }
@@ -921,14 +978,26 @@ impl BinIt {
             recorded_at: now,
         };
         lap.id = store.insert_lap(&lap, completed.profile.as_ref(), completed.trace.as_ref())?;
+        // How far this lap went: the track's length when the game gives it (a whole lap), else measured from the trace.
+        if lap.valid || completed.untimed == Some(UntimedReason::Cut) || completed.untimed.is_none() {
+            let metres = completed.session.length_m.filter(|m| *m > 0).or_else(|| completed.trace.as_ref().and_then(stats::trace_distance_m));
+            if let Some(m) = metres {
+                store.set_lap_distance(lap.id, m)?;
+            }
+        }
         if let Some(slides) = slides.filter(LiveSlideStats::any) {
             store.set_lap_slides(lap.id, &serde_json::to_string(&slides)?)?;
         }
 
         // Purple / green / yellow per sector, against every other valid lap on this combo.
+        let mut purple_sector = false;
         let sector_status = if lap.valid || completed.untimed == Some(UntimedReason::Cut) {
             let others = store.valid_sectors(&combo, lap.id)?;
             let (overall, driver) = sector_bests(&others, lap.sectors_ms.len(), driver_id);
+            // For the Purple sector sticker: quicker than what other drivers have done, not just than your own laps.
+            let rivals: Vec<_> = others.iter().filter(|(who, _)| *who != driver_id).cloned().collect();
+            let (rival_best, _) = sector_bests(&rivals, lap.sectors_ms.len(), driver_id);
+            purple_sector = lap.valid && lap.sectors_ms.iter().zip(&rival_best).any(|(&t, best)| best.is_some_and(|b| t < b));
             lap.sectors_ms.iter().enumerate().map(|(i, &t)| sector_status(t, overall[i], driver[i])).collect()
         } else {
             Vec::new()
@@ -957,7 +1026,9 @@ impl BinIt {
             });
         }
         let awards = match driver_id {
-            Some(id) if lap.valid => award_lap(&store, id, &lap, &combo, personal_best, combo_record, now)?,
+            Some(id) if lap.valid => award_lap(&store, id, &lap, &combo, personal_best, combo_record, !challenges.is_empty(), purple_sector, now)?,
+            // A cut lap earns no XP, but a few stickers are about cut laps.
+            Some(id) if lap.untimed_reason.as_deref() == Some("cut") => award_cut_lap(&store, id, &lap, now)?,
             _ => Awards::default(),
         };
         drop(store);
@@ -1026,6 +1097,9 @@ impl BinIt {
                 };
                 store.settle_challenge(&flag, &payouts, c.ends_at.unwrap_or(now))?;
                 paid += payouts.len();
+                // The challenge stickers: where each driver finished, whether or not coins were paid for it.
+                let board = store.leaderboard(&challenge_query(c))?;
+                stickers::award_challenge(&store, c, &board, now)?;
             }
             if first_run {
                 store.set_setting(STARTED, Some("1"))?;
@@ -1169,6 +1243,9 @@ impl BinIt {
                 // On a stage the path starts when the clock does, not at the drive-up to the line.
                 let on_course = !stage || current_lap_ms > 0;
                 if let (true, false, true, true, Some(pos)) = (driving, out_lap, rt.session_info.is_some(), on_course, position) {
+                    // A long circuit gets a finer map (see `points_for_length`).
+                    let want = trackmap::points_for_length(rt.session_info.as_ref().and_then(|i| i.length_m));
+                    rt.map.fit(want);
                     rt.map.record(lap_progress, pos);
                 }
                 // Crossing the line starts a new lap. A swap during an out lap (a handover in the pits) is
@@ -1189,7 +1266,9 @@ impl BinIt {
                 rt.last_out_lap = out_lap;
                 // Sliding only counts while the car is being driven: a pause isn't a drift.
                 let sliding = inputs.and_then(|i| i.dynamics.map(|d| (d, i.speed_kmh))).filter(|_| driving);
-                let slide = rt.slides.update(sliding.as_ref().map(|(d, _)| d), sliding.map_or(0.0, |(_, speed)| speed), now_ms() as u64);
+                let at = now_ms() as u64;
+                rt.slides.note_handbrake(inputs.map_or(0.0, |i| i.handbrake), at);
+                let slide = rt.slides.update(sliding.as_ref().map(|(d, _)| d), sliding.map_or(0.0, |(_, speed)| speed), at);
                 let changed = rt.lap_driver_changed && !out_lap;
                 let lap_valid = lap_valid && !changed;
                 let live = LiveView { driving, phase: phase.key(), on_track: matches!(phase, tt_games::GamePhase::Driving | tt_games::GamePhase::Paused), resets: rt.resets, slide: slide.key(), slide_stats: rt.slides.stats().into(), current_lap_ms, lap_valid, out_lap, void_reason: changed.then_some("driverChange"), lap_progress, position, inputs: inputs.map(LiveInputs::from), timing };
@@ -1223,7 +1302,10 @@ impl BinIt {
         let (true, Some(points)) = (lap.valid && lap.untimed.is_none(), points) else { return Ok(()) };
         let c = combo_of(&lap.session);
         let store = self.store();
-        if store.track_map(&c.game, &c.track, &c.layout)?.is_some() {
+        // Learned once; but a map from before maps scaled with track length is replaced by a finer one.
+        if let Some(old) = store.track_map(&c.game, &c.track, &c.layout)?
+            && !trackmap::worth_replacing(old.len(), points.len())
+        {
             return Ok(());
         }
         store.set_track_map(&c.game, &c.track, &c.layout, &points, closed, now_ms())?;
@@ -1368,8 +1450,27 @@ fn standing(store: &Store, c: &Challenge, driver_id: Option<DriverId>, now: Time
 #[cfg(test)]
 mod tests;
 
+/// A cut lap pays no lap XP or coins, only the stickers it completes.
+fn award_cut_lap(store: &Store, driver: DriverId, lap: &Lap, now: Timestamp) -> Result<Awards> {
+    let xp_before = store.point_totals(driver)?.0;
+    let unlocked = stickers::award_lap(store, driver, lap, stickers::LapFlags::default(), now)?;
+    let mut awards = Awards::default();
+    for u in &unlocked {
+        awards.xp += u.xp;
+        awards.coins += u.coins;
+        awards.reasons.push(format!("Sticker: {}", u.name));
+    }
+    awards.stickers = unlocked;
+    let level_after = progress::level_of(xp_before + awards.xp);
+    if level_after > progress::level_of(xp_before) {
+        awards.level_up = Some(level_after);
+    }
+    Ok(awards)
+}
+
 /// Pays a driver for a valid lap: see `progress` for what each thing is worth.
-fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal_best: bool, combo_record: bool, now: Timestamp) -> Result<Awards> {
+#[allow(clippy::too_many_arguments)]
+fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal_best: bool, combo_record: bool, in_challenge: bool, purple_sector: bool, now: Timestamp) -> Result<Awards> {
     use progress::*;
     let first_here = store.best_valid_time(combo, Some(driver), lap.id)?.is_none();
     let xp_before = store.point_totals(driver)?.0;
@@ -1391,9 +1492,19 @@ fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal
     if personal_best && !first_here {
         give("pb", rw.personal_best.xp, rw.personal_best.coins, "Personal best")?;
     }
-    if combo_record && store.others_have_valid_lap(combo, driver, lap.id)? {
+    let beat_others = combo_record && store.others_have_valid_lap(combo, driver, lap.id)?;
+    if beat_others {
         give("record", rw.track_record.xp, rw.track_record.coins, "Track record")?;
     }
+    // Stickers this lap completed, paid on top and counted towards the level below.
+    let flags = stickers::LapFlags { personal_best: personal_best && !first_here, track_record: beat_others, in_challenge, purple_sector };
+    let unlocked = stickers::award_lap(store, driver, lap, flags, now)?;
+    for u in &unlocked {
+        awards.xp += u.xp;
+        awards.coins += u.coins;
+        awards.reasons.push(format!("Sticker: {}", u.name));
+    }
+    awards.stickers = unlocked;
     let level_after = level_of(xp_before + awards.xp);
     if level_after > level_of(xp_before) {
         awards.level_up = Some(level_after);
@@ -1402,7 +1513,7 @@ fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal
 }
 
 /// Consecutive days, ending today or yesterday, with at least one of `times` (UTC days).
-fn streak_days(times: impl Iterator<Item = Timestamp>, now: Timestamp) -> u32 {
+pub(crate) fn streak_days(times: impl Iterator<Item = Timestamp>, now: Timestamp) -> u32 {
     let mut days: Vec<i64> = times.map(|t| t.div_euclid(progress::DAY_MS)).collect();
     days.sort_unstable();
     days.dedup();

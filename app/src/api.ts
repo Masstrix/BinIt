@@ -381,6 +381,105 @@ export interface Awards {
   /** The new level, when this lap crossed one. */
   levelUp: number | null;
   reasons: string[];
+  /** Achievement stickers this lap unlocked (their XP and coins are already in the totals above). */
+  stickers?: StickerUnlock[];
+}
+
+/** An achievement sticker a lap just unlocked. */
+export interface StickerUnlock {
+  id: string;
+  name: string;
+  rarity: StickerRarity;
+  xp: number;
+  coins: number;
+  /** A free shop item it also gave, e.g. `decal:crown`. */
+  item: string | null;
+}
+
+export type StickerRarity = "common" | "rare" | "epic" | "legendary";
+
+/** One achievement sticker in a driver's book. A hidden one that is not earned has no name, only a hint in `how`. */
+export interface BookSticker {
+  id: string;
+  name: string;
+  group: string;
+  rarity: StickerRarity;
+  how: string;
+  hidden: boolean;
+  earned: boolean;
+  earnedAt: number | null;
+  /** How far along a counting sticker is. Absent for one-off moments and for stickers that cannot be detected yet. */
+  progress: { cur: number; max: number } | null;
+  xp: number;
+  coins: number;
+  item: string | null;
+  /** False while the sticker is designed but nothing can unlock it yet. */
+  detectable: boolean;
+}
+
+export interface StickerGroup {
+  id: string;
+  name: string;
+  blurb: string;
+}
+
+/** How far, how long, how sideways and where a driver stands (crates/tt-core/src/stats.rs). */
+export interface DriverStats {
+  distanceM: number;
+  /** Laps that have a distance, out of the laps that count: laps from before it was measured, with no trace, are missing. */
+  lapsWithDistance: number;
+  lapsCounted: number;
+  timedLaps: number;
+  cleanPercent: number;
+  timeOnTrackMs: number;
+  tracks: number;
+  cars: number;
+  longestStreakDays: number;
+  driftM: number;
+  /** When the first drift distance was recorded: drift numbers only count from then. */
+  driftSince: number | null;
+  longestDriftMs: number;
+  drifts: number;
+  spins: number;
+  handbrakeDrifts: number;
+  peakSlipDeg: number;
+  recordsHeld: number;
+  challengesEntered: number;
+  podiums: number;
+  wins: number;
+}
+
+/** One sticker in a parcel. */
+export interface ParcelSticker {
+  id: string;
+  name: string;
+  rarity: StickerRarity;
+  how: string;
+  xp: number;
+  coins: number;
+  /** A free shop item it also gave, e.g. `decal:crown`. */
+  item: string | null;
+}
+
+/** What a driver earned since they last looked, rarest first. Paid when each sticker unlocked; shown once, then collected. */
+export interface Parcel {
+  stickers: ParcelSticker[];
+  coins: number;
+  xp: number;
+  items: string[];
+  levelBefore: number;
+  levelAfter: number;
+  titleAfter: string;
+}
+
+/** Every achievement sticker for one driver (crates/tt-core/stickers.json). */
+export interface StickerBook {
+  groups: StickerGroup[];
+  stickers: BookSticker[];
+  earned: number;
+  total: number;
+  /** Ids the driver shows on their profile, in order. Empty until they choose. */
+  pinned: string[];
 }
 
 export interface LapResult {
@@ -566,6 +665,13 @@ export const api = {
   updateDriver: (id: DriverId, name: string, color: string) =>
     request<Driver>("PUT", `/drivers/${id}`, { name, color }),
   profile: (id: DriverId) => request<Profile>("GET", `/drivers/${id}/profile`),
+  driverStats: (id: DriverId) => request<DriverStats>("GET", `/drivers/${id}/stats`),
+  /** The driver's waiting parcel, or null. */
+  parcel: (id: DriverId) => request<Parcel | null>("GET", `/drivers/${id}/parcel`),
+  collectParcel: (id: DriverId) => request<boolean>("POST", `/drivers/${id}/parcel/collect`),
+  stickerBook: (id: DriverId) => request<StickerBook>("GET", `/drivers/${id}/stickers`),
+  /** Chooses the (up to three) earned stickers shown on a driver's profile. */
+  pinStickers: (id: DriverId, ids: string[]) => request<StickerBook>("PUT", `/drivers/${id}/stickers/pinned`, { ids }),
   rewards: () => request<Rewards>("GET", "/rewards"),
   shop: (id: DriverId) => request<ShopState>("GET", `/drivers/${id}/shop`),
   buy: (id: DriverId, slot: string, item: string) => request<ShopState>("POST", `/drivers/${id}/shop/buy`, { slot, id: item }),

@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
-import { api, useAppState, useFetch, type Lap } from "../api";
-import { Helmet } from "../components/Helmet";
+import { api, useFetch, type Lap } from "../api";
 import { Picker, type PickerItem } from "../components/Picker";
 import { byDay, groupCombos, progressOf, runningBest, sectorProgress, summarize, tierOf, type ComboLaps } from "../driverStats";
 import { carName, lapTime, trackName } from "../format";
@@ -10,26 +9,15 @@ const secs = (ms: number) => (ms / 1000).toFixed(3);
 const dayLabel = (ms: number) => new Date(ms).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 
 /** How a driver has improved over time: best lap on each track and car, lap by lap and day by day. */
-export function DriverProgress({ id }: { id: number }) {
-  const { drivers, status } = useAppState();
-  const driver = drivers.find((d) => d.id === id);
-  const laps = useFetch(() => api.driverLaps(id), [id]);
+export function ProgressSection({ id, name, laps }: { id: number; name: string; laps: Lap[] }) {
   const rating = (useFetch(() => api.driverRatings(), []) ?? []).find((r) => r.driverId === id);
-  const combos = useMemo(() => groupCombos(laps ?? []), [laps]);
+  const combos = useMemo(() => groupCombos(laps), [laps]);
   const [picked, setPicked] = useState<string | null>(null);
 
-  if (!driver) {
-    return (
-      <>
-        <a href="#/drivers" className="back-link">← Drivers</a>
-        <div className="empty">That driver isn't here (anymore).</div>
-      </>
-    );
-  }
+  if (combos.length === 0) return <div className="empty">No timed laps yet. Once {name} sets a few, their progress shows up here.</div>;
 
-  const current = combos.find((c) => c.key === picked) ?? combos[0] ?? null;
-  const all = laps ?? [];
-  const firstLapAt = all.length ? all[0].recordedAt : null;
+  const current = combos.find((c) => c.key === picked) ?? combos[0];
+  const firstLapAt = laps.length ? laps[0].recordedAt : null;
   const items: PickerItem[] = combos.map((c) => ({
     value: c.key,
     label: trackName(c.track, c.layout),
@@ -39,50 +27,31 @@ export function DriverProgress({ id }: { id: number }) {
 
   return (
     <>
-      <a href={`#/you/${driver.id}`} className="back-link">← {driver.name}'s profile</a>
-      <div className="head" style={{ alignItems: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-          <Helmet color={driver.color} look={driver.look} size={64} seed={driver.id} />
-          <div style={{ minWidth: 0 }}>
-            <h1 style={{ overflowWrap: "anywhere" }}>{driver.name}</h1>
-            <span className="muted">{status?.seat === driver.id ? "In the seat now" : "Progress over time"}</span>
+      <HowTheyreDoing summary={summarize(combos, rating)} />
+
+      <div className="stat-tiles">
+        {rating?.score != null && (
+          <div className="stat-tile">
+            <span className="label">Speed score</span>
+            <span className="mono">{rating.score.toFixed(1)}</span>
+            <span className="muted" style={{ fontSize: 13, color: tierOf(rating.score).color }}>{tierOf(rating.score).label}</span>
           </div>
-        </div>
+        )}
+        <Tile label="Laps recorded" value={String(laps.length)} />
+        <Tile label="Timed laps" value={String(combos.reduce((n, c) => n + c.laps.length, 0))} />
+        <Tile label="Track + car combos" value={String(combos.length)} />
+        <Tile label="Driving since" value={firstLapAt ? dayLabel(firstLapAt) : "—"} />
       </div>
 
-      {laps === null ? (
-        <div className="empty">Loading…</div>
-      ) : combos.length === 0 ? (
-        <div className="empty">No timed laps yet. Once {driver.name} sets a few, their progress shows up here.</div>
-      ) : (
-        <>
-          <HowTheyreDoing summary={summarize(combos, rating)} />
-
-          <div className="stat-tiles">
-            {rating?.score != null && (
-              <div className="stat-tile">
-                <span className="label">Speed score</span>
-                <span className="mono">{rating.score.toFixed(1)}</span>
-                <span className="muted" style={{ fontSize: 13, color: tierOf(rating.score).color }}>{tierOf(rating.score).label}</span>
-              </div>
-            )}
-            <Tile label="Laps recorded" value={String(all.length)} />
-            <Tile label="Timed laps" value={String(combos.reduce((n, c) => n + c.laps.length, 0))} />
-            <Tile label="Track + car combos" value={String(combos.length)} />
-            <Tile label="Driving since" value={firstLapAt ? dayLabel(firstLapAt) : "—"} />
+      <section className="card" aria-label="Progress on a track">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end", justifyContent: "space-between" }}>
+          <h3 style={{ fontSize: 18 }}>On a track</h3>
+          <div style={{ flex: "1 1 280px", maxWidth: 520 }}>
+            <Picker label="Track and car" title="Choose a track and car" value={current.key} items={items} onChange={setPicked} />
           </div>
-
-          <section className="card" aria-label="Progress on a track">
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end", justifyContent: "space-between" }}>
-              <h2>Progress</h2>
-              <div style={{ flex: "1 1 280px", maxWidth: 520 }}>
-                <Picker label="Track and car" title="Choose a track and car" value={current?.key ?? ""} items={items} onChange={setPicked} />
-              </div>
-            </div>
-            {current && <ComboProgress combo={current} />}
-          </section>
-        </>
-      )}
+        </div>
+        <ComboProgress combo={current} />
+      </section>
     </>
   );
 }

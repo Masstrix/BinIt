@@ -4780,6 +4780,7 @@ name = "tt-core"
 version = "1.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "getrandom 0.3.4",
  "rusqlite",
  "serde",

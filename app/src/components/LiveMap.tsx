@@ -7,6 +7,7 @@ import { Helmet } from "./Helmet";
 import { words } from "../vocab";
 import { cameraAt, MapViewControls, TrackMap, useMapView } from "./TrackMap";
 import { Signed } from "./Signed";
+import { useSmoothLive } from "../smooth";
 
 /**
  * Where the car is on track right now. Shown to anyone watching (including office
@@ -49,7 +50,7 @@ export function LiveMap({ placeholder = false }: { placeholder?: boolean }) {
   const { status } = useAppState();
   const drivers = useDriverMap();
   const session = status?.session ?? null;
-  const live = status?.live ?? null;
+  const live = useSmoothLive();
   const w = words(session?.game);
   const maps = useTrackMaps(session?.game ?? null);
   const map = session ? findMap(maps, session.track, session.layout) : undefined;

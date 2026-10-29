@@ -1,0 +1,775 @@
+{
+  "_about": "Every achievement sticker. Edit, rebuild, ship. Pay (xp and coins) comes from rarityPay unless a sticker has a reward with its own xp / coins; a reward can also give a free shop item such as decal:crown. A sticker with rule null is designed but cannot be detected yet. See docs/stickers.md.",
+  "rarityPay": {
+    "common": {
+      "xp": 20,
+      "coins": 20
+    },
+    "rare": {
+      "xp": 50,
+      "coins": 60
+    },
+    "epic": {
+      "xp": 120,
+      "coins": 150
+    },
+    "legendary": {
+      "xp": 300,
+      "coins": 400
+    }
+  },
+  "groups": [
+    {
+      "id": "first-steps",
+      "name": "First steps",
+      "blurb": "Everyone gets the first two inside their first week."
+    },
+    {
+      "id": "pace",
+      "name": "Pace",
+      "blurb": "About being quick. Measured against your own times and the board."
+    },
+    {
+      "id": "challenges",
+      "name": "Challenges",
+      "blurb": "Weekly office challenges. The top ones double as bragging rights."
+    },
+    {
+      "id": "clean-driving",
+      "name": "Clean driving",
+      "blurb": "Rewards tidy laps over fast ones, so slower drivers have a way to shine too."
+    },
+    {
+      "id": "explorer",
+      "name": "Explorer",
+      "blurb": "Try new tracks, cars and games."
+    },
+    {
+      "id": "office",
+      "name": "Office life",
+      "blurb": "The shared-rig stickers."
+    },
+    {
+      "id": "drifting",
+      "name": "Drifting",
+      "blurb": "For the sideways crowd. Needs the game to report slip angle."
+    },
+    {
+      "id": "funny",
+      "name": "Funny and funky",
+      "blurb": "The silly ones. Some are a joke, some are a dare."
+    },
+    {
+      "id": "hard",
+      "name": "The hard ones",
+      "blurb": "Long-haul stickers. Most drivers will never see these."
+    },
+    {
+      "id": "nordschleife",
+      "name": "The Green Hell",
+      "blurb": "For people who know the Nordschleife. Counts only on the Nordschleife: the Nürburgring in Assetto Corsa EVO, and Nordschleife in Assetto Corsa."
+    }
+  ],
+  "stickers": [
+    {
+      "id": "first-lap",
+      "name": "First lap",
+      "group": "first-steps",
+      "rarity": "common",
+      "how": "Finish your first timed lap.",
+      "rule": {
+        "kind": "timedLaps",
+        "n": 1
+      }
+    },
+    {
+      "id": "ten-laps",
+      "name": "Ten laps",
+      "group": "first-steps",
+      "rarity": "common",
+      "how": "Ten timed laps on one track.",
+      "rule": {
+        "kind": "timedLapsOnOneTrack",
+        "n": 10
+      }
+    },
+    {
+      "id": "century",
+      "name": "Century",
+      "group": "first-steps",
+      "rarity": "rare",
+      "how": "100 timed laps in total, on any track or car.",
+      "rule": {
+        "kind": "timedLaps",
+        "n": 100
+      }
+    },
+    {
+      "id": "local",
+      "name": "Local",
+      "group": "first-steps",
+      "rarity": "epic",
+      "how": "50 laps at one track. Also unlocks the Home track backdrop.",
+      "rule": {
+        "kind": "timedLapsOnOneTrack",
+        "n": 50
+      }
+    },
+    {
+      "id": "personal-best",
+      "name": "Personal best",
+      "group": "pace",
+      "rarity": "common",
+      "how": "Beat your own best time on any track.",
+      "rule": {
+        "kind": "thisLapIsPersonalBest"
+      }
+    },
+    {
+      "id": "purple-sector",
+      "name": "Purple sector",
+      "group": "pace",
+      "rarity": "rare",
+      "how": "Set the fastest sector on a board.",
+      "rule": {
+        "kind": "thisLapSectorFasterThanEveryoneElse"
+      }
+    },
+    {
+      "id": "on-the-pace",
+      "name": "On the pace",
+      "group": "pace",
+      "rarity": "epic",
+      "how": "Finish a lap within 1% of a track record.",
+      "rule": {
+        "kind": "thisLapWithinPercentOfAnotherDriversBest",
+        "percent": 1.0
+      }
+    },
+    {
+      "id": "record-breaker",
+      "name": "Record breaker",
+      "group": "pace",
+      "rarity": "legendary",
+      "how": "Hold the fastest lap on 5 different tracks at once.",
+      "rule": {
+        "kind": "recordsHeldOnDifferentTracks",
+        "n": 5
+      }
+    },
+    {
+      "id": "entered",
+      "name": "Entered",
+      "group": "challenges",
+      "rarity": "common",
+      "how": "Set a time in a challenge.",
+      "rule": {
+        "kind": "thisLapInChallenge"
+      }
+    },
+    {
+      "id": "on-the-podium",
+      "name": "On the podium",
+      "group": "challenges",
+      "rarity": "rare",
+      "how": "Finish in the top 3 of a challenge with at least 3 drivers, when it ends.",
+      "rule": {
+        "kind": "challengeFinishedInTopPlaces",
+        "places": 3,
+        "minEntrants": 3
+      }
+    },
+    {
+      "id": "crown",
+      "name": "Crown",
+      "group": "challenges",
+      "rarity": "epic",
+      "how": "Take the crown on any board.",
+      "reward": {
+        "item": "decal:crown"
+      },
+      "rule": {
+        "kind": "thisLapIsTrackRecord"
+      }
+    },
+    {
+      "id": "reigning",
+      "name": "Reigning",
+      "group": "challenges",
+      "rarity": "legendary",
+      "how": "Hold a track record for 7 days. Also unlocks Gold numerals.",
+      "rule": {
+        "kind": "recordHeldForDays",
+        "days": 7
+      }
+    },
+    {
+      "id": "giant-killer",
+      "name": "Giant killer",
+      "group": "challenges",
+      "rarity": "epic",
+      "how": "Beat the top time on a board while sitting in its bottom half.",
+      "rule": {
+        "kind": "thisLapWinsFromBottomHalf",
+        "minDrivers": 4
+      }
+    },
+    {
+      "id": "tidy-lap",
+      "name": "Tidy lap",
+      "group": "clean-driving",
+      "rarity": "common",
+      "how": "A timed lap with no cuts and no spin.",
+      "rule": {
+        "kind": "thisLapHasNoSpin"
+      }
+    },
+    {
+      "id": "five-clean",
+      "name": "Five clean",
+      "group": "clean-driving",
+      "rarity": "rare",
+      "how": "5 clean laps in a row.",
+      "rule": {
+        "kind": "cleanLapsInARow",
+        "n": 5
+      }
+    },
+    {
+      "id": "smooth-operator",
+      "name": "Smooth operator",
+      "group": "clean-driving",
+      "rarity": "epic",
+      "how": "20 clean laps in a row.",
+      "rule": {
+        "kind": "cleanLapsInARow",
+        "n": 20
+      }
+    },
+    {
+      "id": "spotless",
+      "name": "Spotless",
+      "group": "clean-driving",
+      "rarity": "legendary",
+      "how": "Finish a challenge with at least 5 timed laps and not one cut lap.",
+      "rule": {
+        "kind": "challengeFinishedWithEveryLapClean",
+        "minLaps": 5
+      }
+    },
+    {
+      "id": "rule-bender",
+      "name": "Rule bender",
+      "group": "clean-driving",
+      "rarity": "epic",
+      "how": "Cut the track on 5 laps in a row and still stay within 2% of the track record every time.",
+      "rule": {
+        "kind": "thisCutLapEndsARunWithinPercentOfAnotherDriversBest",
+        "n": 5,
+        "percent": 2.0
+      }
+    },
+    {
+      "id": "tourist",
+      "name": "Tourist",
+      "group": "explorer",
+      "rarity": "common",
+      "how": "Drive 3 different tracks.",
+      "rule": {
+        "kind": "tracksDriven",
+        "n": 3
+      }
+    },
+    {
+      "id": "world-tour",
+      "name": "World tour",
+      "group": "explorer",
+      "rarity": "rare",
+      "how": "Drive 10 different tracks.",
+      "rule": {
+        "kind": "tracksDriven",
+        "n": 10
+      }
+    },
+    {
+      "id": "garage-queen",
+      "name": "Garage queen",
+      "group": "explorer",
+      "rarity": "rare",
+      "how": "Drive 5 different cars.",
+      "rule": {
+        "kind": "carsDriven",
+        "n": 5
+      }
+    },
+    {
+      "id": "switch-hitter",
+      "name": "Switch hitter",
+      "group": "explorer",
+      "rarity": "epic",
+      "how": "Set a lap in 2 different games.",
+      "rule": {
+        "kind": "gamesDriven",
+        "n": 2
+      }
+    },
+    {
+      "id": "rematch",
+      "name": "Rematch",
+      "group": "office",
+      "rarity": "common",
+      "how": "Beat a colleague's time.",
+      "rule": {
+        "kind": "thisLapPassesAnotherDriver"
+      }
+    },
+    {
+      "id": "streak",
+      "name": "Streak",
+      "group": "office",
+      "rarity": "rare",
+      "how": "Drive on 5 days in a row.",
+      "rule": {
+        "kind": "daysInARow",
+        "n": 5
+      }
+    },
+    {
+      "id": "lunch-break",
+      "name": "Lunch break",
+      "group": "office",
+      "rarity": "common",
+      "how": "Set a lap between 12 and 2. Secret until you do.",
+      "hidden": true,
+      "hint": "Hidden. Something to do with midday.",
+      "rule": {
+        "kind": "thisLapSetBetweenLocalTimes",
+        "from": "12:00",
+        "to": "14:00"
+      }
+    },
+    {
+      "id": "photo-finish",
+      "name": "Photo finish",
+      "group": "office",
+      "rarity": "epic",
+      "how": "Finish within 0.010 s of another driver.",
+      "hidden": true,
+      "hint": "Hidden. Something to do with very close racing.",
+      "rule": {
+        "kind": "thisLapWithinOfAnotherDriversTime",
+        "ms": 10
+      }
+    },
+    {
+      "id": "sideways",
+      "name": "Sideways",
+      "group": "drifting",
+      "rarity": "common",
+      "how": "Hold a slide for 2 seconds.",
+      "rule": {
+        "kind": "thisLapLongestDriftAtLeast",
+        "ms": 2000
+      }
+    },
+    {
+      "id": "skid-marks",
+      "name": "Skid marks",
+      "group": "drifting",
+      "rarity": "rare",
+      "how": "Drift a combined 1 km across all your laps. Counts from laps recorded after distance was added.",
+      "rule": {
+        "kind": "driftDistanceInTotalAtLeast",
+        "metres": 1000
+      }
+    },
+    {
+      "id": "tyre-fryer",
+      "name": "Tyre fryer",
+      "group": "drifting",
+      "rarity": "epic",
+      "how": "One slide lasting 10 seconds without spinning out.",
+      "rule": {
+        "kind": "thisLapLongestDriftAtLeast",
+        "ms": 10000,
+        "noSpins": true
+      }
+    },
+    {
+      "id": "drift-king",
+      "name": "Drift king",
+      "group": "drifting",
+      "rarity": "legendary",
+      "how": "Spend more than half a lap sideways and still finish it.",
+      "rule": {
+        "kind": "thisLapDriftTimeShareAtLeast",
+        "percent": 50
+      }
+    },
+    {
+      "id": "handbrake-hero",
+      "name": "Handbrake hero",
+      "group": "drifting",
+      "rarity": "rare",
+      "how": "Start a drift with the handbrake and finish the lap clean.",
+      "rule": {
+        "kind": "thisLapHandbrakeDriftsAtLeast",
+        "n": 1
+      }
+    },
+    {
+      "id": "spinning-top",
+      "name": "Spinning top",
+      "group": "funny",
+      "rarity": "common",
+      "how": "Spin the car all the way round and still finish the lap.",
+      "rule": {
+        "kind": "thisLapSpinsAtLeast",
+        "n": 1
+      }
+    },
+    {
+      "id": "scenic-route",
+      "name": "Scenic route",
+      "group": "funny",
+      "rarity": "common",
+      "how": "Finish a lap 50% slower than your best. Enjoy the view.",
+      "rule": {
+        "kind": "thisLapSlowerThanYourBestBy",
+        "percent": 50
+      }
+    },
+    {
+      "id": "participation-trophy",
+      "name": "Participation trophy",
+      "group": "funny",
+      "rarity": "common",
+      "how": "Take part in a challenge and finish outside the top 3. It still counts.",
+      "rule": {
+        "kind": "challengeFinishedOutsideTopPlaces",
+        "places": 3,
+        "minEntrants": 3
+      }
+    },
+    {
+      "id": "early-bird",
+      "name": "Early bird",
+      "group": "funny",
+      "rarity": "rare",
+      "how": "Set a lap before 8 am. Coffee first.",
+      "rule": {
+        "kind": "thisLapSetBetweenLocalTimes",
+        "from": "00:00",
+        "to": "08:00"
+      }
+    },
+    {
+      "id": "night-owl",
+      "name": "Night owl",
+      "group": "funny",
+      "rarity": "rare",
+      "how": "Set a lap after 7 pm. Secret until you do.",
+      "hidden": true,
+      "hint": "Hidden. Something to do with the evening.",
+      "rule": {
+        "kind": "thisLapSetBetweenLocalTimes",
+        "from": "19:00",
+        "to": "24:00"
+      }
+    },
+    {
+      "id": "lucky-seven",
+      "name": "Lucky seven",
+      "group": "funny",
+      "rarity": "epic",
+      "how": "A lap time that ends in .777.",
+      "hidden": true,
+      "hint": "Hidden. Fortune favours the three-of-a-kind.",
+      "rule": {
+        "kind": "thisLapTimeEndsIn",
+        "ms": 777
+      }
+    },
+    {
+      "id": "mirror-lap",
+      "name": "Mirror lap",
+      "group": "funny",
+      "rarity": "epic",
+      "how": "A lap time that reads the same backwards, like 1:42.241.",
+      "hidden": true,
+      "hint": "Hidden. Read it backwards.",
+      "rule": {
+        "kind": "thisLapTimeIsPalindrome"
+      }
+    },
+    {
+      "id": "dead-heat",
+      "name": "Dead heat",
+      "group": "funny",
+      "rarity": "legendary",
+      "how": "Match another driver's time on the same board to the millisecond.",
+      "hidden": true,
+      "hint": "Hidden. Two drivers, one time.",
+      "rule": {
+        "kind": "thisLapEqualsAnotherDriversTime"
+      }
+    },
+    {
+      "id": "wrong-way-round",
+      "name": "Wrong way round",
+      "group": "funny",
+      "rarity": "common",
+      "how": "Stop dead facing backwards mid-lap, then carry on and finish it.",
+      "rule": {
+        "kind": "thisLapStoppedFacingTheWrongWay",
+        "belowKmh": 5,
+        "degrees": 135
+      }
+    },
+    {
+      "id": "slow-and-steady",
+      "name": "Slow and steady",
+      "group": "funny",
+      "rarity": "rare",
+      "how": "Ten laps in a row within 0.2 s of each other.",
+      "rule": {
+        "kind": "steadyLapsInARow",
+        "n": 10,
+        "withinMs": 200
+      }
+    },
+    {
+      "id": "friday-feeling",
+      "name": "Friday feeling",
+      "group": "funny",
+      "rarity": "common",
+      "how": "Set a lap after 4 pm on a Friday.",
+      "rule": {
+        "kind": "thisLapSetBetweenLocalTimes",
+        "from": "16:00",
+        "to": "24:00",
+        "days": [
+          "fri"
+        ]
+      }
+    },
+    {
+      "id": "one-more-go",
+      "name": "One more go",
+      "group": "funny",
+      "rarity": "rare",
+      "how": "Set a new personal best after five laps in a row on that track and car that did not beat the best before them.",
+      "rule": {
+        "kind": "thisLapIsPersonalBestAfterLapsWithoutOne",
+        "n": 5
+      }
+    },
+    {
+      "id": "moonwalk",
+      "name": "Moonwalk",
+      "group": "funny",
+      "rarity": "epic",
+      "how": "Cross the finish line of a lap or stage facing backwards.",
+      "rule": {
+        "kind": "thisLapFinishesFacingBackwards",
+        "slipDeg": 120,
+        "minSpeedKmh": 10
+      }
+    },
+    {
+      "id": "marathon",
+      "name": "Marathon",
+      "group": "hard",
+      "rarity": "epic",
+      "how": "500 timed laps in total.",
+      "rule": {
+        "kind": "timedLaps",
+        "n": 500
+      }
+    },
+    {
+      "id": "hat-trick",
+      "name": "Hat trick",
+      "group": "hard",
+      "rarity": "legendary",
+      "how": "Win three challenges in a row (each with at least 3 drivers).",
+      "rule": {
+        "kind": "challengesWonInARow",
+        "n": 3,
+        "minEntrants": 3
+      }
+    },
+    {
+      "id": "untouchable",
+      "name": "Untouchable",
+      "group": "hard",
+      "rarity": "legendary",
+      "how": "50 clean laps in a row.",
+      "rule": {
+        "kind": "cleanLapsInARow",
+        "n": 50
+      }
+    },
+    {
+      "id": "perfectionist",
+      "name": "Perfectionist",
+      "group": "hard",
+      "rarity": "epic",
+      "how": "Three laps within 0.1% of your own best time on one track.",
+      "rule": {
+        "kind": "lapsWithinPercentOfYourBest",
+        "n": 3,
+        "withinPercent": 0.1
+      }
+    },
+    {
+      "id": "completionist",
+      "name": "Completionist",
+      "group": "hard",
+      "rarity": "legendary",
+      "how": "Earn every other sticker in the book.",
+      "reward": {
+        "xp": 1000,
+        "coins": 1000,
+        "item": "shell:gold"
+      },
+      "rule": {
+        "kind": "allOtherStickers"
+      }
+    },
+    {
+      "id": "ring-green-hell",
+      "name": "Green Hell",
+      "group": "nordschleife",
+      "rarity": "rare",
+      "how": "Finish a timed lap of the Nordschleife, on any of its layouts.",
+      "rule": {
+        "kind": "timedLapsOnTrack",
+        "n": 1,
+        "on": [
+          {
+            "track": "Nurburgring",
+            "layout": "Nordschleife"
+          },
+          {
+            "track": "Nurburgring",
+            "layout": "Touristenfahrten"
+          },
+          {
+            "track": "ks_nordschleife"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ring-regular",
+      "name": "Ring regular",
+      "group": "nordschleife",
+      "rarity": "rare",
+      "how": "Ten timed laps of the Nordschleife, on any of its layouts.",
+      "rule": {
+        "kind": "timedLapsOnTrack",
+        "n": 10,
+        "on": [
+          {
+            "track": "Nurburgring",
+            "layout": "Nordschleife"
+          },
+          {
+            "track": "Nurburgring",
+            "layout": "Touristenfahrten"
+          },
+          {
+            "track": "ks_nordschleife"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ring-sub-eight",
+      "name": "Sub eight",
+      "group": "nordschleife",
+      "rarity": "epic",
+      "how": "Lap the Nordschleife in under 8:00, on the closed Nordschleife layout. Open-wheel and prototype cars do not count.",
+      "rule": {
+        "kind": "thisLapFasterThan",
+        "ms": 480000,
+        "on": [
+          {
+            "track": "Nurburgring",
+            "layout": "Nordschleife"
+          },
+          {
+            "track": "ks_nordschleife",
+            "layout": "nordschleife"
+          }
+        ],
+        "exceptCarClasses": [
+          "Open wheel",
+          "Formula",
+          "LMP1",
+          "LMP2",
+          "Prototype",
+          "Hypercar"
+        ]
+      }
+    },
+    {
+      "id": "ring-sub-seven",
+      "name": "Sub seven",
+      "group": "nordschleife",
+      "rarity": "legendary",
+      "how": "Lap the Nordschleife in under 7:00, on the closed Nordschleife layout. Open-wheel and prototype cars do not count.",
+      "reward": {
+        "xp": 500,
+        "coins": 750
+      },
+      "rule": {
+        "kind": "thisLapFasterThan",
+        "ms": 420000,
+        "on": [
+          {
+            "track": "Nurburgring",
+            "layout": "Nordschleife"
+          },
+          {
+            "track": "ks_nordschleife",
+            "layout": "nordschleife"
+          }
+        ],
+        "exceptCarClasses": [
+          "Open wheel",
+          "Formula",
+          "LMP1",
+          "LMP2",
+          "Prototype",
+          "Hypercar"
+        ]
+      }
+    },
+    {
+      "id": "ring-20-832",
+      "name": "20.832",
+      "group": "nordschleife",
+      "rarity": "epic",
+      "how": "A lap time that ends in :20.832, like 7:20.832, on the closed Nordschleife layout. The circuit is 20.832 km long.",
+      "hidden": true,
+      "hint": "Hidden. How long the Ring is, on the stopwatch.",
+      "rule": {
+        "kind": "thisLapTimeEndsInSecondsAndMs",
+        "seconds": 20,
+        "ms": 832,
+        "on": [
+          {
+            "track": "Nurburgring",
+            "layout": "Nordschleife"
+          },
+          {
+            "track": "ks_nordschleife",
+            "layout": "nordschleife"
+          }
+        ]
+      }
+    }
+  ]
+}
