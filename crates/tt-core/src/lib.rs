@@ -1192,6 +1192,9 @@ impl BinIt {
                 // On a stage the path starts when the clock does, not at the drive-up to the line.
                 let on_course = !stage || current_lap_ms > 0;
                 if let (true, false, true, true, Some(pos)) = (driving, out_lap, rt.session_info.is_some(), on_course, position) {
+                    // A long circuit gets a finer map (see `points_for_length`).
+                    let want = trackmap::points_for_length(rt.session_info.as_ref().and_then(|i| i.length_m));
+                    rt.map.fit(want);
                     rt.map.record(lap_progress, pos);
                 }
                 // Crossing the line starts a new lap. A swap during an out lap (a handover in the pits) is
@@ -1246,7 +1249,10 @@ impl BinIt {
         let (true, Some(points)) = (lap.valid && lap.untimed.is_none(), points) else { return Ok(()) };
         let c = combo_of(&lap.session);
         let store = self.store();
-        if store.track_map(&c.game, &c.track, &c.layout)?.is_some() {
+        // Learned once; but a map from before maps scaled with track length is replaced by a finer one.
+        if let Some(old) = store.track_map(&c.game, &c.track, &c.layout)?
+            && !trackmap::worth_replacing(old.len(), points.len())
+        {
             return Ok(());
         }
         store.set_track_map(&c.game, &c.track, &c.layout, &points, closed, now_ms())?;

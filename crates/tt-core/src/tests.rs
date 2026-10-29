@@ -351,8 +351,16 @@ fn a_clean_lap_teaches_the_track_map_once_and_flags_the_catalogue() {
     tt.handle_game_event(GameEvent::LapCompleted(lap(99_000, true))).unwrap();
     let maps = tt.track_maps("acevo").unwrap();
     assert_eq!(maps.len(), 1);
-    assert_eq!((maps[0].track.as_str(), maps[0].points.len()), ("Imola", 400));
+    // Imola is 4.9 km, so one point every 10 m.
+    assert_eq!((maps[0].track.as_str(), maps[0].points.len()), ("Imola", 490));
     assert!((maps[0].points[0][0] - 400.0).abs() < 5.0);
+
+    // A coarse map from before maps scaled with track length is replaced by the next clean lap, not kept for ever.
+    let coarse: Vec<[f32; 2]> = (0..200).map(|i| [i as f32, 0.0]).collect();
+    tt.store().set_track_map("acevo", "Imola", "", &coarse, true, 1).unwrap();
+    drive(&tt, 400.0);
+    tt.handle_game_event(GameEvent::LapCompleted(lap(98_000, true))).unwrap();
+    assert_eq!(tt.track_maps("acevo").unwrap()[0].points.len(), 490);
 
     let cat = tt.catalogue("acevo").unwrap();
     let imola = cat.tracks.iter().find(|t| t.name == "Imola").unwrap();
