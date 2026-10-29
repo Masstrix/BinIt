@@ -65,6 +65,39 @@ pub enum Rule {
     },
     /// This lap's time ends in these seconds and milliseconds, on one of these tracks (7:20.832 ends in 20 s 832 ms).
     ThisLapTimeEndsInSecondsAndMs { seconds: u32, ms: u32, on: Vec<TrackRef> },
+    /// This lap's longest drift lasted `ms` or more (a drift is the game's: 12 degrees of slip or more at speed); with
+    /// `no_spins` the lap must also have no spin. Needs a game that reports physics.
+    ThisLapLongestDriftAtLeast {
+        ms: u32,
+        #[serde(default)]
+        no_spins: bool,
+    },
+    /// Drifting added up to `percent` of this lap's time or more.
+    ThisLapDriftTimeShareAtLeast { percent: u32 },
+    /// This lap had `n` spins or more (90 degrees of slip or more).
+    ThisLapSpinsAtLeast { n: u32 },
+    /// This lap was `percent` slower than the driver's own best on that track and car, or more.
+    ThisLapSlowerThanYourBestBy { percent: u32 },
+    /// `n` timed laps on one track and car, all within `within_percent` of the driver's own best there.
+    LapsWithinPercentOfYourBest { n: u32, within_percent: f32 },
+    /// A sector in this lap was faster than every other driver's on that track and car (needs one other driver).
+    ThisLapSectorFasterThanEveryoneElse,
+    /// This lap was within `percent` of another driver's best on that track and car (needs one other driver).
+    ThisLapWithinPercentOfAnotherDriversBest { percent: f32 },
+    /// The driver holds the best time, with another driver on the board, on `n` different tracks (track and layout,
+    /// any car).
+    RecordsHeldOnDifferentTracks { n: u32 },
+    /// This lap took the best time on a board with at least `min_drivers` drivers, while the driver's previous best
+    /// was in the bottom half of it.
+    ThisLapWinsFromBottomHalf { min_drivers: u32 },
+    /// This lap was faster than another driver's best that had beaten the driver's previous best there.
+    ThisLapPassesAnotherDriver,
+    /// This lap was within `ms` of another driver's best, but not the same.
+    ThisLapWithinOfAnotherDriversTime { ms: u32 },
+    /// This lap was exactly another driver's best time on that track and car.
+    ThisLapEqualsAnotherDriversTime,
+    /// The driver has held the best time on a track and car for `days` days, with another driver on the board.
+    RecordHeldForDays { days: u32 },
     /// Every other sticker in the book.
     AllOtherStickers,
 }
@@ -224,6 +257,50 @@ pub struct LapFlags {
     pub personal_best: bool,
     pub track_record: bool,
     pub in_challenge: bool,
+    /// A sector was faster than any other driver's on this track and car.
+    pub purple_sector: bool,
+}
+
+/// What the board looks like around a driver, for stickers that compare drivers.
+#[derive(Debug, Clone, Default)]
+struct Board {
+    /// Other drivers' bests on this lap's track and car (empty when there is no lap).
+    others: Vec<u32>,
+    /// This driver's best there before this lap.
+    prev_best: Option<u32>,
+    /// Tracks (track and layout) where the driver holds the best, with another driver on the board.
+    records_held: u32,
+    /// How many days the longest-standing of those records has stood.
+    longest_held_days: u32,
+}
+
+fn board_for(store: &Store, driver: DriverId, lap: Option<&Lap>, laps: &[Lap], now: Timestamp) -> Result<Board> {
+    let bests = store.profile_best_times()?;
+    let mut board = Board::default();
+    if let Some(lap) = lap {
+        board.others = bests.iter().filter(|(c, d, _)| c == &lap.combo && *d != driver).map(|(_, _, t)| *t).collect();
+        board.prev_best = store.best_valid_time(&lap.combo, Some(driver), lap.id)?;
+    }
+    // Where the driver is the outright best, and nobody else has matched it.
+    let mut tracks: HashSet<(&str, &str, &str)> = HashSet::new();
+    let mut combos: Vec<&crate::Combo> = Vec::new();
+    for (combo, who, time) in bests.iter().filter(|(_, who, _)| *who == driver) {
+        let rivals: Vec<u32> = bests.iter().filter(|(c, d, _)| c == combo && d != who).map(|(_, _, t)| *t).collect();
+        if rivals.iter().min().is_some_and(|m| m > time) {
+            tracks.insert((&combo.game, &combo.track, &combo.layout));
+            combos.push(combo);
+        }
+    }
+    board.records_held = tracks.len() as u32;
+    for combo in combos {
+        let best = bests.iter().filter(|(c, d, _)| c == combo && *d == driver).map(|(_, _, t)| *t).min();
+        // The lap that set it: the earliest valid lap with that time (nobody has beaten it since).
+        let set = laps.iter().filter(|l| l.valid && &l.combo == combo && Some(l.time_ms) == best).map(|l| l.recorded_at).min();
+        if let Some(at) = set {
+            board.longest_held_days = board.longest_held_days.max(((now - at).max(0) / crate::progress::DAY_MS) as u32);
+        }
+    }
+    Ok(board)
 }
 
 struct Ctx<'a> {
@@ -235,6 +312,9 @@ struct Ctx<'a> {
     now: Timestamp,
     others_earned: u32,
     others_total: u32,
+    board: &'a Board,
+    /// The slides and spins this lap recorded, when the game reports them.
+    slides: crate::LiveSlideStats,
 }
 
 /// How far a driver is through a rule: `(so far, needed)`. Earned when so far reaches needed.
@@ -281,6 +361,45 @@ fn measure(rule: &Rule, c: &Ctx) -> (u32, u32) {
             (on_lap(&|l| l.time_ms < *ms && on_track(l, on) && car_allowed(l, only_car_classes, except_car_classes)), 1)
         }
         Rule::ThisLapTimeEndsInSecondsAndMs { seconds, ms, on } => (on_lap(&|l| l.time_ms % 60_000 == seconds * 1000 + ms && on_track(l, on)), 1),
+        Rule::ThisLapLongestDriftAtLeast { ms, no_spins } => (on_lap(&|_| c.slides.longest_ms >= u64::from(*ms) && (!*no_spins || c.slides.spins == 0)), 1),
+        Rule::ThisLapDriftTimeShareAtLeast { percent } => (on_lap(&|l| c.slides.drift_ms * 100 >= u64::from(l.time_ms) * u64::from(*percent)), 1),
+        Rule::ThisLapSpinsAtLeast { n } => (on_lap(&|_| c.slides.spins >= *n), 1),
+        Rule::ThisLapSlowerThanYourBestBy { percent } => {
+            (on_lap(&|l| c.board.prev_best.is_some_and(|b| f64::from(l.time_ms) >= f64::from(b) * (1.0 + f64::from(*percent) / 100.0))), 1)
+        }
+        Rule::LapsWithinPercentOfYourBest { n, within_percent } => {
+            let mut per: HashMap<&crate::Combo, Vec<u32>> = HashMap::new();
+            for l in timed() {
+                per.entry(&l.combo).or_default().push(l.time_ms);
+            }
+            let most = per
+                .values()
+                .map(|times| {
+                    let best = f64::from(*times.iter().min().unwrap_or(&0));
+                    times.iter().filter(|&&t| f64::from(t) <= best * (1.0 + f64::from(*within_percent) / 100.0)).count() as u32
+                })
+                .max()
+                .unwrap_or(0);
+            (most, *n)
+        }
+        Rule::ThisLapSectorFasterThanEveryoneElse => (u32::from(c.lap.is_some() && c.flags.purple_sector), 1),
+        Rule::ThisLapWithinPercentOfAnotherDriversBest { percent } => {
+            (on_lap(&|l| c.board.others.iter().min().is_some_and(|&m| f64::from(l.time_ms) <= f64::from(m) * (1.0 + f64::from(*percent) / 100.0))), 1)
+        }
+        Rule::RecordsHeldOnDifferentTracks { n } => (c.board.records_held, *n),
+        Rule::ThisLapWinsFromBottomHalf { min_drivers } => (
+            on_lap(&|l| {
+                let (others, Some(before)) = (&c.board.others, c.board.prev_best) else { return false };
+                let drivers = others.len() as u32 + 1;
+                let rank_before = 1 + others.iter().filter(|&&t| t < before).count() as u32;
+                drivers >= *min_drivers && others.iter().all(|&t| l.time_ms < t) && rank_before * 2 > drivers
+            }),
+            1,
+        ),
+        Rule::ThisLapPassesAnotherDriver => (on_lap(&|l| c.board.prev_best.is_some_and(|before| c.board.others.iter().any(|&t| l.time_ms < t && t < before))), 1),
+        Rule::ThisLapWithinOfAnotherDriversTime { ms } => (on_lap(&|l| c.board.others.iter().any(|&t| t != l.time_ms && t.abs_diff(l.time_ms) <= *ms)), 1),
+        Rule::ThisLapEqualsAnotherDriversTime => (on_lap(&|l| c.board.others.contains(&l.time_ms)), 1),
+        Rule::RecordHeldForDays { days } => (c.board.longest_held_days.min(*days), *days),
         Rule::AllOtherStickers => (c.others_earned, c.others_total),
     }
 }
@@ -357,7 +476,8 @@ pub fn book(store: &Store, driver: DriverId, now: Timestamp) -> Result<StickerBo
     let laps = store.driver_laps(driver)?;
     let earned: HashMap<String, Timestamp> = store.driver_stickers(driver)?.into_iter().collect();
     let total = cat.stickers.len() as u32;
-    let ctx = Ctx { laps: &laps, lap: None, flags: LapFlags::default(), now, others_earned: earned.len() as u32, others_total: total.saturating_sub(1) };
+    let board = board_for(store, driver, None, &laps, now)?;
+    let ctx = Ctx { laps: &laps, lap: None, flags: LapFlags::default(), now, others_earned: earned.len() as u32, others_total: total.saturating_sub(1), board: &board, slides: Default::default() };
     let stickers: Vec<StickerView> = cat
         .stickers
         .iter()
@@ -365,7 +485,7 @@ pub fn book(store: &Store, driver: DriverId, now: Timestamp) -> Result<StickerBo
             let at = earned.get(&s.id).copied();
             let shown = at.is_some() || !s.hidden;
             let pay = cat.pay(s);
-            let one_off = matches!(s.rule, Some(Rule::ThisLapIsPersonalBest | Rule::ThisLapIsTrackRecord | Rule::ThisLapInChallenge | Rule::ThisLapTimeEndsIn { .. } | Rule::ThisLapTimeIsPalindrome | Rule::ThisLapFasterThan { .. } | Rule::ThisLapTimeEndsInSecondsAndMs { .. }));
+            let one_off = matches!(s.rule, Some(Rule::ThisLapIsPersonalBest | Rule::ThisLapIsTrackRecord | Rule::ThisLapInChallenge | Rule::ThisLapTimeEndsIn { .. } | Rule::ThisLapTimeIsPalindrome | Rule::ThisLapFasterThan { .. } | Rule::ThisLapTimeEndsInSecondsAndMs { .. } | Rule::ThisLapLongestDriftAtLeast { .. } | Rule::ThisLapDriftTimeShareAtLeast { .. } | Rule::ThisLapSpinsAtLeast { .. } | Rule::ThisLapSlowerThanYourBestBy { .. } | Rule::ThisLapSectorFasterThanEveryoneElse | Rule::ThisLapWithinPercentOfAnotherDriversBest { .. } | Rule::ThisLapWinsFromBottomHalf { .. } | Rule::ThisLapPassesAnotherDriver | Rule::ThisLapWithinOfAnotherDriversTime { .. } | Rule::ThisLapEqualsAnotherDriversTime));
             let progress = match &s.rule {
                 Some(rule) if at.is_none() && !one_off && shown => {
                     let (cur, max) = measure(rule, &ctx);
@@ -445,6 +565,12 @@ fn unlock_pass(store: &Store, driver: DriverId, laps: &[Lap], lap: Option<&Lap>,
     let mut earned: HashSet<String> = store.driver_stickers(driver)?.into_iter().map(|(id, _)| id).collect();
     let total = cat.stickers.len() as u32;
     let at = laps.last().map_or(now, |l| l.recorded_at.min(now));
+    let board = board_for(store, driver, lap, laps, now)?;
+    // What this lap's drifting and spinning added up to (nothing when the game does not report it).
+    let slides: crate::LiveSlideStats = match lap {
+        Some(l) => store.lap_slides(l.id)?.and_then(|json| serde_json::from_str(&json).ok()).unwrap_or_default(),
+        None => Default::default(),
+    };
     // The Completionist goes last, so it sees what this very lap unlocked.
     for completionist in [false, true] {
         for s in &cat.stickers {
@@ -452,7 +578,7 @@ fn unlock_pass(store: &Store, driver: DriverId, laps: &[Lap], lap: Option<&Lap>,
             if earned.contains(&s.id) || (*rule == Rule::AllOtherStickers) != completionist {
                 continue;
             }
-            let ctx = Ctx { laps, lap, flags, now, others_earned: earned.len() as u32, others_total: total.saturating_sub(1) };
+            let ctx = Ctx { laps, lap, flags, now, others_earned: earned.len() as u32, others_total: total.saturating_sub(1), board: &board, slides };
             let (cur, max) = measure(rule, &ctx);
             if cur < max || max == 0 {
                 continue;
@@ -526,5 +652,50 @@ mod tests {
         assert!(is_palindrome(102_241)); // 1:42.241
         assert!(!is_palindrome(102_242));
         assert!(!is_palindrome(45_054), "under a minute never counts");
+    }
+
+    fn timed_lap(time_ms: u32) -> Lap {
+        Lap {
+            id: 1,
+            driver_id: Some(1),
+            combo: crate::Combo { game: "acevo".into(), track: "Imola".into(), layout: String::new(), car: "Porsche 992 GT3 R".into() },
+            session_kind: "Hot Stint".into(),
+            lap_number: 1,
+            time_ms,
+            valid: true,
+            untimed_reason: None,
+            sectors_ms: vec![],
+            recorded_at: 0,
+        }
+    }
+
+    fn slid(drift_ms: u64, longest_ms: u64, spins: u32) -> crate::LiveSlideStats {
+        crate::LiveSlideStats { drifts: u32::from(drift_ms > 0), spins, drift_ms, longest_ms, peak_slip_deg: 30.0 }
+    }
+
+    /// Whether a rule is met by one lap that carried these slides.
+    fn met(rule: &Rule, time_ms: u32, slides: crate::LiveSlideStats) -> bool {
+        let lap = timed_lap(time_ms);
+        let laps = [lap.clone()];
+        let board = Board::default();
+        let ctx = Ctx { laps: &laps, lap: Some(&lap), flags: LapFlags::default(), now: 0, others_earned: 0, others_total: 0, board: &board, slides };
+        let (cur, max) = measure(rule, &ctx);
+        cur >= max
+    }
+
+    #[test]
+    fn the_drift_stickers_read_a_laps_slides() {
+        let sideways = Rule::ThisLapLongestDriftAtLeast { ms: 2000, no_spins: false };
+        assert!(!met(&sideways, 100_000, slid(1_900, 1_900, 0)));
+        assert!(met(&sideways, 100_000, slid(2_000, 2_000, 0)));
+        let fryer = Rule::ThisLapLongestDriftAtLeast { ms: 10_000, no_spins: true };
+        assert!(met(&fryer, 100_000, slid(12_000, 12_000, 0)));
+        assert!(!met(&fryer, 100_000, slid(12_000, 12_000, 1)), "a spin spoils it");
+        let king = Rule::ThisLapDriftTimeShareAtLeast { percent: 50 };
+        assert!(!met(&king, 100_000, slid(49_999, 9_000, 0)));
+        assert!(met(&king, 100_000, slid(50_000, 9_000, 0)));
+        let top = Rule::ThisLapSpinsAtLeast { n: 1 };
+        assert!(met(&top, 100_000, slid(0, 0, 1)) && !met(&top, 100_000, slid(3_000, 3_000, 0)));
+        assert!(!met(&sideways, 100_000, Default::default()), "a game that reports no slides cannot earn them");
     }
 }

@@ -64,6 +64,19 @@ A sticker with a `reward` overrides any part of that. Leave a field out to keep 
 | `timedLapsOnTrack` | `n` timed laps on one of these tracks | `n`, `on` |
 | `thisLapFasterThan` | this lap was quicker than `ms`, on one of these tracks (`on` empty = any track), in an allowed car | `ms`, `on`, optional `exceptCarClasses`, optional `onlyCarClasses` |
 | `thisLapTimeEndsInSecondsAndMs` | this lap's time ends in these seconds and milliseconds (7:20.832 is 20 and 832), on these tracks | `seconds`, `ms`, `on` |
+| `thisLapLongestDriftAtLeast` | this lap's longest drift lasted `ms` or more (a drift is the game's: 12 degrees of slip or more at speed); `noSpins` also needs a lap with no spin | `ms`, optional `noSpins` |
+| `thisLapDriftTimeShareAtLeast` | drifting added up to `percent` of this lap's time | `percent` |
+| `thisLapSpinsAtLeast` | this lap had `n` spins (90 degrees of slip or more) | `n` |
+| `thisLapSlowerThanYourBestBy` | this lap was `percent` slower than your own best on that track and car | `percent` |
+| `lapsWithinPercentOfYourBest` | `n` timed laps on one track and car, all within `withinPercent` of your best there | `n`, `withinPercent` |
+| `thisLapSectorFasterThanEveryoneElse` | a sector was quicker than any other driver's on that track and car | none |
+| `thisLapWithinPercentOfAnotherDriversBest` | this lap was within `percent` of another driver's best on that track and car | `percent` |
+| `recordsHeldOnDifferentTracks` | you hold the best time on `n` different tracks (track and layout, any car), each with another driver on the board | `n` |
+| `thisLapWinsFromBottomHalf` | this lap took the best time on a board of at least `minDrivers`, while your previous best was in its bottom half | `minDrivers` |
+| `thisLapPassesAnotherDriver` | this lap was faster than another driver's best that had beaten your previous best | none |
+| `thisLapWithinOfAnotherDriversTime` | this lap was within `ms` of another driver's best, but not equal | `ms` |
+| `thisLapEqualsAnotherDriversTime` | this lap equals another driver's best exactly | none |
+| `recordHeldForDays` | you have held the best time on a track and car for `days` days, with another driver on the board | `days` |
 | `allOtherStickers` | every other sticker is earned | none |
 
 `on` is a list of tracks, each `{ "track": "Nurburgring", "layout": "Touristenfahrten" }` (`layout` is optional). Spelling,
@@ -106,22 +119,20 @@ hidden sticker with no hint, and a reward item that is not in the shop all fail 
 
 ## What can be detected today, and what cannot
 
-Of the 54 designed stickers, 25 have a rule today (first lap, ten laps, century, local, personal best, entered, crown,
-five clean, smooth operator, tourist, world tour, garage queen, switch hitter, streak, lucky seven, mirror lap,
-slow and steady, marathon, untouchable, completionist, and the five Nordschleife ones). The rest are in the file with `"rule": null`, and need:
+Of the 54 designed stickers, 39 have a rule today. The 15 that do not are listed in `stickers.json` with `"rule": null` and
+need a decision or new data; the open questions are in the "Sticker rules: questions for you" document.
 
-* **A time zone.** Lunch break, Early bird, Night owl and Friday feeling depend on the local time of day. Laps are
-  stored in UTC milliseconds and the app has no time-zone setting yet.
-* **Telemetry from the game.** Drifting (slip angle), Spinning top, Wrong way round and Moonwalk (which way the car
-  faces), Handbrake hero, and which games report which. `laps.slides` already stores drift and spin stats per lap, so
-  the drifting group is the nearest.
-* **Cut detail.** Tidy lap duplicates First lap until a game reports track-limit cuts per lap. Rule bender and
-  Spotless need cut counts.
-* **Board context.** Purple sector, On the pace, Record breaker, Reigning, Giant killer, Dead heat, Photo finish and
-  Rematch compare against other drivers' laps or sectors.
-* **Challenge results.** On the podium, Hat trick, Participation trophy, Spotless need a challenge to have ended.
-* **Session history.** Scenic route, One more go and Perfectionist need a lap compared with the driver's own recent
-  laps or best.
+* **Need a decision first:** Skid marks (the app stores how long a slide lasted, not how far), Tidy lap (identical to First
+  lap today), One more go (no session boundary), Rule bender (needs cut-lap times).
+* **A time zone:** Lunch break, Early bird, Night owl and Friday feeling. Laps are stored in UTC; the plan is to store the
+  PC's local time on each lap when it is recorded.
+* **Challenge results:** On the podium, Participation trophy, Hat trick and Spotless unlock when a challenge ends and
+  pays out, not when a lap is recorded.
+* **New telemetry:** Moonwalk and Wrong way round (the trace has heading and slip, so they are doable), and Handbrake hero
+  (the handbrake is not in the trace yet).
+
+The drift and spin stickers only work for games that report physics (AC EVO so far); the board stickers need another driver on
+the board, and only look at timed laps.
 
 ## In the app
 

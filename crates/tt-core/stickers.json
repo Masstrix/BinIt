@@ -131,7 +131,9 @@
       "group": "pace",
       "rarity": "rare",
       "how": "Set the fastest sector on a board.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapSectorFasterThanEveryoneElse"
+      }
     },
     {
       "id": "on-the-pace",
@@ -139,7 +141,10 @@
       "group": "pace",
       "rarity": "epic",
       "how": "Finish a lap within 1% of a track record.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapWithinPercentOfAnotherDriversBest",
+        "percent": 1.0
+      }
     },
     {
       "id": "record-breaker",
@@ -147,7 +152,10 @@
       "group": "pace",
       "rarity": "legendary",
       "how": "Hold the fastest lap on 5 different tracks at once.",
-      "rule": null
+      "rule": {
+        "kind": "recordsHeldOnDifferentTracks",
+        "n": 5
+      }
     },
     {
       "id": "entered",
@@ -186,7 +194,10 @@
       "group": "challenges",
       "rarity": "legendary",
       "how": "Hold a track record for 7 days. Also unlocks Gold numerals.",
-      "rule": null
+      "rule": {
+        "kind": "recordHeldForDays",
+        "days": 7
+      }
     },
     {
       "id": "giant-killer",
@@ -194,7 +205,10 @@
       "group": "challenges",
       "rarity": "epic",
       "how": "Beat the top time on a board while sitting in its bottom half.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapWinsFromBottomHalf",
+        "minDrivers": 4
+      }
     },
     {
       "id": "tidy-lap",
@@ -292,7 +306,9 @@
       "group": "office",
       "rarity": "common",
       "how": "Beat a colleague's time.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapPassesAnotherDriver"
+      }
     },
     {
       "id": "streak",
@@ -323,7 +339,10 @@
       "how": "Finish within 0.010 s of another driver.",
       "hidden": true,
       "hint": "Hidden. Something to do with very close racing.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapWithinOfAnotherDriversTime",
+        "ms": 10
+      }
     },
     {
       "id": "sideways",
@@ -331,7 +350,10 @@
       "group": "drifting",
       "rarity": "common",
       "how": "Hold a slide for 2 seconds.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapLongestDriftAtLeast",
+        "ms": 2000
+      }
     },
     {
       "id": "skid-marks",
@@ -347,7 +369,11 @@
       "group": "drifting",
       "rarity": "epic",
       "how": "One slide lasting 10 seconds without spinning out.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapLongestDriftAtLeast",
+        "ms": 10000,
+        "noSpins": true
+      }
     },
     {
       "id": "drift-king",
@@ -355,7 +381,10 @@
       "group": "drifting",
       "rarity": "legendary",
       "how": "Spend more than half a lap sideways and still finish it.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapDriftTimeShareAtLeast",
+        "percent": 50
+      }
     },
     {
       "id": "handbrake-hero",
@@ -371,7 +400,10 @@
       "group": "funny",
       "rarity": "common",
       "how": "Spin the car all the way round and still finish the lap.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapSpinsAtLeast",
+        "n": 1
+      }
     },
     {
       "id": "scenic-route",
@@ -379,7 +411,10 @@
       "group": "funny",
       "rarity": "common",
       "how": "Finish a lap 50% slower than your best. Enjoy the view.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapSlowerThanYourBestBy",
+        "percent": 50
+      }
     },
     {
       "id": "participation-trophy",
@@ -440,7 +475,9 @@
       "how": "Match another driver's time on the same board to the millisecond.",
       "hidden": true,
       "hint": "Hidden. Two drivers, one time.",
-      "rule": null
+      "rule": {
+        "kind": "thisLapEqualsAnotherDriversTime"
+      }
     },
     {
       "id": "wrong-way-round",
@@ -522,7 +559,11 @@
       "group": "hard",
       "rarity": "epic",
       "how": "Three laps within 0.1% of your own best time on one track.",
-      "rule": null
+      "rule": {
+        "kind": "lapsWithinPercentOfYourBest",
+        "n": 3,
+        "withinPercent": 0.1
+      }
     },
     {
       "id": "completionist",

@@ -949,9 +949,14 @@ impl BinIt {
         }
 
         // Purple / green / yellow per sector, against every other valid lap on this combo.
+        let mut purple_sector = false;
         let sector_status = if lap.valid || completed.untimed == Some(UntimedReason::Cut) {
             let others = store.valid_sectors(&combo, lap.id)?;
             let (overall, driver) = sector_bests(&others, lap.sectors_ms.len(), driver_id);
+            // For the Purple sector sticker: quicker than what other drivers have done, not just than your own laps.
+            let rivals: Vec<_> = others.iter().filter(|(who, _)| *who != driver_id).cloned().collect();
+            let (rival_best, _) = sector_bests(&rivals, lap.sectors_ms.len(), driver_id);
+            purple_sector = lap.valid && lap.sectors_ms.iter().zip(&rival_best).any(|(&t, best)| best.is_some_and(|b| t < b));
             lap.sectors_ms.iter().enumerate().map(|(i, &t)| sector_status(t, overall[i], driver[i])).collect()
         } else {
             Vec::new()
@@ -980,7 +985,7 @@ impl BinIt {
             });
         }
         let awards = match driver_id {
-            Some(id) if lap.valid => award_lap(&store, id, &lap, &combo, personal_best, combo_record, !challenges.is_empty(), now)?,
+            Some(id) if lap.valid => award_lap(&store, id, &lap, &combo, personal_best, combo_record, !challenges.is_empty(), purple_sector, now)?,
             _ => Awards::default(),
         };
         drop(store);
@@ -1399,7 +1404,7 @@ mod tests;
 
 /// Pays a driver for a valid lap: see `progress` for what each thing is worth.
 #[allow(clippy::too_many_arguments)]
-fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal_best: bool, combo_record: bool, in_challenge: bool, now: Timestamp) -> Result<Awards> {
+fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal_best: bool, combo_record: bool, in_challenge: bool, purple_sector: bool, now: Timestamp) -> Result<Awards> {
     use progress::*;
     let first_here = store.best_valid_time(combo, Some(driver), lap.id)?.is_none();
     let xp_before = store.point_totals(driver)?.0;
@@ -1426,7 +1431,7 @@ fn award_lap(store: &Store, driver: DriverId, lap: &Lap, combo: &Combo, personal
         give("record", rw.track_record.xp, rw.track_record.coins, "Track record")?;
     }
     // Stickers this lap completed, paid on top and counted towards the level below.
-    let flags = stickers::LapFlags { personal_best: personal_best && !first_here, track_record: beat_others, in_challenge };
+    let flags = stickers::LapFlags { personal_best: personal_best && !first_here, track_record: beat_others, in_challenge, purple_sector };
     let unlocked = stickers::award_lap(store, driver, lap, flags, now)?;
     for u in &unlocked {
         awards.xp += u.xp;
