@@ -584,7 +584,7 @@
       "name": "Sub eight",
       "group": "nordschleife",
       "rarity": "epic",
-      "how": "Lap the Nordschleife in under 8:00.",
+      "how": "Lap the Nordschleife in under 8:00. Open-wheel and prototype cars do not count.",
       "rule": {
         "kind": "thisLapFasterThan",
         "ms": 480000,
@@ -596,6 +596,14 @@
           {
             "track": "ks_nordschleife"
           }
+        ],
+        "exceptCarClasses": [
+          "Open wheel",
+          "Formula",
+          "LMP1",
+          "LMP2",
+          "Prototype",
+          "Hypercar"
         ]
       }
     },
@@ -604,7 +612,7 @@
       "name": "Sub seven",
       "group": "nordschleife",
       "rarity": "legendary",
-      "how": "Lap the Nordschleife in under 7:00.",
+      "how": "Lap the Nordschleife in under 7:00. Open-wheel and prototype cars do not count.",
       "reward": {
         "xp": 500,
         "coins": 750
@@ -620,6 +628,14 @@
           {
             "track": "ks_nordschleife"
           }
+        ],
+        "exceptCarClasses": [
+          "Open wheel",
+          "Formula",
+          "LMP1",
+          "LMP2",
+          "Prototype",
+          "Hypercar"
         ]
       }
     },

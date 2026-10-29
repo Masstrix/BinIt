@@ -62,7 +62,7 @@ A sticker with a `reward` overrides any part of that. Leave a field out to keep 
 | `thisLapTimeEndsIn` | this lap's time ends in these milliseconds | `ms` |
 | `thisLapTimeIsPalindrome` | this lap's time reads the same backwards (1:42.241) | none |
 | `timedLapsOnTrack` | `n` timed laps on one of these tracks | `n`, `on` |
-| `thisLapFasterThan` | this lap was quicker than `ms`, on one of these tracks (`on` empty = any track) | `ms`, `on` |
+| `thisLapFasterThan` | this lap was quicker than `ms`, on one of these tracks (`on` empty = any track), in an allowed car | `ms`, `on`, optional `exceptCarClasses`, optional `onlyCarClasses` |
 | `thisLapTimeEndsInSecondsAndMs` | this lap's time ends in these seconds and milliseconds (7:20.832 is 20 and 832), on these tracks | `seconds`, `ms`, `on` |
 | `allOtherStickers` | every other sticker is earned | none |
 
@@ -70,6 +70,12 @@ A sticker with a `reward` overrides any part of that. Leave a field out to keep 
 case and punctuation do not matter, but list every name each game uses for the circuit: Assetto Corsa EVO stores the
 Nordschleife as `Nurburgring` / `Touristenfahrten`, Assetto Corsa as `ks_nordschleife`. A different layout of the same
 track (the Nurburgring GP circuit) does not match.
+
+`exceptCarClasses` stops cars that are far quicker than the sticker is about from earning it: Sub eight and Sub seven rule
+out `Open wheel`, `Formula`, `LMP1`, `LMP2`, `Prototype` and `Hypercar`, so a Formula 1 car cannot take them. Classes are the
+ones in the game's catalogue (`crates/tt-games/src/*/catalogue.json`), matched loosely and found by the car's name or any
+alias. `onlyCarClasses` is the opposite, an allow-list; it also rules out any car the catalogue has no class for. A car
+with no class is allowed by `exceptCarClasses`, so an unlisted mod car can still earn it.
 
 Kinds starting `thisLap` are about the lap that was just recorded, so they can only be earned live, never from history.
 

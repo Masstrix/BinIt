@@ -9,7 +9,7 @@
 //! never taken away and never pays twice. Everything is decided server side when a lap is recorded.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Mutex};
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -51,8 +51,18 @@ pub enum Rule {
     ThisLapTimeIsPalindrome,
     /// `n` timed laps on one of these tracks.
     TimedLapsOnTrack { n: u32, on: Vec<TrackRef> },
-    /// This lap was quicker than `ms`, on one of these tracks (empty = any track).
-    ThisLapFasterThan { ms: u32, on: Vec<TrackRef> },
+    /// This lap was quicker than `ms`, on one of these tracks (empty = any track), in a car that is allowed.
+    /// `except_car_classes` rules cars out by class (open-wheel cars, say) so a car far quicker than the sticker is
+    /// about cannot earn it. `only_car_classes`, when not empty, rules out every class not listed, including cars the
+    /// catalogue has no class for. Classes are the catalogue's (`Road`, `GT3`, `Open wheel`, `Formula`, `LMP1`...).
+    ThisLapFasterThan {
+        ms: u32,
+        on: Vec<TrackRef>,
+        #[serde(default)]
+        except_car_classes: Vec<String>,
+        #[serde(default)]
+        only_car_classes: Vec<String>,
+    },
     /// This lap's time ends in these seconds and milliseconds, on one of these tracks (7:20.832 ends in 20 s 832 ms).
     ThisLapTimeEndsInSecondsAndMs { seconds: u32, ms: u32, on: Vec<TrackRef> },
     /// Every other sticker in the book.
@@ -71,6 +81,30 @@ pub struct TrackRef {
 
 fn squash(s: &str) -> String {
     s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
+}
+
+/// The class of a car (`GT3`, `Open wheel`...) from the game's bundled catalogue, by its name or any alias.
+fn car_class(game: &str, car: &str) -> Option<String> {
+    static SEEDS: LazyLock<Mutex<HashMap<String, std::sync::Arc<crate::catalogue::Seed>>>> = LazyLock::new(Default::default);
+    let seed = {
+        let mut cache = SEEDS.lock().ok()?;
+        cache.entry(game.to_string()).or_insert_with(|| std::sync::Arc::new(crate::catalogue::bundled(game))).clone()
+    };
+    let wanted = crate::catalogue::norm(car);
+    seed.cars
+        .iter()
+        .find(|c| crate::catalogue::norm(&c.name) == wanted || c.aliases.iter().any(|a| crate::catalogue::norm(a) == wanted))
+        .and_then(|c| c.class.clone())
+}
+
+/// Whether a lap's car may earn a sticker that rules some classes out (see `Rule::ThisLapFasterThan`).
+fn car_allowed(lap: &Lap, only: &[String], except: &[String]) -> bool {
+    if only.is_empty() && except.is_empty() {
+        return true;
+    }
+    let class = car_class(&lap.combo.game, &lap.combo.car);
+    let is = |list: &[String]| class.as_deref().is_some_and(|c| list.iter().any(|x| crate::catalogue::norm(x) == crate::catalogue::norm(c)));
+    (only.is_empty() || is(only)) && !is(except)
 }
 
 /// Whether a lap was driven on one of these tracks (and layouts). An empty list matches every track.
@@ -243,7 +277,9 @@ fn measure(rule: &Rule, c: &Ctx) -> (u32, u32) {
         Rule::ThisLapTimeEndsIn { ms } => (on_lap(&|l| l.time_ms % 1000 == *ms), 1),
         Rule::ThisLapTimeIsPalindrome => (on_lap(&|l| is_palindrome(l.time_ms)), 1),
         Rule::TimedLapsOnTrack { n, on } => (timed().filter(|l| on_track(l, on)).count() as u32, *n),
-        Rule::ThisLapFasterThan { ms, on } => (on_lap(&|l| l.time_ms < *ms && on_track(l, on)), 1),
+        Rule::ThisLapFasterThan { ms, on, except_car_classes, only_car_classes } => {
+            (on_lap(&|l| l.time_ms < *ms && on_track(l, on) && car_allowed(l, only_car_classes, except_car_classes)), 1)
+        }
         Rule::ThisLapTimeEndsInSecondsAndMs { seconds, ms, on } => (on_lap(&|l| l.time_ms % 60_000 == seconds * 1000 + ms && on_track(l, on)), 1),
         Rule::AllOtherStickers => (c.others_earned, c.others_total),
     }

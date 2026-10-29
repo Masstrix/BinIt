@@ -1642,3 +1642,19 @@ fn a_lap_time_that_ends_in_the_rings_length_is_a_hidden_egg_and_ten_laps_make_a_
     let ids = sticker_ids(&egg);
     assert!(ids.contains(&"ring-20-832") && ids.contains(&"ring-regular"), "{ids:?}");
 }
+
+#[test]
+fn an_open_wheel_car_cannot_earn_the_nordschleife_time_stickers() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    let mut f1 = ring_lap("Nurburgring", Some("Touristenfahrten"), 330_000);
+    f1.session.car = "Ferrari F2004".into();
+    let ids = sticker_ids(&tt.record_lap(&f1).unwrap().awards).into_iter().map(String::from).collect::<Vec<_>>();
+    // It still counts as a lap on the Ring, just not as a sub-eight or sub-seven.
+    assert!(ids.contains(&"ring-green-hell".to_string()), "{ids:?}");
+    assert!(!ids.contains(&"ring-sub-eight".to_string()) && !ids.contains(&"ring-sub-seven".to_string()), "{ids:?}");
+    // The same time in a GT3 car does earn them.
+    let gt3 = tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 330_000)).unwrap().awards;
+    let ids = sticker_ids(&gt3);
+    assert!(ids.contains(&"ring-sub-eight") && ids.contains(&"ring-sub-seven"), "{ids:?}");
+}
