@@ -613,12 +613,16 @@ h2 { font-size: 22px; line-height: 1.2; }
 
 /* Phones (office network page): a banner on top, four tabs along the bottom in thumb reach, normal page scrolling. */
 @media (max-width: 640px) {
+  /* Nothing may be wider than the screen: a page that is, makes phones shift where fixed things (the tab bar) sit. */
+  html, body { overflow-x: clip; }
   .shell { display: block; height: auto; padding: 0; }
   .main-col { display: block; }
   .titlebar, .sidebar-head, .sidebar-fill, .seat-card, .nav, .lan-box, .sidebar > .update-pill { display: none; }
   .sidebar {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; margin: 0; border-radius: 0; border-right: 0; border-top: 1px solid var(--line);
     display: block; overflow: visible; padding: 6px 4px calc(10px + env(safe-area-inset-bottom));
+    /* Its own layer, so it is pinned to the screen while the page scrolls under it. */
+    transform: translateZ(0);
   }
   .tabbar { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .tabbar a { min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 500; }
