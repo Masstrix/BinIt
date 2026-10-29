@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { api, isTauri, useAppState, useFetch } from "./api";
 import { GameIcon } from "./components/GameIcon";
 import { readStored, usePersistedState, writeStored } from "./persist";
@@ -73,11 +74,39 @@ function PhoneSwitch({ path }: { path: string }) {
   );
 }
 
+/** How deep a page sits: the Shop and Customize open from the profile, so they are one step further in than it. */
+function pageDepth(path: string): number {
+  const base = path.split("/").filter(Boolean).length;
+  return base + (path.startsWith("/shop") || path.startsWith("/customize") ? 1 : 0);
+}
+
+type ViewTransitionDocument = Document & { startViewTransition?: (update: () => void) => { ready: Promise<unknown>; finished: Promise<unknown> } };
+
 function useHashPath() {
   const read = () => location.hash.replace(/^#/, "") || "/";
   const [path, setPath] = useState(read);
+  const current = useRef(path);
   useEffect(() => {
-    const onChange = () => setPath(read());
+    const onChange = () => {
+      const next = read();
+      const from = current.current;
+      current.current = next;
+      const doc = document as ViewTransitionDocument;
+      const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!doc.startViewTransition || calm || next === from) {
+        setPath(next);
+        return;
+      }
+      // The page area slides in from the right going deeper, from the left coming back, and rises in between sections
+      // (see `::view-transition-*(page)` in styles.css). Browsers without view transitions just change page.
+      const [a, b] = [pageDepth(from), pageDepth(next)];
+      const root = document.documentElement;
+      root.dataset.nav = b > a ? "forward" : b < a ? "back" : "across";
+      const t = doc.startViewTransition(() => flushSync(() => setPath(next)));
+      // A newer navigation skips this one mid-flight; that rejection is expected.
+      t.ready.catch(() => {});
+      t.finished.catch(() => {}).finally(() => delete root.dataset.nav);
+    };
     window.addEventListener("hashchange", onChange);
     return () => window.removeEventListener("hashchange", onChange);
   }, []);
