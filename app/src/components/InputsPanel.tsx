@@ -2,6 +2,7 @@ import { useRef } from "react";
 import type { LiveInputs } from "../api";
 import { useAppState } from "../api";
 import { ElectronicsGauges } from "./ElectronicsGauges";
+import { useSmoothLive } from "../smooth";
 
 const WINDOW_MS = 10_000;
 const THROTTLE = "#4fd39a";
@@ -35,9 +36,11 @@ export function gearLabel(gear: number): string {
 /** Gear, speed, pedals, steering and a rolling trace of the last 10 seconds. */
 export function InputsPanel() {
   const { status } = useAppState();
-  const live = status?.live ?? null;
+  // The history keeps the readings as they arrive; what is shown (needles, bars, the scrolling trace) is glided between them.
+  const rawLive = status?.live ?? null;
+  const history = useInputHistory(rawLive?.inputs, rawLive);
+  const live = useSmoothLive();
   const inputs = live?.inputs ?? null;
-  const history = useInputHistory(inputs, live);
   const now = Date.now();
 
   const x = (t: number) => ((t - (now - WINDOW_MS)) / WINDOW_MS) * 300;

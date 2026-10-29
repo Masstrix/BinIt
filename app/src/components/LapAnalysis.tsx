@@ -171,9 +171,16 @@ function lookup(pts: Pt[], key: "p" | "t", x: number, val: (q: Pt) => number): n
   return val(a) + (val(b) - val(a)) * f;
 }
 
-/** The sample nearest to a point on the lap. */
-function nearest(pts: Pt[], p: number): Pt | null {
+/**
+ * The readings at a point of the lap, glided between the two samples either side of it. The trace holds one sample
+ * every 50 ms, so reading the nearest one makes dials and numbers step 20 times a second while a replay plays at 60.
+ * Numbers are blended; things that are not (the gear, the aids, the limiter) come from the nearer sample.
+ */
+function sampleAt(pts: Pt[], p: number): Pt | null {
   if (pts.length === 0) return null;
+  if (p <= pts[0].p) return pts[0];
+  const last = pts[pts.length - 1];
+  if (p >= last.p) return last;
   let lo = 0;
   let hi = pts.length - 1;
   while (hi - lo > 1) {
@@ -181,7 +188,25 @@ function nearest(pts: Pt[], p: number): Pt | null {
     if (pts[mid].p <= p) lo = mid;
     else hi = mid;
   }
-  return Math.abs(pts[lo].p - p) <= Math.abs(pts[hi].p - p) ? pts[lo] : pts[hi];
+  const a = pts[lo];
+  const b = pts[hi];
+  const f = b.p === a.p ? 0 : (p - a.p) / (b.p - a.p);
+  const near = f < 0.5 ? a : b;
+  const mixN = (x: number, y: number) => x + (y - x) * f;
+  const mixO = (x: number | null, y: number | null) => (x !== null && y !== null ? mixN(x, y) : near === a ? x : y);
+  return {
+    ...near,
+    p,
+    t: mixN(a.t, b.t),
+    speed: mixN(a.speed, b.speed),
+    throttle: mixN(a.throttle, b.throttle),
+    brake: mixN(a.brake, b.brake),
+    steer: mixN(a.steer, b.steer),
+    x: mixO(a.x, b.x),
+    z: mixO(a.z, b.z),
+    slip: mixO(a.slip, b.slip),
+    boost: mixO(a.boost, b.boost),
+  };
 }
 
 const W = 1000;
@@ -810,9 +835,9 @@ function Traces({
   }, [a, lapA.sectorsMs]);
   const sectors: Span[] = [0, ...sectorMarks].map((lo, i) => ({ lo, hi: sectorMarks[i] ?? 1 }));
 
-  const atA = shown !== null ? nearest(a, shown) : null;
+  const atA = shown !== null ? sampleAt(a, shown) : null;
   // Lap B at the same point of the lap (the charts compare the same corner).
-  const atB = shown !== null && hasB ? nearest(b, shown) : null;
+  const atB = shown !== null && hasB ? sampleAt(b, shown) : null;
   const atDelta = shown !== null && delta.length ? lookup(delta as unknown as Pt[], "p", shown, (q) => q.t) : null;
   // The electronics at the reading point, or as the lap started when nothing is being read, so the panels don't come and go.
   const hasAids = a.some((q) => q.tc !== null) || b.some((q) => q.tc !== null);
