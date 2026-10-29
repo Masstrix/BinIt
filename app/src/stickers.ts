@@ -69,6 +69,11 @@ export const STICKER_ICON: Record<string, string> = {
   untouchable: "M5 21V10a7 7 0 0 1 14 0v11l-3-2-2 2-2-2-2 2-2-2zM9.5 10h.01M14.5 10h.01",
   perfectionist: "M12 3l9 9-9 9-9-9z",
   completionist: STAR,
+  "ring-green-hell": "M12 21v-6M12 15c-4 0-6-3-6-6 0-2 1-4 3-5 1-2 5-2 6 0 2 1 3 3 3 5 0 3-2 6-6 6z",
+  "ring-regular": "M4 12a8 8 0 1 1 3 6.2M4 19v-4h4",
+  "ring-sub-eight": "M12 8v5l3 2M9 2h6M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16z",
+  "ring-sub-seven": "M13 2L5 14h6l-1 8 8-12h-6z",
+  "ring-20-832": "M3 8h18v8H3zM7 8v4M11 8v3M15 8v4M19 8v3",
 };
 const LOCK = "M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5zM12 15v2";
 

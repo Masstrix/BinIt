@@ -1599,3 +1599,46 @@ fn a_driver_shows_up_to_three_earned_stickers_on_their_profile() {
     assert_eq!(tt.sticker_book(sam.id).unwrap().pinned, vec!["personal-best", "first-lap"]);
     assert!(tt.pin_stickers(sam.id, &[]).unwrap().pinned.is_empty());
 }
+
+fn ring_lap(track: &str, layout: Option<&str>, time_ms: u32) -> CompletedLap {
+    let mut l = lap(time_ms, true);
+    l.session.track = track.into();
+    l.session.layout = layout.map(Into::into);
+    l
+}
+
+#[test]
+fn the_nordschleife_stickers_count_only_on_the_nordschleife_in_either_game() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    // A quick lap somewhere else is just a lap.
+    assert!(!sticker_ids(&tt.record_lap(&lap(400_000, true)).unwrap().awards).iter().any(|id| id.starts_with("ring-")));
+    // The GP circuit at the same Nurburgring is not the Nordschleife.
+    assert!(!sticker_ids(&tt.record_lap(&ring_lap("ks_nurburgring", Some("layout_gp_a"), 400_000)).unwrap().awards).iter().any(|id| id.starts_with("ring-")));
+
+    // Assetto Corsa EVO: Nurburgring, Touristenfahrten. Sub-eight but not sub-seven.
+    let evo = tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 470_000)).unwrap().awards;
+    let ids = sticker_ids(&evo);
+    assert!(ids.contains(&"ring-green-hell") && ids.contains(&"ring-sub-eight") && !ids.contains(&"ring-sub-seven"), "{ids:?}");
+    // Assetto Corsa: ks_nordschleife, any layout. Sub-seven, paid with its own reward.
+    let ac = tt.record_lap(&ring_lap("ks_nordschleife", Some("nordschleife"), 419_000)).unwrap().awards;
+    let seven = ac.stickers.iter().find(|s| s.id == "ring-sub-seven").expect("sub seven");
+    assert_eq!((seven.xp, seven.coins), (500, 750));
+    assert!(!sticker_ids(&ac).contains(&"ring-sub-eight"), "already earned");
+}
+
+#[test]
+fn a_lap_time_that_ends_in_the_rings_length_is_a_hidden_egg_and_ten_laps_make_a_regular() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+    let hidden = tt.sticker_book(sam.id).unwrap().stickers.into_iter().find(|s| s.id == "ring-20-832").unwrap();
+    assert_eq!((hidden.name.as_str(), hidden.earned), ("Hidden sticker", false));
+    // 7:20.832 on the Nordschleife; the same time elsewhere does nothing.
+    assert!(!sticker_ids(&tt.record_lap(&lap(440_832, true)).unwrap().awards).contains(&"ring-20-832"));
+    for i in 0..9 {
+        tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 600_000 + i)).unwrap();
+    }
+    let egg = tt.record_lap(&ring_lap("Nurburgring", Some("Touristenfahrten"), 440_832)).unwrap().awards;
+    let ids = sticker_ids(&egg);
+    assert!(ids.contains(&"ring-20-832") && ids.contains(&"ring-regular"), "{ids:?}");
+}

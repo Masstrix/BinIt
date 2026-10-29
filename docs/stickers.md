@@ -1,7 +1,7 @@
 # Achievement stickers
 
 Stickers are the app's achievements: things a driver earns by driving, each with a name, a one-line rule, a rarity and a
-reward. The designs are on the Achievements page of the design canvas ("Stickers: how they work" and "all 49").
+reward. The designs are on the Achievements page of the design canvas ("Stickers: how they work" and "all 54").
 This file is how to set them up and what is built.
 
 Everything about a sticker is data in [`crates/tt-core/stickers.json`](../crates/tt-core/stickers.json). Edit, rebuild,
@@ -61,7 +61,15 @@ A sticker with a `reward` overrides any part of that. Leave a field out to keep 
 | `thisLapInChallenge` | this lap counted in a running challenge | none |
 | `thisLapTimeEndsIn` | this lap's time ends in these milliseconds | `ms` |
 | `thisLapTimeIsPalindrome` | this lap's time reads the same backwards (1:42.241) | none |
+| `timedLapsOnTrack` | `n` timed laps on one of these tracks | `n`, `on` |
+| `thisLapFasterThan` | this lap was quicker than `ms`, on one of these tracks (`on` empty = any track) | `ms`, `on` |
+| `thisLapTimeEndsInSecondsAndMs` | this lap's time ends in these seconds and milliseconds (7:20.832 is 20 and 832), on these tracks | `seconds`, `ms`, `on` |
 | `allOtherStickers` | every other sticker is earned | none |
+
+`on` is a list of tracks, each `{ "track": "Nurburgring", "layout": "Touristenfahrten" }` (`layout` is optional). Spelling,
+case and punctuation do not matter, but list every name each game uses for the circuit: Assetto Corsa EVO stores the
+Nordschleife as `Nurburgring` / `Touristenfahrten`, Assetto Corsa as `ks_nordschleife`. A different layout of the same
+track (the Nurburgring GP circuit) does not match.
 
 Kinds starting `thisLap` are about the lap that was just recorded, so they can only be earned live, never from history.
 
@@ -90,9 +98,9 @@ hidden sticker with no hint, and a reward item that is not in the shop all fail 
 
 ## What can be detected today, and what cannot
 
-Of the 49 designed stickers, 20 have a rule today (first lap, ten laps, century, local, personal best, entered, crown,
+Of the 54 designed stickers, 25 have a rule today (first lap, ten laps, century, local, personal best, entered, crown,
 five clean, smooth operator, tourist, world tour, garage queen, switch hitter, streak, lucky seven, mirror lap,
-slow and steady, marathon, untouchable, completionist). The rest are in the file with `"rule": null`, and need:
+slow and steady, marathon, untouchable, completionist, and the five Nordschleife ones). The rest are in the file with `"rule": null`, and need:
 
 * **A time zone.** Lunch break, Early bird, Night owl and Friday feeling depend on the local time of day. Laps are
   stored in UTC milliseconds and the app has no time-zone setting yet.

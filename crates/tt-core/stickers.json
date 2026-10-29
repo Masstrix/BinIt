@@ -63,6 +63,11 @@
       "id": "hard",
       "name": "The hard ones",
       "blurb": "Long-haul stickers. Most drivers will never see these."
+    },
+    {
+      "id": "nordschleife",
+      "name": "The Green Hell",
+      "blurb": "For people who know the Nordschleife. Counts only on the Nordschleife: the Nürburgring in Assetto Corsa EVO, and Nordschleife in Assetto Corsa."
     }
   ],
   "stickers": [
@@ -532,6 +537,113 @@
       },
       "rule": {
         "kind": "allOtherStickers"
+      }
+    },
+    {
+      "id": "ring-green-hell",
+      "name": "Green Hell",
+      "group": "nordschleife",
+      "rarity": "rare",
+      "how": "Finish a timed lap of the Nordschleife.",
+      "rule": {
+        "kind": "timedLapsOnTrack",
+        "n": 1,
+        "on": [
+          {
+            "track": "Nurburgring",
+            "layout": "Touristenfahrten"
+          },
+          {
+            "track": "ks_nordschleife"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ring-regular",
+      "name": "Ring regular",
+      "group": "nordschleife",
+      "rarity": "rare",
+      "how": "Ten timed laps of the Nordschleife.",
+      "rule": {
+        "kind": "timedLapsOnTrack",
+        "n": 10,
+        "on": [
+          {
+            "track": "Nurburgring",
+            "layout": "Touristenfahrten"
+          },
+          {
+            "track": "ks_nordschleife"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ring-sub-eight",
+      "name": "Sub eight",
+      "group": "nordschleife",
+      "rarity": "epic",
+      "how": "Lap the Nordschleife in under 8:00.",
+      "rule": {
+        "kind": "thisLapFasterThan",
+        "ms": 480000,
+        "on": [
+          {
+            "track": "Nurburgring",
+            "layout": "Touristenfahrten"
+          },
+          {
+            "track": "ks_nordschleife"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ring-sub-seven",
+      "name": "Sub seven",
+      "group": "nordschleife",
+      "rarity": "legendary",
+      "how": "Lap the Nordschleife in under 7:00.",
+      "reward": {
+        "xp": 500,
+        "coins": 750
+      },
+      "rule": {
+        "kind": "thisLapFasterThan",
+        "ms": 420000,
+        "on": [
+          {
+            "track": "Nurburgring",
+            "layout": "Touristenfahrten"
+          },
+          {
+            "track": "ks_nordschleife"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ring-20-832",
+      "name": "20.832",
+      "group": "nordschleife",
+      "rarity": "epic",
+      "how": "A Nordschleife lap time that ends in :20.832, like 7:20.832. The circuit is 20.832 km long.",
+      "hidden": true,
+      "hint": "Hidden. How long the Ring is, on the stopwatch.",
+      "rule": {
+        "kind": "thisLapTimeEndsInSecondsAndMs",
+        "seconds": 20,
+        "ms": 832,
+        "on": [
+          {
+            "track": "Nurburgring",
+            "layout": "Touristenfahrten"
+          },
+          {
+            "track": "ks_nordschleife"
+          }
+        ]
       }
     }
   ]

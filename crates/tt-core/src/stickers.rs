@@ -49,8 +49,34 @@ pub enum Rule {
     ThisLapTimeEndsIn { ms: u32 },
     /// This lap's time reads the same backwards (1:42.241).
     ThisLapTimeIsPalindrome,
+    /// `n` timed laps on one of these tracks.
+    TimedLapsOnTrack { n: u32, on: Vec<TrackRef> },
+    /// This lap was quicker than `ms`, on one of these tracks (empty = any track).
+    ThisLapFasterThan { ms: u32, on: Vec<TrackRef> },
+    /// This lap's time ends in these seconds and milliseconds, on one of these tracks (7:20.832 ends in 20 s 832 ms).
+    ThisLapTimeEndsInSecondsAndMs { seconds: u32, ms: u32, on: Vec<TrackRef> },
     /// Every other sticker in the book.
     AllOtherStickers,
+}
+
+/// A track, by the name the app stores laps under, and optionally one layout of it. Spelling, case and punctuation do
+/// not matter (`Nurburgring`, `ks_nordschleife`). List every name a game uses for the same circuit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackRef {
+    pub track: String,
+    #[serde(default)]
+    pub layout: Option<String>,
+}
+
+fn squash(s: &str) -> String {
+    s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
+}
+
+/// Whether a lap was driven on one of these tracks (and layouts). An empty list matches every track.
+fn on_track(lap: &Lap, on: &[TrackRef]) -> bool {
+    on.is_empty()
+        || on.iter().any(|t| squash(&t.track) == squash(&lap.combo.track) && t.layout.as_deref().is_none_or(|l| squash(l) == squash(&lap.combo.layout)))
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -216,6 +242,9 @@ fn measure(rule: &Rule, c: &Ctx) -> (u32, u32) {
         Rule::ThisLapInChallenge => (u32::from(c.lap.is_some() && c.flags.in_challenge), 1),
         Rule::ThisLapTimeEndsIn { ms } => (on_lap(&|l| l.time_ms % 1000 == *ms), 1),
         Rule::ThisLapTimeIsPalindrome => (on_lap(&|l| is_palindrome(l.time_ms)), 1),
+        Rule::TimedLapsOnTrack { n, on } => (timed().filter(|l| on_track(l, on)).count() as u32, *n),
+        Rule::ThisLapFasterThan { ms, on } => (on_lap(&|l| l.time_ms < *ms && on_track(l, on)), 1),
+        Rule::ThisLapTimeEndsInSecondsAndMs { seconds, ms, on } => (on_lap(&|l| l.time_ms % 60_000 == seconds * 1000 + ms && on_track(l, on)), 1),
         Rule::AllOtherStickers => (c.others_earned, c.others_total),
     }
 }
@@ -300,7 +329,7 @@ pub fn book(store: &Store, driver: DriverId, now: Timestamp) -> Result<StickerBo
             let at = earned.get(&s.id).copied();
             let shown = at.is_some() || !s.hidden;
             let pay = cat.pay(s);
-            let one_off = matches!(s.rule, Some(Rule::ThisLapIsPersonalBest | Rule::ThisLapIsTrackRecord | Rule::ThisLapInChallenge | Rule::ThisLapTimeEndsIn { .. } | Rule::ThisLapTimeIsPalindrome));
+            let one_off = matches!(s.rule, Some(Rule::ThisLapIsPersonalBest | Rule::ThisLapIsTrackRecord | Rule::ThisLapInChallenge | Rule::ThisLapTimeEndsIn { .. } | Rule::ThisLapTimeIsPalindrome | Rule::ThisLapFasterThan { .. } | Rule::ThisLapTimeEndsInSecondsAndMs { .. }));
             let progress = match &s.rule {
                 Some(rule) if at.is_none() && !one_off && shown => {
                     let (cur, max) = measure(rule, &ctx);
