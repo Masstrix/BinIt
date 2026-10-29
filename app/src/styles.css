@@ -1580,3 +1580,66 @@ a.garage-coins { text-decoration: none; }
   .burst { display: none; }
   .burst-wrap[data-pop] > :first-child, .sheet-won, .btn[data-nudge] { animation: none; }
 }
+
+/* ---- achievement stickers (profile section and the sticker book) ----------------------------------------------- */
+.stk-tile { --s: 64px; width: var(--s); height: var(--s); flex: none; box-sizing: border-box; border-radius: calc(var(--s) * 0.3); display: grid; place-items: center; background: var(--panel-2); border: 2px solid #2a3242; color: #5a6178; }
+.stk-tile[data-state="earned"] { background: linear-gradient(150deg, var(--a), var(--b)); border-color: rgba(255, 255, 255, 0.25); color: #0e1117; }
+.stk-tile[data-state="hidden"] { border: 2px dashed #5a5fa8; color: var(--violet); }
+.stk-rarity { display: inline-flex; align-items: center; gap: 8px; font: 600 11px var(--font-mono); letter-spacing: 0.06em; }
+.stk-pips { display: inline-flex; gap: 3px; }
+.stk-pips i { width: 10px; height: 4px; border-radius: 2px; }
+.stk-link { font-weight: 600; font-size: 14px; color: var(--peri-1); text-decoration: none; }
+.stk-summary { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 22px; background: var(--panel); }
+.stk-count { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font: 800 22px var(--font-display); letter-spacing: -0.02em; }
+.stk-count > span:first-child { white-space: nowrap; flex: none; }
+.stk-count > .mono { text-align: right; }
+.stk-count small { color: var(--muted); font-weight: 600; font-size: 15px; }
+.stk-block { display: flex; flex-direction: column; gap: 8px; }
+.stk-label { font: 600 12px var(--font-mono); letter-spacing: 0.08em; color: var(--muted); }
+.stk-pinned { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.stk-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 6px 12px; border-radius: 24px; background: var(--panel); border-top: 3px solid var(--line); text-align: center; text-decoration: none; color: var(--text); }
+.stk-card:hover { background: var(--panel-2); color: var(--text); }
+.stk-card-name { font-size: 13px; font-weight: 700; line-height: 1.25; }
+.stk-latest { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.stk-mini { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; text-decoration: none; color: var(--text); }
+.stk-mini:hover { color: var(--text); }
+.stk-mini-name { font-size: 12px; font-weight: 600; line-height: 1.25; }
+.stk-mini-sub { font: 500 11px var(--font-mono); color: var(--muted); }
+.stk-close { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; border-radius: 22px; background: var(--panel); }
+.stk-close-row { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
+.stk-close-row:hover { color: var(--text); }
+.stk-close-row .grow { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.stk-close-top { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; }
+.stk-close-top .mono { font-size: 12px; color: #8cc4ff; }
+.stk-open { display: flex; align-items: center; justify-content: center; min-height: 52px; border-radius: 18px; background: var(--tint); color: var(--peri-1); font: 700 16px var(--font-body); text-decoration: none; }
+.stk-open:hover { filter: brightness(1.1); color: var(--peri-1); }
+.you-bar.sm { height: 6px; display: block; }
+.you-bar.sm > span { display: block; height: 100%; border-radius: inherit; }
+.stk-head { display: flex; flex-direction: column; gap: 14px; }
+.stk-head h1 { margin: 0; }
+.stk-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.stk-filters > * { min-width: 0; }
+.stk-filters .dropdown.pill .dropdown-trigger { width: 100%; max-width: none; min-height: 48px; border-radius: 24px; justify-content: space-between; }
+.stk-group { display: flex; flex-direction: column; gap: 10px; }
+.stk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
+.stk-cell { position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 132px; padding: 12px 6px 10px; border: none; border-radius: 22px; background: var(--panel); color: var(--text); font-family: inherit; cursor: pointer; }
+.stk-cell:hover { background: var(--panel-2); }
+.stk-cell-name { font-size: 12.5px; font-weight: 600; line-height: 1.25; text-align: center; }
+.stk-cell[data-state="locked"] .stk-cell-name, .stk-cell[data-state="hidden"] .stk-cell-name { color: var(--muted); }
+.stk-cell .you-bar.sm { width: 70%; }
+.stk-cell-sub { font: 500 11px var(--font-mono); color: var(--muted); }
+.stk-pin { position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 999px; background: var(--tint); color: var(--peri-1); font-size: 11px; }
+.stk-sheet { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; border-top: 4px solid var(--line); padding-top: 16px; }
+.stk-sheet-how { margin: 0; max-width: 320px; font-size: 15px; line-height: 1.5; color: var(--text-2); }
+.stk-sheet-progress { width: 100%; }
+.stk-sheet-status { font: 600 13px var(--font-mono); letter-spacing: 0.04em; color: var(--muted); }
+.stk-sheet-status[data-state="earned"] { color: #5fe3b0; }
+.stk-sheet-status[data-state="progress"] { color: #8cc4ff; }
+.stk-sheet-status[data-state="hidden"] { color: var(--peri-1); }
+.stk-rewards { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.stk-reward { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--panel-2); font: 600 14px var(--font-mono); color: var(--peri-1); }
+.stk-reward.gold { color: var(--gold); }
+.stk-reward.item { background: var(--tint); font-family: var(--font-body); }
+.stk-sheet .btn { align-self: stretch; }
+.stk-sheet .btn[data-off] { background: var(--panel-3); color: var(--text); }
+.stk-sheet .btn:disabled { opacity: 0.6; }

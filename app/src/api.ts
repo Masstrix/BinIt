@@ -381,6 +381,56 @@ export interface Awards {
   /** The new level, when this lap crossed one. */
   levelUp: number | null;
   reasons: string[];
+  /** Achievement stickers this lap unlocked (their XP and coins are already in the totals above). */
+  stickers?: StickerUnlock[];
+}
+
+/** An achievement sticker a lap just unlocked. */
+export interface StickerUnlock {
+  id: string;
+  name: string;
+  rarity: StickerRarity;
+  xp: number;
+  coins: number;
+  /** A free shop item it also gave, e.g. `decal:crown`. */
+  item: string | null;
+}
+
+export type StickerRarity = "common" | "rare" | "epic" | "legendary";
+
+/** One achievement sticker in a driver's book. A hidden one that is not earned has no name, only a hint in `how`. */
+export interface BookSticker {
+  id: string;
+  name: string;
+  group: string;
+  rarity: StickerRarity;
+  how: string;
+  hidden: boolean;
+  earned: boolean;
+  earnedAt: number | null;
+  /** How far along a counting sticker is. Absent for one-off moments and for stickers that cannot be detected yet. */
+  progress: { cur: number; max: number } | null;
+  xp: number;
+  coins: number;
+  item: string | null;
+  /** False while the sticker is designed but nothing can unlock it yet. */
+  detectable: boolean;
+}
+
+export interface StickerGroup {
+  id: string;
+  name: string;
+  blurb: string;
+}
+
+/** Every achievement sticker for one driver (crates/tt-core/stickers.json). */
+export interface StickerBook {
+  groups: StickerGroup[];
+  stickers: BookSticker[];
+  earned: number;
+  total: number;
+  /** Ids the driver shows on their profile, in order. Empty until they choose. */
+  pinned: string[];
 }
 
 export interface LapResult {
@@ -566,6 +616,9 @@ export const api = {
   updateDriver: (id: DriverId, name: string, color: string) =>
     request<Driver>("PUT", `/drivers/${id}`, { name, color }),
   profile: (id: DriverId) => request<Profile>("GET", `/drivers/${id}/profile`),
+  stickerBook: (id: DriverId) => request<StickerBook>("GET", `/drivers/${id}/stickers`),
+  /** Chooses the (up to three) earned stickers shown on a driver's profile. */
+  pinStickers: (id: DriverId, ids: string[]) => request<StickerBook>("PUT", `/drivers/${id}/stickers/pinned`, { ids }),
   rewards: () => request<Rewards>("GET", "/rewards"),
   shop: (id: DriverId) => request<ShopState>("GET", `/drivers/${id}/shop`),
   buy: (id: DriverId, slot: string, item: string) => request<ShopState>("POST", `/drivers/${id}/shop/buy`, { slot, id: item }),

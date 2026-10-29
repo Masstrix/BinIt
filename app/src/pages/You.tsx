@@ -8,12 +8,14 @@ import { GameIcon } from "../components/GameIcon";
 import { Modal } from "../components/Modal";
 import { useSeatSwitcher } from "../components/SeatSwitcher";
 import { PhonesDialog } from "./Drivers";
+import { StickerHighlights } from "./Stickers";
 
 /** Why a ledger row paid out, in words. */
 const KIND: Record<string, string> = { lap: "Clean lap", first: "First lap here", pb: "Personal best", record: "Track record" };
 
 /** Ledger rows for a purchase carry the item: `buy:shell:aurora`. */
 function kindLabel(kind: string) {
+  if (kind.startsWith("sticker:")) return "Sticker unlocked";
   if (kind.startsWith("buy:")) return `Bought ${kind.split(":")[2] ?? "an item"}`;
   if (kind.startsWith("challenge:")) {
     // challenge:<place>:<name> or challenge:entry:<name>
@@ -23,17 +25,6 @@ function kindLabel(kind: string) {
   }
   return KIND[kind] ?? kind;
 }
-
-const STICKER_ICON: Record<string, string> = {
-  "first-lap": "M5 21V4M5 4h11l-2 4 2 4H5",
-  "ten-clean": "M5 12l5 5L20 7",
-  "fifty-clean": "M4 12l4 4 6-8M12 16l4 4 6-10",
-  explorer: "M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11zM12 12a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
-  record: "M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0zM17 5h3a3 3 0 0 1-3 4M7 5H4a3 3 0 0 0 3 4",
-  streak: "M13 2L5 14h6l-1 8 8-12h-6z",
-  "clean-sweep": "M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6L12 16.7 6.7 19.6l1.1-6L3.4 9.4l6-.8z",
-  regular: "M12 3l9 5v8l-9 5-9-5V8z",
-};
 
 /**
  * The page behind the phone banner: who you are, how far you have got and what you have done. It follows the
@@ -154,7 +145,6 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
   const canDress = mine || (manage && status?.seat === p.driver.id);
   const into = p.xp - p.levelStartXp;
   const span = Math.max(1, p.nextLevelXp - p.levelStartXp);
-  const earned = p.stickers.filter((s) => s.earned).length;
   return (
     <div className="you-layout">
       <div className="you-main">
@@ -232,21 +222,7 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
         </div>
       </section>
 
-      <section className="you-section" aria-label="Stickers">
-        <div className="head"><h2>Stickers</h2><span className="muted" style={{ fontSize: 13 }}>{earned} of {p.stickers.length}</span></div>
-        <div className="sticker-grid">
-          {p.stickers.map((s) => (
-            <div className="sticker" data-earned={s.earned || undefined} key={s.id} title={s.hint}>
-              <span className="sticker-icon">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d={STICKER_ICON[s.id] ?? STICKER_ICON.regular} />
-                </svg>
-              </span>
-              <span className="sticker-name">{s.name}</span>
-            </div>
-          ))}
-        </div>
-      </section>
+      <StickerHighlights driverId={p.driver.id} color={p.driver.color} />
 
       <section className="you-section" aria-label="Recent">
         <div className="head"><h2>Recent</h2></div>
