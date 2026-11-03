@@ -121,6 +121,26 @@ pub fn driver_breakdown(store: &Store, driver: DriverId) -> Result<Vec<LapSummar
         .collect())
 }
 
+/// One driver's laps for the all-drivers overview.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriverLaps {
+    pub driver_id: DriverId,
+    pub laps: Vec<LapSummary>,
+}
+
+/// Every driver who has a lap, with all their laps: the page that compares everyone.
+pub fn all_breakdowns(store: &Store) -> Result<Vec<DriverLaps>> {
+    let mut out = Vec::new();
+    for d in store.drivers()? {
+        let laps = driver_breakdown(store, d.id)?;
+        if !laps.is_empty() {
+            out.push(DriverLaps { driver_id: d.id, laps });
+        }
+    }
+    Ok(out)
+}
+
 /// The longest run of days in a row with a timed lap, by UTC day.
 fn longest_streak(times: impl Iterator<Item = Timestamp>) -> u32 {
     let mut days: Vec<i64> = times.map(|t| t.div_euclid(crate::progress::DAY_MS)).collect();

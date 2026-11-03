@@ -26,10 +26,16 @@ export function DriversPage() {
     <>
       <div className="page-head" style={{ alignItems: "center" }}>
         <h1>Drivers</h1>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        <a className="btn ghost" href="#/drivers/compare" title="Everyone's laps, distance, speed and spins side by side">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7" /></svg>
+          Compare everyone
+        </a>
         <button className="btn" onClick={() => setAdding(true)}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
           New driver
         </button>
+        </div>
       </div>
 
       <section className="card">

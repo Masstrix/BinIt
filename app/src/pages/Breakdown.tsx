@@ -8,10 +8,10 @@ import { carName, gameName, km, spanText, trackName } from "../format";
 // ---- the numbers ------------------------------------------------------------------------------------
 
 /** A lap that counts: a timed lap or a cut one. Out, in and partial laps aren't laps a driver chose to drive. */
-const isAttempt = (l: LapSummary) => l.valid || l.untimedReason === null || l.untimedReason === "cut";
+export const isAttempt = (l: LapSummary) => l.valid || l.untimedReason === null || l.untimedReason === "cut";
 const isClean = (l: LapSummary) => l.valid && l.untimedReason === null;
 
-interface Totals {
+export interface Totals {
   laps: number;
   clean: number;
   cut: number;
@@ -26,7 +26,7 @@ interface Totals {
   physicsLaps: number;
 }
 
-function totals(laps: LapSummary[]): Totals {
+export function totals(laps: LapSummary[]): Totals {
   const t: Totals = { laps: 0, clean: 0, cut: 0, timeMs: 0, distanceM: 0, timeWithDistanceMs: 0, topKmh: null, spins: 0, drifts: 0, physicsLaps: 0 };
   for (const l of laps) {
     if (!isAttempt(l)) continue;
@@ -48,12 +48,12 @@ function totals(laps: LapSummary[]): Totals {
   return t;
 }
 
-const avgKmh = (t: Totals) => (t.timeWithDistanceMs > 0 ? t.distanceM / 1000 / (t.timeWithDistanceMs / 3_600_000) : null);
+export const avgKmh = (t: Totals) => (t.timeWithDistanceMs > 0 ? t.distanceM / 1000 / (t.timeWithDistanceMs / 3_600_000) : null);
 /** Spins per 10 laps, over laps where spins are known. */
-const spinRate = (t: Totals) => (t.physicsLaps > 0 ? (t.spins / t.physicsLaps) * 10 : null);
-const cleanPct = (t: Totals) => (t.laps > 0 ? Math.round((t.clean / t.laps) * 100) : null);
+export const spinRate = (t: Totals) => (t.physicsLaps > 0 ? (t.spins / t.physicsLaps) * 10 : null);
+export const cleanPct = (t: Totals) => (t.laps > 0 ? Math.round((t.clean / t.laps) * 100) : null);
 
-type Range = "7" | "30" | "90" | "all";
+export type Range = "7" | "30" | "90" | "all";
 const RANGES: { key: Range; label: string }[] = [
   { key: "7", label: "7 days" },
   { key: "30", label: "30 days" },
@@ -61,7 +61,7 @@ const RANGES: { key: Range; label: string }[] = [
   { key: "all", label: "All time" },
 ];
 
-type Unit = "day" | "week" | "month";
+export type Unit = "day" | "week" | "month";
 const DAY = 86_400_000;
 
 function bucketStart(ms: number, unit: Unit): number {
@@ -80,20 +80,20 @@ function nextBucket(start: number, unit: Unit): number {
   return d.getTime();
 }
 
-function bucketLabel(start: number, unit: Unit, long = false): string {
+export function bucketLabel(start: number, unit: Unit, long = false): string {
   const d = new Date(start);
   if (unit === "month") return d.toLocaleDateString(undefined, { month: long ? "long" : "short", year: "numeric" });
   const day = d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
   return unit === "week" ? (long ? `Week of ${day}` : day) : long ? d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }) : day;
 }
 
-interface Bucket {
+export interface Bucket {
   start: number;
   t: Totals;
 }
 
 /** Laps grouped into days, weeks or months (whichever keeps the chart readable), with empty ones filled in. */
-function buckets(laps: LapSummary[], from: number, to: number): { unit: Unit; list: Bucket[] } {
+export function buckets(laps: LapSummary[], from: number, to: number): { unit: Unit; list: Bucket[] } {
   const span = to - from;
   const unit: Unit = span <= 31 * DAY ? "day" : span <= 26 * 7 * DAY ? "week" : "month";
   const groups = new Map<number, LapSummary[]>();
@@ -129,14 +129,46 @@ function byCombo(laps: LapSummary[]): ComboRow[] {
   return [...m.values()].map((e) => ({ ...e.row, t: totals(e.laps) })).sort((a, b) => b.t.laps - a.t.laps || b.lastAt - a.lastAt);
 }
 
-const one = (v: number | null, digits = 0) => (v == null ? "–" : v.toFixed(digits));
-const hours = (ms: number) => ms / 3_600_000;
-const timeText = (ms: number) => {
+export const one = (v: number | null, digits = 0) => (v == null ? "–" : v.toFixed(digits));
+export const hours = (ms: number) => ms / 3_600_000;
+export const timeText = (ms: number) => {
   const s = spanText(ms);
   return `${s.value} ${s.unit}`;
 };
 
 // ---- the page ---------------------------------------------------------------------------------------
+
+/** The laps (oldest first) inside a range and game, and where the range starts. Ranges start no earlier than the
+ * first lap, so a newcomer's 90 days aren't weeks of nothing. */
+export function windowOf(all: LapSummary[], range: Range, game: string): { laps: LapSummary[]; from: number; now: number } {
+  const now = Date.now();
+  const inGame = all.filter((l) => game === "all" || l.game === game);
+  const first = inGame.length ? Math.min(...inGame.map((l) => l.recordedAt)) : now;
+  const from = range === "all" ? first : Math.max(now - (Number(range) - 1) * DAY, first);
+  return { laps: inGame.filter((l) => l.recordedAt >= bucketStart(from, "day")), from, now };
+}
+
+/** The time range and game, in one row above the charts. */
+export function Filters({ range, onRange, game, onGame, games }: { range: Range; onRange: (r: Range) => void; game: string; onGame: (g: string) => void; games: string[] }) {
+  return (
+    <div className="bd-filters">
+      <div className="seg" role="group" aria-label="Time range">
+        {RANGES.map((r) => (
+          <button key={r.key} type="button" aria-pressed={range === r.key} onClick={() => onRange(r.key)}>{r.label}</button>
+        ))}
+      </div>
+      {games.length > 1 && (
+        <Dropdown
+          variant="pill"
+          label="Game"
+          value={game}
+          onChange={onGame}
+          options={[{ value: "all", label: "All games" }, ...games.map((g) => ({ value: g, label: gameName(g), icon: <GameIcon game={g} size={18} /> }))]}
+        />
+      )}
+    </div>
+  );
+}
 
 /** One driver's driving at a glance: how much, how clean, how far, how fast and how often they spin, over time. */
 export function BreakdownPage({ id }: { id: DriverId }) {
@@ -148,12 +180,7 @@ export function BreakdownPage({ id }: { id: DriverId }) {
 
   const games = useMemo(() => [...new Set((all ?? []).map((l) => l.game))], [all]);
   const view = useMemo(() => {
-    const now = Date.now();
-    const inGame = (all ?? []).filter((l) => game === "all" || l.game === game);
-    const first = inGame.length ? inGame[0].recordedAt : now;
-    // A new driver's 90 days start at their first lap, not with weeks of nothing.
-    const from = range === "all" ? first : Math.max(now - (Number(range) - 1) * DAY, first);
-    const laps = inGame.filter((l) => l.recordedAt >= bucketStart(from, "day"));
+    const { laps, from, now } = windowOf(all ?? [], range, game);
     return { laps, t: totals(laps), b: buckets(laps.filter(isAttempt), from, now), combos: byCombo(laps) };
   }, [all, range, game]);
 
@@ -176,27 +203,12 @@ export function BreakdownPage({ id }: { id: DriverId }) {
           <Helmet color={driver.color} look={driver.look} size={64} seed={driver.id} />
           <div style={{ minWidth: 0 }}>
             <h1 style={{ overflowWrap: "anywhere" }}>{driver.name}</h1>
-            <span className="muted">Driver breakdown · <a href={`#/you/${id}`}>profile</a> · <a href={`#/you/${id}/stats`}>stats</a></span>
+            <span className="muted">Driver breakdown · <a href={`#/you/${id}`}>profile</a> · <a href={`#/you/${id}/stats`}>stats</a> · <a href="#/drivers/compare">compare everyone</a></span>
           </div>
         </div>
       </div>
 
-      <div className="bd-filters">
-        <div className="seg" role="group" aria-label="Time range">
-          {RANGES.map((r) => (
-            <button key={r.key} type="button" aria-pressed={range === r.key} onClick={() => setRange(r.key)}>{r.label}</button>
-          ))}
-        </div>
-        {games.length > 1 && (
-          <Dropdown
-            variant="pill"
-            label="Game"
-            value={game}
-            onChange={setGame}
-            options={[{ value: "all", label: "All games" }, ...games.map((g) => ({ value: g, label: gameName(g), icon: <GameIcon game={g} size={18} /> }))]}
-          />
-        )}
-      </div>
+      <Filters range={range} onRange={setRange} game={game} onGame={setGame} games={games} />
 
       {t.laps === 0 ? (
         <div className="empty">No laps {range === "all" ? "yet" : "in this time"}. {range !== "all" && "Try a longer range."}</div>
@@ -352,7 +364,7 @@ export function BreakdownPage({ id }: { id: DriverId }) {
   );
 }
 
-function Kpi({ label, value, unit, note, big, swatch }: { label: string; value: string; unit?: string; note?: string; big?: boolean; swatch?: string }) {
+export function Kpi({ label, value, unit, note, big, swatch }: { label: string; value: string; unit?: string; note?: string; big?: boolean; swatch?: string }) {
   return (
     <div className={`stats-cell${big ? " bd-kpi-big" : ""}`}>
       <span className="stats-label">
@@ -365,7 +377,7 @@ function Kpi({ label, value, unit, note, big, swatch }: { label: string; value: 
   );
 }
 
-function ChartCard({ title, sub, legend, children }: { title: string; sub: string; legend?: [string, string][]; children: ReactNode }) {
+export function ChartCard({ title, sub, legend, children }: { title: string; sub: string; legend?: [string, string][]; children: ReactNode }) {
   return (
     <section className="card bd-chart" aria-label={title}>
       <div className="bd-chart-head">
@@ -390,7 +402,7 @@ function ChartCard({ title, sub, legend, children }: { title: string; sub: strin
 
 /** The chart's own width in CSS pixels, so text stays its real size at any width. A callback ref, so it follows
  * whichever element is mounted (the empty state or the plot). */
-function useWidth() {
+export function useWidth() {
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   const [w, setW] = useState(600);
   useEffect(() => {
@@ -424,7 +436,7 @@ function tickEvery(n: number, plotW: number) {
   return Math.max(1, Math.ceil(n / Math.max(1, Math.floor(plotW / 64))));
 }
 
-function Tooltip({ x, w, title, rows }: { x: number; w: number; title: string; rows: { label: string; color?: string; value: string }[] }) {
+export function Tooltip({ x, w, title, rows }: { x: number; w: number; title: string; rows: { label: string; color?: string; value: string }[] }) {
   const left = Math.min(Math.max(x, 90), w - 90);
   return (
     <div className="bd-tip" style={{ left }} role="status">
@@ -441,7 +453,7 @@ function Tooltip({ x, w, title, rows }: { x: number; w: number; title: string; r
 }
 
 /** Bars per bucket, stacked when there is more than one series, with a hover tooltip per bar. */
-function BarChart({
+export function BarChart({
   buckets: list,
   unit,
   series,
@@ -524,7 +536,7 @@ function BarChart({
 }
 
 /** Lines through the buckets that have a value (a gap where there were no laps), with a crosshair and tooltip. */
-function LineChart({
+export function LineChart({
   buckets: list,
   unit,
   series,

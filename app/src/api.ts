@@ -688,6 +688,8 @@ export const api = {
   driverStats: (id: DriverId) => request<DriverStats>("GET", `/drivers/${id}/stats`),
   /** Every lap a driver has, oldest first, with distance, top speed and spins: the breakdown page. */
   driverBreakdown: (id: DriverId) => request<LapSummary[]>("GET", `/drivers/${id}/breakdown`),
+  /** Every driver who has a lap, with all their laps: the page comparing everyone. */
+  allBreakdowns: () => request<{ driverId: DriverId; laps: LapSummary[] }[]>("GET", "/drivers/breakdown"),
   /** The driver's waiting parcel, or null. */
   parcel: (id: DriverId) => request<Parcel | null>("GET", `/drivers/${id}/parcel`),
   collectParcel: (id: DriverId) => request<boolean>("POST", `/drivers/${id}/parcel/collect`),

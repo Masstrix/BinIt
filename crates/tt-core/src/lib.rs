@@ -674,6 +674,11 @@ impl BinIt {
         stats::driver_breakdown(&store, driver_id)
     }
 
+    /// Every driver's laps with distance, top speed and spins: the page comparing everyone.
+    pub fn all_breakdowns(&self) -> Result<Vec<stats::DriverLaps>> {
+        stats::all_breakdowns(&self.store())
+    }
+
     /// How far, how long, how sideways and where they stand: the stats page.
     pub fn driver_stats(&self, driver_id: DriverId) -> Result<stats::DriverStats> {
         let store = self.store();

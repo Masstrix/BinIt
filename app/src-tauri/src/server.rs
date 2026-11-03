@@ -51,6 +51,7 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/server", get(server_info))
         .route("/drivers", get(drivers).post(add_driver))
         .route("/drivers/ratings", get(driver_ratings))
+        .route("/drivers/breakdown", get(all_breakdowns))
         .route("/drivers/{id}", put(update_driver))
         .route("/drivers/{id}/profile", get(driver_profile))
         .route("/drivers/{id}/stickers", get(driver_stickers))
@@ -317,6 +318,11 @@ async fn driver_stickers(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiR
 /// How far, how long, how sideways and where a driver stands. Open to everyone, like the profile.
 async fn driver_stats(State(c): State<Ctx>, Path(id): Path<DriverId>) -> ApiResult<tt_core::stats::DriverStats> {
     Ok(Json(c.tt.driver_stats(id)?))
+}
+
+/// Every driver's laps with distance, top speed and spins, for the page comparing everyone. Open to everyone.
+async fn all_breakdowns(State(c): State<Ctx>) -> ApiResult<Vec<tt_core::stats::DriverLaps>> {
+    Ok(Json(c.tt.all_breakdowns()?))
 }
 
 /// Every lap a driver has with its distance, top speed and spins, for the breakdown page. Open to everyone, like the profile.
