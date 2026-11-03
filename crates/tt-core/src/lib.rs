@@ -665,6 +665,20 @@ impl BinIt {
         stickers::book(&store, driver_id, now_ms())
     }
 
+    /// Every lap a driver has, with its distance, top speed and spins: the driver breakdown page.
+    pub fn driver_breakdown(&self, driver_id: DriverId) -> Result<Vec<stats::LapSummary>> {
+        let store = self.store();
+        if store.driver(driver_id)?.is_none() {
+            anyhow::bail!("no such driver");
+        }
+        stats::driver_breakdown(&store, driver_id)
+    }
+
+    /// Every driver's laps with distance, top speed and spins: the page comparing everyone.
+    pub fn all_breakdowns(&self) -> Result<Vec<stats::DriverLaps>> {
+        stats::all_breakdowns(&self.store())
+    }
+
     /// How far, how long, how sideways and where they stand: the stats page.
     pub fn driver_stats(&self, driver_id: DriverId) -> Result<stats::DriverStats> {
         let store = self.store();
@@ -984,6 +998,9 @@ impl BinIt {
             if let Some(m) = metres {
                 store.set_lap_distance(lap.id, m)?;
             }
+        }
+        if let Some(kmh) = completed.trace.as_ref().and_then(stats::trace_top_kmh) {
+            store.set_lap_top_speed(lap.id, kmh)?;
         }
         if let Some(slides) = slides.filter(LiveSlideStats::any) {
             store.set_lap_slides(lap.id, &serde_json::to_string(&slides)?)?;

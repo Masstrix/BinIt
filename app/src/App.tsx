@@ -21,6 +21,8 @@ import { Overlay } from "./pages/Overlay";
 import { YouPage } from "./pages/You";
 import { StickerBookPage } from "./pages/Stickers";
 import { StatsPage } from "./pages/Stats";
+import { BreakdownPage } from "./pages/Breakdown";
+import { ComparePage } from "./pages/Compare";
 import { ParcelGate } from "./components/Parcel";
 import { CustomizePage } from "./pages/Customize";
 import { ShopPage } from "./pages/Shop";
@@ -170,6 +172,8 @@ export function App() {
   if (path.startsWith("/leaderboard")) page = <LeaderboardPage />;
   else if (path.startsWith("/challenges/new")) page = <NewChallengePage />;
   else if (path.startsWith("/challenges")) page = <ChallengesPage path={path} />;
+  else if (path.startsWith("/drivers/compare")) page = <ComparePage />;
+  else if (/^\/drivers\/\d+/.test(path)) page = <BreakdownPage id={Number(path.split("/")[2])} />;
   else if (path.startsWith("/drivers")) page = <DriversPage />;
   else if (path.startsWith("/games")) page = <GamesPage />;
   else if (path.startsWith("/telemetry")) page = <TelemetryPage path={path} />;

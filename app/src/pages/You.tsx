@@ -192,6 +192,7 @@ function ProfileView({ profile: p, mine, manage, onSwitch }: { profile: Profile;
       </div>
       <div className="manage-list">
         <ManageRow icon="M3 17l5-6 4 4 6-8M14 7h6v6" title="Driver stats" sub="Most driven, distance, drifting and progress over time" href={`#/you/${p.driver.id}/stats`} />
+        <ManageRow icon="M5 20V10M12 20V4M19 20v-7" title="Breakdown" sub="Charts of laps, clean and cut, distance, time, speed and spins" href={`#/drivers/${p.driver.id}`} />
       </div>
 
       {manage && <ManageDriver driver={p.driver} />}

@@ -408,6 +408,11 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
       recordsHeld: 1, challengesEntered: 5, podiums: 3, wins: 1,
     });
   }
+  if (p === "/drivers/breakdown") {
+    const ids = [...new Set(laps.map((l) => l.driverId).filter((x): x is number => x != null))];
+    return ok(ids.map((driverId) => ({ driverId, laps: mockBreakdown(driverId) })));
+  }
+  if ((r = m(/^\/drivers\/(\d+)\/breakdown$/))) return ok(mockBreakdown(+r[1]));
   if ((r = m(/^\/drivers\/(\d+)\/parcel$/))) return ok(collectedParcels.has(+r[1]) ? null : MOCK_PARCEL);
   if ((r = m(/^\/drivers\/(\d+)\/parcel\/collect$/))) {
     collectedParcels.add(+r[1]);
@@ -545,4 +550,23 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
   if (p === "/admin/laps/count") return ok(0);
   if (p === "/admin/laps/delete") return ok(0);
   throw new Error(`Mock server has no route for ${method} ${p}`);
+}
+
+/** Per-lap distance, top speed and spins for the breakdown pages, made up but steady per lap. */
+function mockBreakdown(driverId: number) {
+  const len: Record<string, number> = { Imola: 4909, "Brands Hatch": 3908, Monza: 5793, "Wales Sweet Lamb": 9450 };
+  return laps
+    .filter((l) => l.driverId === driverId)
+    .sort((a, b) => a.recordedAt - b.recordedAt)
+    .map((l) => {
+      const h = (l.id * 2654435761) >>> 0;
+      const physics = l.game !== "dr2";
+      const spins = h % 9 === 0 ? 1 + (h % 2) : 0;
+      return {
+        id: l.id, game: l.game, track: l.track, layout: l.layout, car: l.car, timeMs: l.timeMs, valid: l.valid, untimedReason: l.untimedReason, recordedAt: l.recordedAt,
+        distanceM: l.untimedReason === "outLap" ? null : len[l.track] ?? 4000,
+        topKmh: l.game === "dr2" ? 168 + (h % 220) / 10 : 252 + (h % 300) / 10 - (l.track === "Brands Hatch" ? 18 : 0),
+        spins: physics ? spins : null, drifts: physics ? h % 4 : null, driftMs: physics ? (h % 4) * 900 : null, peakSlipDeg: physics ? 8 + (h % 30) : null,
+      };
+    });
 }

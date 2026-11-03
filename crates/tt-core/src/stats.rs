@@ -52,6 +52,95 @@ pub fn trace_distance_m(trace: &LapTrace) -> Option<u32> {
     (metres >= 50.0).then_some(metres.round() as u32)
 }
 
+/// A lap's top speed from its trace, km/h. A single sample far above its neighbours is a glitch (a reset, a teleport),
+/// so the top is the fastest speed held across two samples in a row. `None` for a trace too short to say.
+pub fn trace_top_kmh(trace: &LapTrace) -> Option<f32> {
+    if trace.0.len() < 20 {
+        return None;
+    }
+    let top = trace.0.windows(2).map(|w| w[0].speed_kmh.min(w[1].speed_kmh)).filter(|v| v.is_finite() && *v < 600.0).fold(0.0f32, f32::max);
+    (top >= 1.0).then_some((top * 10.0).round() / 10.0)
+}
+
+/// One lap, as the driver breakdown page needs it: how it went, how far, how fast and how sideways.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LapSummary {
+    pub id: crate::LapId,
+    pub game: String,
+    pub track: String,
+    pub layout: String,
+    pub car: String,
+    pub time_ms: u32,
+    pub valid: bool,
+    pub untimed_reason: Option<String>,
+    pub recorded_at: Timestamp,
+    /// Metres, when the lap has a distance.
+    pub distance_m: Option<u32>,
+    /// km/h, when the lap has a trace.
+    pub top_kmh: Option<f32>,
+    /// Slide stats, when the game reports physics: `None` means unknown, not zero.
+    pub spins: Option<u32>,
+    pub drifts: Option<u32>,
+    pub drift_ms: Option<u64>,
+    pub peak_slip_deg: Option<f32>,
+}
+
+/// Every lap a driver has driven, oldest first, with what the breakdown page charts. Out and in laps are included
+/// (the page leaves them out of lap counts but they still add time and distance where recorded).
+pub fn driver_breakdown(store: &Store, driver: DriverId) -> Result<Vec<LapSummary>> {
+    // Slide stats are only stored for laps with a drift or spin; laps from a game that reports physics, recorded
+    // since slides were measured, with nothing stored, had none.
+    let rows = store.driver_lap_extras(driver)?;
+    let physics_since = rows.iter().filter(|r| r.3.is_some()).map(|r| r.0.recorded_at).min();
+    let physics_games: HashSet<String> = rows.iter().filter(|r| r.3.is_some()).map(|r| r.0.combo.game.clone()).collect();
+    Ok(rows
+        .into_iter()
+        .map(|(lap, distance_m, top_kmh, slides)| {
+            let st = slides.as_deref().and_then(|j| serde_json::from_str::<crate::LiveSlideStats>(j).ok());
+            let measured = st.is_some() || (physics_games.contains(&lap.combo.game) && physics_since.is_some_and(|t| lap.recorded_at >= t));
+            let st = st.unwrap_or_default();
+            LapSummary {
+                id: lap.id,
+                game: lap.combo.game,
+                track: lap.combo.track,
+                layout: lap.combo.layout,
+                car: lap.combo.car,
+                time_ms: lap.time_ms,
+                valid: lap.valid,
+                untimed_reason: lap.untimed_reason,
+                recorded_at: lap.recorded_at,
+                distance_m,
+                top_kmh,
+                spins: measured.then_some(st.spins),
+                drifts: measured.then_some(st.drifts),
+                drift_ms: measured.then_some(st.drift_ms),
+                peak_slip_deg: measured.then_some(st.peak_slip_deg),
+            }
+        })
+        .collect())
+}
+
+/// One driver's laps for the all-drivers overview.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DriverLaps {
+    pub driver_id: DriverId,
+    pub laps: Vec<LapSummary>,
+}
+
+/// Every driver who has a lap, with all their laps: the page that compares everyone.
+pub fn all_breakdowns(store: &Store) -> Result<Vec<DriverLaps>> {
+    let mut out = Vec::new();
+    for d in store.drivers()? {
+        let laps = driver_breakdown(store, d.id)?;
+        if !laps.is_empty() {
+            out.push(DriverLaps { driver_id: d.id, laps });
+        }
+    }
+    Ok(out)
+}
+
 /// The longest run of days in a row with a timed lap, by UTC day.
 fn longest_streak(times: impl Iterator<Item = Timestamp>) -> u32 {
     let mut days: Vec<i64> = times.map(|t| t.div_euclid(crate::progress::DAY_MS)).collect();
@@ -137,6 +226,14 @@ mod tests {
         let blind = LapTrace((0..100).map(|i| TracePoint { position: None, ..point(i, 0.0) }).collect());
         assert_eq!(trace_distance_m(&blind), None);
         assert_eq!(trace_distance_m(&LapTrace((0..5).map(|i| point(i, i as f32 * 10.0)).collect())), None);
+    }
+
+    #[test]
+    fn top_speed_is_held_for_two_samples_so_a_glitch_is_not_it() {
+        let mut pts: Vec<TracePoint> = (0..50).map(|i| TracePoint { speed_kmh: 100.0 + i as f32, ..point(i, 0.0) }).collect();
+        pts[10].speed_kmh = 450.0;
+        assert_eq!(trace_top_kmh(&LapTrace(pts)), Some(148.0));
+        assert_eq!(trace_top_kmh(&LapTrace((0..5).map(|i| point(i, 0.0)).collect())), None);
     }
 
     #[test]

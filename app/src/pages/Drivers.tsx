@@ -26,10 +26,16 @@ export function DriversPage() {
     <>
       <div className="page-head" style={{ alignItems: "center" }}>
         <h1>Drivers</h1>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        <a className="btn ghost" href="#/drivers/compare" title="Everyone's laps, distance, speed and spins side by side">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7" /></svg>
+          Compare everyone
+        </a>
         <button className="btn" onClick={() => setAdding(true)}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
           New driver
         </button>
+        </div>
       </div>
 
       <section className="card">
@@ -42,7 +48,7 @@ export function DriversPage() {
         )}
         {drivers.length > 0 && (
           <span className="muted" style={{ fontSize: 13 }}>
-            Grouped by speed score: 100 means quickest on every track and car you share with others, and each point below is about 1% slower. Open a driver for their profile.
+            Grouped by speed score: 100 means quickest on every track and car you share with others, and each point below is about 1% slower. Open a driver for their profile, or their breakdown for charts of laps, distance, speed and spins.
           </span>
         )}
         {TIER_ORDER.map((key) => {
@@ -146,6 +152,7 @@ function DriverCard({ driver, seated, rating }: { driver: Driver; seated: boolea
   const fastestOn = rating?.fastestOn ?? 0;
   // The whole card opens their profile: the level, bests and stickers, and (from this PC) editing and phones.
   return (
+    <div className="driver-card-wrap">
     <a className="driver-card" href={`#/you/${driver.id}`} data-seated={seated || undefined} title={`Open ${driver.name}'s profile`}>
       <span className="dc-tile" style={{ background: `${driver.color}2E` }}>
         <Helmet color={driver.color} look={driver.look} size={60} tile={false} seed={driver.id} mood={seated ? "happy" : "idle"} />
@@ -166,6 +173,12 @@ function DriverCard({ driver, seated, rating }: { driver: Driver; seated: boolea
       )}
       {fastestOn > 0 && <span className="muted dc-fast">Fastest on {fastestOn} {fastestOn === 1 ? "track" : "tracks"}</span>}
     </a>
+    {/* A sibling of the card, not inside it: a link can't hold another link. */}
+    <a className="dc-breakdown" href={`#/drivers/${driver.id}`} title={`${driver.name}'s breakdown: laps, distance, speed and spins`}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7" /></svg>
+      Breakdown
+    </a>
+    </div>
   );
 }
 
