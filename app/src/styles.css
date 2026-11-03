@@ -1778,3 +1778,45 @@ html[data-nav="back"]::view-transition-new(page) { animation-name: page-in-left;
 /* more air between the stats sections, most of all on a phone */
 .content > .stats-group, .content > .stk-close, .content > .stats-hero { margin-top: 10px; }
 @media (max-width: 760px) { .content > .stats-group, .content > .stk-close, .content > .stats-hero { margin-top: 18px; } .stats-group { gap: 14px; } .stats-grid, .fav-grid { gap: 12px; } .stats-foot { margin-top: 10px; } }
+
+/* ---- driver breakdown: totals, charts of laps, distance, time, speed and spins, and a table per track ---------- */
+.driver-card-wrap { position: relative; display: flex; flex-direction: column; min-width: 0; }
+.driver-card-wrap .driver-card { flex: 1; padding-bottom: 56px; }
+.dc-breakdown { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; min-height: 34px; border-radius: 999px; background: var(--panel); color: var(--text-2); font: 600 13px var(--font-body); text-decoration: none; white-space: nowrap; }
+.dc-breakdown:hover { background: var(--bg); color: var(--text); }
+.dc-breakdown:focus-visible { outline: 2px solid var(--peri-1); outline-offset: 2px; }
+.bd-filters { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.bd-filters .seg { overflow-x: auto; max-width: 100%; }
+.bd-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 900px) { .bd-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.bd-kpi-big .stats-value { font-size: 32px; }
+.bd-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.bd-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; }
+.bd-chart { gap: 12px; min-width: 0; }
+.bd-chart h3 { font-size: 18px; }
+.bd-chart-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 8px 16px; }
+.bd-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--text-2); }
+.bd-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.bd-plot { position: relative; width: 100%; min-width: 0; }
+.bd-plot svg { display: block; background: var(--bg); border-radius: 16px; overflow: visible; }
+.bd-axis { font: 500 11px var(--font-mono); fill: var(--muted); }
+.bd-tip { position: absolute; top: 4px; transform: translateX(-50%); pointer-events: none; background: var(--panel-3); border-radius: 12px; padding: 8px 12px; display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--text); box-shadow: 0 6px 24px rgb(0 0 0 / 0.35); min-width: 150px; z-index: 2; }
+.bd-tip b { font-weight: 700; }
+.bd-tip span { display: flex; align-items: center; gap: 6px; color: var(--text-2); }
+.bd-tip .mono { margin-left: auto; padding-left: 12px; color: var(--text); font-weight: 600; }
+.bd-table-wrap { overflow-x: auto; margin: 0 -8px; }
+.bd-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.bd-table th { text-align: left; font: 500 11px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 6px 8px; white-space: nowrap; }
+.bd-table td { padding: 10px 8px; border-top: 1px solid var(--line); white-space: nowrap; }
+.bd-table td.mono, .bd-table th:not(:first-child) { text-align: right; }
+.bd-table td:not(:first-child) { text-align: right; }
+.bd-combo { display: flex; align-items: center; gap: 10px; }
+.bd-combo > span { display: flex; flex-direction: column; }
+.bd-combo .muted { font-size: 12.5px; }
+.bd-clean-bar { display: inline-block; vertical-align: middle; width: 56px; height: 6px; border-radius: 3px; background: var(--red); margin-right: 8px; overflow: hidden; }
+.bd-clean-bar span { display: block; height: 100%; background: var(--mint); border-right: 2px solid var(--panel); }
+.bd-numbers summary { cursor: pointer; font-weight: 700; }
+@media (max-width: 640px) {
+  .bd-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bd-kpi-big .stats-value { font-size: 26px; }
+}

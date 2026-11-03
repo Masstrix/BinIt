@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 17;
+const SCHEMA_VERSION: i32 = 18;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -312,6 +312,22 @@ impl Store {
             for (id, bytes) in rows {
                 if let Some(m) = LapTrace::from_bytes(&bytes).and_then(|t| crate::stats::trace_distance_m(&t)) {
                     conn.execute("UPDATE laps SET distance_m = ?2 WHERE id = ?1", params![id, m])?;
+                }
+            }
+        }
+        if version < 18 {
+            // Each lap's top speed in km/h (see stats.rs), for the driver breakdown. Older laps get it from their trace.
+            let has_column = conn.query_row("SELECT COUNT(*) FROM pragma_table_info('laps') WHERE name = 'top_kmh'", [], |r| r.get::<_, i64>(0))? > 0;
+            if !has_column {
+                conn.execute_batch("ALTER TABLE laps ADD COLUMN top_kmh REAL;")?;
+            }
+            let rows: Vec<(i64, Vec<u8>)> = {
+                let mut stmt = conn.prepare("SELECT id, trace FROM laps WHERE top_kmh IS NULL AND trace IS NOT NULL")?;
+                stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect::<Result<_, _>>()?
+            };
+            for (id, bytes) in rows {
+                if let Some(kmh) = LapTrace::from_bytes(&bytes).and_then(|t| crate::stats::trace_top_kmh(&t)) {
+                    conn.execute("UPDATE laps SET top_kmh = ?2 WHERE id = ?1", params![id, f64::from(kmh)])?;
                 }
             }
         }
@@ -682,6 +698,22 @@ impl Store {
     pub fn set_lap_distance(&self, id: LapId, metres: u32) -> Result<()> {
         self.conn.execute("UPDATE laps SET distance_m = ?2 WHERE id = ?1", params![id, metres])?;
         Ok(())
+    }
+
+    /// Records a lap's top speed, km/h.
+    pub fn set_lap_top_speed(&self, id: LapId, kmh: f32) -> Result<()> {
+        self.conn.execute("UPDATE laps SET top_kmh = ?2 WHERE id = ?1", params![id, f64::from(kmh)])?;
+        Ok(())
+    }
+
+    /// Every lap a driver has, oldest first, with its distance, top speed and slide stats (JSON) when it has them.
+    pub fn driver_lap_extras(&self, driver_id: DriverId) -> Result<Vec<LapExtras>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid, sectors_ms, recorded_at, untimed_reason, distance_m, top_kmh, slides
+             FROM laps WHERE driver_id = ?1 ORDER BY recorded_at, id",
+        )?;
+        let rows = stmt.query_map([driver_id], |r| Ok((lap_from_row(r)?, r.get(13)?, r.get::<_, Option<f64>>(14)?.map(|v| v as f32), r.get(15)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
     }
 
     /// `(metres driven, laps that have a distance, laps that count)` and the time on track in ms, over a driver's
@@ -1142,6 +1174,9 @@ impl Store {
         Ok(())
     }
 }
+
+/// A lap with its distance (m), top speed (km/h) and slide stats (JSON), each when it has one.
+pub type LapExtras = (Lap, Option<u32>, Option<f32>, Option<String>);
 
 const LAP_SELECT: &str = "SELECT id, driver_id, game, track, layout, car, session_kind, lap_number, time_ms, valid, sectors_ms, recorded_at, untimed_reason FROM laps";
 const CHALLENGE_SELECT: &str = "SELECT id, name, game, track, layout, car, starts_at, ends_at, valid_only, max_laps, prizes, created_at, reward_size FROM challenges";

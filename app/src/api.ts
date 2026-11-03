@@ -424,6 +424,26 @@ export interface StickerGroup {
 }
 
 /** How far, how long, how sideways and where a driver stands (crates/tt-core/src/stats.rs). */
+/** One lap as the driver breakdown charts it. Distance, top speed and slides are null when the lap has none recorded. */
+export interface LapSummary {
+  id: number;
+  game: string;
+  track: string;
+  layout: string;
+  car: string;
+  timeMs: number;
+  valid: boolean;
+  untimedReason: string | null;
+  recordedAt: number;
+  distanceM: number | null;
+  topKmh: number | null;
+  /** Null when the game doesn't report physics (or the lap is from before slides were measured): unknown, not zero. */
+  spins: number | null;
+  drifts: number | null;
+  driftMs: number | null;
+  peakSlipDeg: number | null;
+}
+
 export interface DriverStats {
   distanceM: number;
   /** Laps that have a distance, out of the laps that count: laps from before it was measured, with no trace, are missing. */
@@ -666,6 +686,8 @@ export const api = {
     request<Driver>("PUT", `/drivers/${id}`, { name, color }),
   profile: (id: DriverId) => request<Profile>("GET", `/drivers/${id}/profile`),
   driverStats: (id: DriverId) => request<DriverStats>("GET", `/drivers/${id}/stats`),
+  /** Every lap a driver has, oldest first, with distance, top speed and spins: the breakdown page. */
+  driverBreakdown: (id: DriverId) => request<LapSummary[]>("GET", `/drivers/${id}/breakdown`),
   /** The driver's waiting parcel, or null. */
   parcel: (id: DriverId) => request<Parcel | null>("GET", `/drivers/${id}/parcel`),
   collectParcel: (id: DriverId) => request<boolean>("POST", `/drivers/${id}/parcel/collect`),
