@@ -1158,7 +1158,17 @@ h2 { font-size: 22px; line-height: 1.2; }
 .dc-score .mono { font: 800 28px/1 var(--font-display); letter-spacing: -0.03em; color: var(--mint); }
 .dc-score .label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
 .dc-fast { font-size: 12px; }
-@media (max-width: 640px) { .driver-cards { grid-template-columns: 1fr; } }
+/* Wide screens: the name box steps aside so name, seat, score and "fastest on" stack in the centred card. */
+.dc-info { display: contents; }
+.dc-title { order: 1; }
+.dc-seat { order: 2; }
+.dc-score, .dc-unrated { order: 3; }
+.dc-fast { order: 4; }
+.dc-unrated { font-size: 14px; }
+.drivers-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.drivers-head { align-items: center; }
+
+
 
 /* ---- game badges ------------------------------------------------------------------------------- */
 
@@ -1834,3 +1844,37 @@ html[data-nav="back"]::view-transition-new(page) { animation-name: page-in-left;
 .bd-compare th button:focus-visible { outline: 2px solid var(--peri-1); outline-offset: 2px; border-radius: 4px; }
 .bd-compare tbody tr { cursor: pointer; }
 .bd-compare tbody tr:hover td { background: var(--panel-2); }
+
+/* Phones: one compact row per driver (helmet, name and status, score, a breakdown button) instead of a tall card,
+   so a whole group fits on a screen. */
+@media (max-width: 640px) {
+  .drivers-head { flex-wrap: nowrap; }
+  .drivers-head h1 { min-width: 0; }
+  .drivers-actions { flex-wrap: nowrap; gap: 8px; }
+  .drivers-actions .btn { min-height: 44px; padding: 0 14px; font-size: 15px; gap: 6px; }
+  .wide-only { display: none; }
+  .drivers-list { padding: 16px 12px; gap: 12px; border-radius: 24px; }
+  .drivers-list > h2 { padding: 0 4px; font-size: 19px; }
+  .drivers-list > .muted { padding: 0 4px; font-size: 12.5px !important; line-height: 1.45; }
+  .drivers-list .tier-group { gap: 6px; }
+  .drivers-list .tier-head { padding: 0 4px; margin-top: 4px; gap: 2px 10px; font-size: 14px; }
+  .drivers-list .tier-head .muted { font-size: 12px !important; }
+  .driver-cards { grid-template-columns: 1fr; gap: 6px; }
+  .driver-card-wrap .driver-card {
+    display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; align-items: center; column-gap: 12px;
+    padding: 8px 60px 8px 8px; border-radius: 18px; text-align: left; min-height: 64px;
+  }
+  .driver-card:hover { transform: none; }
+  .dc-tile { width: 48px; height: 48px; border-radius: 15px; margin: 0; }
+  .dc-tile svg { width: 38px; height: 38px; }
+  .dc-info { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .dc-title { font-size: 16px; }
+  .dc-seat { font-size: 10px; }
+  .dc-fast { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dc-score { flex-direction: column; align-items: flex-end; gap: 2px; }
+  .dc-score .mono { font-size: 22px; }
+  .dc-score .label { font-size: 9.5px; }
+  .dc-unrated { font-size: 12px; text-align: right; max-width: 64px; line-height: 1.25; }
+  .dc-breakdown { left: auto; right: 8px; top: 50%; bottom: auto; transform: translateY(-50%); width: 44px; height: 44px; min-height: 0; padding: 0; justify-content: center; border-radius: 14px; }
+  .dc-bd-label { display: none; }
+}
