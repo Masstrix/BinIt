@@ -24,21 +24,21 @@ export function DriversPage() {
   const ratingOf = new Map(ratings.map((r) => [r.driverId, r]));
   return (
     <>
-      <div className="page-head" style={{ alignItems: "center" }}>
+      <div className="page-head drivers-head">
         <h1>Drivers</h1>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-        <a className="btn ghost" href="#/drivers/compare" title="Everyone's laps, distance, speed and spins side by side">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7" /></svg>
-          Compare everyone
-        </a>
-        <button className="btn" onClick={() => setAdding(true)}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-          New driver
-        </button>
+        <div className="drivers-actions">
+          <a className="btn ghost" href="#/drivers/compare" title="Everyone's laps, distance, speed and spins side by side">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7" /></svg>
+            <span>Compare<span className="wide-only"> everyone</span></span>
+          </a>
+          <button className="btn" onClick={() => setAdding(true)}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            <span>New<span className="wide-only"> driver</span></span>
+          </button>
         </div>
       </div>
 
-      <section className="card">
+      <section className="card drivers-list">
         <h2>Everyone ({drivers.length})</h2>
         {drivers.length === 0 && (
           <div className="empty" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
@@ -48,7 +48,7 @@ export function DriversPage() {
         )}
         {drivers.length > 0 && (
           <span className="muted" style={{ fontSize: 13 }}>
-            Grouped by speed score: 100 means quickest on every track and car you share with others, and each point below is about 1% slower. Open a driver for their profile, or their breakdown for charts of laps, distance, speed and spins.
+            Grouped by speed score: 100 is quickest on every track and car you share with others, and each point below is about 1% slower. Open a driver for their profile, or the chart button for their breakdown.
           </span>
         )}
         {TIER_ORDER.map((key) => {
@@ -157,26 +157,29 @@ function DriverCard({ driver, seated, rating }: { driver: Driver; seated: boolea
       <span className="dc-tile" style={{ background: `${driver.color}2E` }}>
         <Helmet color={driver.color} look={driver.look} size={60} tile={false} seed={driver.id} mood={seated ? "happy" : "idle"} />
       </span>
-      <span className="dc-title">{driver.name}</span>
-      {seated && (
-        <span className="dc-seat">
-          <i /> in the seat
-        </span>
-      )}
+      {/* On a phone the name and its status line sit beside the helmet; on wider screens this box steps aside (display: contents). */}
+      <span className="dc-info">
+        <span className="dc-title">{driver.name}</span>
+        {seated && (
+          <span className="dc-seat">
+            <i /> in the seat
+          </span>
+        )}
+        {fastestOn > 0 && <span className="muted dc-fast">Fastest on {fastestOn} {fastestOn === 1 ? "track" : "tracks"}</span>}
+      </span>
       {rating?.score != null ? (
         <span className="dc-score" title={`Speed score from ${rating.combos} shared ${rating.combos === 1 ? "track and car" : "tracks and cars"}`}>
           <span className="mono">{rating.score.toFixed(1)}</span>
           <span className="label">speed</span>
         </span>
       ) : (
-        <span className="muted" style={{ fontSize: 14 }}>Not rated yet</span>
+        <span className="muted dc-unrated">Not rated yet</span>
       )}
-      {fastestOn > 0 && <span className="muted dc-fast">Fastest on {fastestOn} {fastestOn === 1 ? "track" : "tracks"}</span>}
     </a>
     {/* A sibling of the card, not inside it: a link can't hold another link. */}
-    <a className="dc-breakdown" href={`#/drivers/${driver.id}`} title={`${driver.name}'s breakdown: laps, distance, speed and spins`}>
+    <a className="dc-breakdown" href={`#/drivers/${driver.id}`} aria-label={`${driver.name}'s breakdown`} title={`${driver.name}'s breakdown: laps, distance, speed and spins`}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 20V10M12 20V4M19 20v-7" /></svg>
-      Breakdown
+      <span className="dc-bd-label">Breakdown</span>
     </a>
     </div>
   );
