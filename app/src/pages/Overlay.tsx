@@ -5,15 +5,17 @@ import { Helmet } from "../components/Helmet";
 import { MOCK_DATA, SectionWidgets, withDevClimb, withDevLive, TOAST_KEYFRAMES, useLapToasts, useOverlayData } from "../components/OverlayWidgets";
 import { useDevCelebrate, useDevOverlay } from "../devOverlay";
 import { fx } from "../fx";
-import { ANCHORS, anchorStyle, useOverlayLayout } from "../overlayLayout";
+import { ANCHORS, anchorStyle, applyProMode, useOverlayLayout } from "../overlayLayout";
 
 export function Overlay() {
   const { status, drivers } = useAppState();
   // Dev builds can draw the overlay for a chosen game with example data, with no game running (see the editor).
   const [devGame] = useDevOverlay();
   const game = devGame ?? status?.game ?? "acevo";
-  const { layout, profile } = useOverlayLayout(game);
+  const { layout: saved, profile } = useOverlayLayout(game);
   const live = useOverlayData();
+  // With a pro challenge on, the pro widgets take over from the ones they replace, in the player's own places.
+  const layout = live.pro && devGame == null ? applyProMode(saved, profile) : saved;
   // Development only: the editor's "Rank" buttons move Tom up the example standings so the motion can be seen.
   const [devClimb, setDevClimb] = useState(0);
   useDevCelebrate(

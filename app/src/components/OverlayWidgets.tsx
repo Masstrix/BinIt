@@ -13,6 +13,8 @@ import { useDevCelebrate } from "../devOverlay";
 import { Helmet } from "./Helmet";
 import type { Look } from "../looks";
 import { QrCode } from "./QrCode";
+import { ProBoardCard, ProGapCard, ProGhostCard, useProOverlay } from "./ProOverlay";
+import type { ProOverlay } from "../proMode";
 import { Signed } from "./Signed";
 
 const card = {
@@ -57,6 +59,8 @@ export interface OverlayData {
   slip: { slipDeg: number; slide: "none" | "slide" | "drift" | "spin" } | null;
   /** Address phones on the network can open (null when sharing is off or there is no network). */
   url: string | null;
+  /** The pro-lap challenge that is switched on, when one is: the overlay then follows it (see `applyProMode`). */
+  pro: ProOverlay | null;
 }
 
 /** Everything the widgets show, from live app state. */
@@ -65,6 +69,7 @@ export function useOverlayData(): OverlayData {
   const drivers = useDriverMap();
   const seat = status?.seat != null ? drivers.get(status.seat) : undefined;
   const session = status?.session ?? null;
+  const pro = useProOverlay();
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     api.server().then((s) => setUrl(s.urls[0] ?? null)).catch(() => setUrl(null));
@@ -119,6 +124,7 @@ export function useOverlayData(): OverlayData {
     outLap: !!(status?.live?.driving && status.live.outLap),
     slip: status?.live?.driving && status.live.inputs?.dynamics ? { slipDeg: status.live.inputs.dynamics.slipDeg, slide: status.live.slide } : null,
     url,
+    pro,
   };
 }
 
@@ -234,6 +240,29 @@ export const MOCK_DATA: OverlayData = {
   outLap: false,
   slip: { slipDeg: -23, slide: "drift" },
   url: "http://192.168.0.20:7878",
+  pro: {
+    id: "nord-992-gt3rs",
+    name: "Nordschleife",
+    title: "Nordschleife · 911 GT3 RS (992)",
+    proMs: 409328,
+    limitMs: 421607,
+    driver: "Jörg Bergmeister",
+    rewards: { proLevel: { xp: 300, coins: 300 }, beat: { xp: 2000, coins: 1500 } },
+    attempt: 6,
+    bestMs: 420940,
+    proLevelEarned: true,
+    beatEarned: false,
+    setup: null,
+    need: { track: "Nordschleife", layout: "Nordschleife", car: "911 GT3 RS (992)" },
+    live: { gapMs: 9804, onPaceMs: 419132, progress: 0.55, proProgress: 0.575 },
+    lapMs: 201480,
+    rows: [
+      { driverId: 2, gapMs: 9103, proLevel: true, beat: false, attempts: 4, name: "Jess", color: "#2FA8FF", isSeat: false },
+      { driverId: 1, gapMs: 11612, proLevel: true, beat: false, attempts: 6, name: "Sam", color: "#FF8A4C", isSeat: true },
+      { driverId: 3, gapMs: 24318, proLevel: false, beat: false, attempts: 2, name: "Alex", color: "#FFC93C", isSeat: false },
+    ],
+    lapLengthM: 20832,
+  },
 };
 
 export const MOCK_TOAST: Toast = { id: 0, tone: "pb", title: "New PB 1:42.318", detail: "Up to P2 in Imola Hot Lap Week" };
@@ -255,6 +284,10 @@ export function hasContent(w: WidgetId, data: OverlayData): boolean {
       return data.url !== null;
     case "slip":
       return data.slip !== null;
+    case "proGap":
+    case "proBoard":
+    case "proGhost":
+      return data.pro !== null;
     default:
       return true;
   }
@@ -967,7 +1000,7 @@ export function LeaderboardCard({ data }: { data: OverlayData }) {
 
 export interface Toast {
   id: number;
-  tone: "pb" | "record" | "lead" | "cut" | "lap" | "out" | "in";
+  tone: "pb" | "record" | "lead" | "cut" | "lap" | "out" | "in" | "pro" | "beat";
   title: string;
   detail: string;
 }
@@ -981,6 +1014,8 @@ const TONES: Record<Toast["tone"], { bg: string; fg: string; badge: string }> = 
   lap: { bg: "#161B24", fg: "#E8EBF4", badge: "LAP" },
   out: { bg: "#1E2430", fg: "#E8EBF4", badge: "OUT" },
   in: { bg: "#1E2430", fg: "#E8EBF4", badge: "IN" },
+  pro: { bg: "#F5B544", fg: "#241A05", badge: "PRO" },
+  beat: { bg: "#B79BFF", fg: "#1B1038", badge: "PRO" },
 };
 
 export function ToastCard({ toast, animate = true }: { toast: Toast; animate?: boolean }) {
@@ -1028,6 +1063,17 @@ export function useLapToasts(pbMs: number | null): Toast | null {
       const moved = s?.position != null && s.position !== s.previousPosition ? ` · up to P${s.position}` : "";
       let t: Omit<Toast, "id">;
       const kind = lapKind(r.lap);
+      // A lap that counted for the pro-lap challenge says how it stood against the pro, ahead of the ordinary pop-ups.
+      if (r.pro) {
+        const p = r.pro;
+        const paid = r.awards && r.awards.xp > 0 ? ` · +${r.awards.xp} XP${r.awards.coins ? ` · +${r.awards.coins} coins` : ""}` : "";
+        const gap = `${p.gapMs < 0 ? "−" : "+"}${(Math.abs(p.gapMs) / 1000).toFixed(3)}`;
+        if (p.beat) t = { tone: "beat", title: `Beat the pro ${lapTime(p.timeMs)}`, detail: `${gap} vs the pro${paid}` };
+        else if (p.proLevel) t = { tone: "pro", title: `Pro level ${lapTime(p.timeMs)}`, detail: `${gap} vs the pro · attempt ${p.attempt}${paid}` };
+        else t = { tone: "pro", title: `Counted ${lapTime(p.timeMs)}`, detail: `${gap} vs the pro · attempt ${p.attempt}` };
+        setToast({ ...t, id: Date.now() });
+        return;
+      }
       // The big moments (PB, record, the lead) are celebrations now; the Pop-ups slot shows those.
       if (kind === "timed" && (r.comboRecord || r.personalBest || (s?.position === 1 && s.previousPosition !== 1))) return;
       if (kind === "outLap") t = { tone: "out", title: `Out lap ${lapTime(r.lap.timeMs)}`, detail: "Timing starts now. Good luck!" };
@@ -1125,6 +1171,9 @@ export function SectionWidgets({
           const Tower = styleOf({ styles }, "tower") === "gaps" ? GapMonitorCard : GapTowerCard;
           return wrap(g, <Tower data={data} orientation={orientationFor(anchor)} live={towerMode === "live"} />);
         }
+        if (g === "proGap") return data.pro ? wrap(g, <ProGapCard pro={data.pro} />) : null;
+        if (g === "proBoard") return data.pro ? wrap(g, <ProBoardCard pro={data.pro} />) : null;
+        if (g === "proGhost") return data.pro ? wrap(g, <ProGhostCard pro={data.pro} />) : null;
         if (g === "qr") return wrap(g, <QrCard data={data} />);
         if (g === "slip") return wrap(g, <SlipCard data={data} />);
         if (celebration) return wrap(g, <CelebrationView key={celebration.id} c={celebration} layout={orientationFor(anchor) === "horizontal" ? "pill" : "card"} />);

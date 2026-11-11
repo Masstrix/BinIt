@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { api, useAppEvent, type AppEvent } from "./api";
 
-export type WidgetId = "driver" | "pb" | "challenge" | "timing" | "standings" | "leaderboard" | "tower" | "qr" | "slip" | "toasts";
+export type WidgetId = "driver" | "pb" | "challenge" | "timing" | "standings" | "leaderboard" | "tower" | "qr" | "slip" | "toasts" | "proGap" | "proBoard" | "proGhost";
 export type Anchor =
   | "top-left"
   | "top-center"
@@ -51,7 +51,14 @@ export const WIDGETS: Record<WidgetId, { label: string; description: string; com
   qr: { label: "Phone QR code", description: "Scan to open Bin It on a phone: pick the driver, see the standings", compact: false },
   slip: { label: "Slip angle", description: "How far sideways the car is, and whether that is a slide, a drift or a spin. AC EVO only", compact: false },
   toasts: { label: "Pop-ups", description: "New PB, record, new leader, cut lap. Shows for 4s", compact: false },
+  proGap: { label: "Pro gap", description: "Pro challenge only: the gap to the pro lap, the range to pro level and what the lap is on course for", compact: false },
+  proBoard: { label: "Pro prize & office", description: "Pro challenge only: what beating the pro pays, and how the office stands against the pro", compact: false },
+  proGhost: { label: "Pro ghost map", description: "Pro challenge only: the track with you and where the pro would be, and how far behind", compact: false },
 };
+
+/** The widgets a pro challenge takes over from: while one is on, these give way to the three pro widgets. */
+export const PRO_REPLACED: WidgetId[] = ["timing", "tower", "standings", "leaderboard", "challenge"];
+export const PRO_WIDGETS: WidgetId[] = ["proGap", "proBoard", "proGhost"];
 
 /** The styles a widget comes in, first one the default. A widget not listed has just one. */
 export const WIDGET_STYLES: Partial<Record<WidgetId, { id: string; label: string; hint: string }[]>> = {
@@ -182,6 +189,8 @@ export interface GameProfile {
   hud: { label: string; box: Box }[];
   /** Per-section distance from the top/bottom edge (%), to clear fixed game UI. */
   edges?: Partial<Record<Anchor, number>>;
+  /** Where the pro board and ghost map go when the layout has not put them anywhere (clear of this game's HUD). */
+  proHomes?: { proBoard: Anchor; proGhost: Anchor };
   defaults: OverlayLayout;
 }
 
@@ -208,6 +217,8 @@ export const GAME_PROFILES: GameProfile[] = [
     ],
     // Start the top-centre section below the session bar (time / session / weather).
     edges: { "top-center": 6, "bottom-left": 8 },
+    // The game's lap timing and track map are down the left, so the pro board and map go down the right.
+    proHomes: { proBoard: "top-right", proGhost: "middle-right" },
     defaults: standard,
   },
   { key: "ac", name: "Assetto Corsa", hud: [], defaults: standard },
@@ -233,7 +244,7 @@ function contentHeight(items: WidgetId[], anchor: Anchor): number {
       inStrip = true;
     } else {
       const tower = orientationFor(anchor) === "horizontal" ? 8 : 20;
-      h += w === "timing" ? 11 : w === "standings" ? 13 : w === "leaderboard" ? 18 : w === "tower" ? tower : 7.5;
+      h += w === "timing" ? 11 : w === "standings" ? 13 : w === "leaderboard" ? 18 : w === "tower" ? tower : w === "proGap" ? 14 : w === "proBoard" ? 24 : w === "proGhost" ? 20 : 7.5;
       inStrip = false;
     }
   }
@@ -278,6 +289,38 @@ function sanitize(raw: unknown, fallback: OverlayLayout): OverlayLayout {
     ...(r.towerMode === "live" ? { towerMode: "live" as const } : {}),
     ...(Object.keys(margins).length ? { margins } : {}),
   };
+}
+
+/**
+ * The layout while a pro challenge is on: the pro widgets take the places of the ones they replace, so the player's own
+ * positions still hold. The gap sits where Live timing was, the prize and office board where the challenge top 3 or
+ * the leaderboard was, the ghost map where the gap tower was. A pro widget the player has already placed stays where
+ * they put it. With nothing to take the place of, they go to the profile's own spots (clear of the game's HUD).
+ */
+export function applyProMode(layout: OverlayLayout, profile: GameProfile): OverlayLayout {
+  const sections: OverlayLayout["sections"] = {};
+  for (const a of ANCHORS) if (layout.sections[a]?.length) sections[a] = [...layout.sections[a]!];
+  const where = (w: WidgetId) => ANCHORS.find((a) => sections[a]?.includes(w));
+  const homes: [WidgetId, WidgetId[], Anchor][] = [
+    ["proGap", ["timing"], "top-center"],
+    ["proBoard", ["standings", "leaderboard"], profile.proHomes?.proBoard ?? "middle-left"],
+    ["proGhost", ["tower"], profile.proHomes?.proGhost ?? "middle-right"],
+  ];
+  for (const [pro, takes, fallback] of homes) {
+    if (where(pro)) continue;
+    const from = takes.find((w) => where(w));
+    const anchor = from ? where(from)! : fallback;
+    const items = sections[anchor] ?? [];
+    const at = from ? items.indexOf(from) : items.length;
+    items.splice(at, 0, pro);
+    sections[anchor] = items;
+  }
+  for (const a of ANCHORS) {
+    const items = sections[a]?.filter((w) => !PRO_REPLACED.includes(w));
+    if (items?.length) sections[a] = items;
+    else delete sections[a];
+  }
+  return { ...layout, sections };
 }
 
 /** The saved layout for a game (or its default), kept live across windows. */
