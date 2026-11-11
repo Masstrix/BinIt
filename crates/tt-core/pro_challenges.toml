@@ -24,12 +24,12 @@
 marginPercent = 3.0
 
 [rewards.proLevel]
-xp = 300
-coins = 300
+xp = 1000
+coins = 800
 
 [rewards.beat]
-xp = 2000
-coins = 1500
+xp = 3000
+coins = 2000
 
 [[challenges]]
 id = "nord-992-gt3rs"

@@ -128,7 +128,7 @@ export const CHALLENGES: Challenge[] = [
 
 /** The pro-lap challenges, copied from crates/tt-core/pro_challenges.toml so the mock server can serve them. */
 const pro = (c: Omit<ProChallenge, "games" | "marginPercent" | "limitMs" | "rewards" | "layouts" | "trackPatterns"> & { games?: string[] }): ProChallenge => ({
-  games: ["acevo"], layouts: c.layout ? [c.layout] : [], trackPatterns: [c.track], marginPercent: 3, limitMs: Math.floor(c.timeMs * 1.03), rewards: { proLevel: { xp: 300, coins: 300 }, beat: { xp: 2000, coins: 1500 } }, ...c,
+  games: ["acevo"], layouts: c.layout ? [c.layout] : [], trackPatterns: [c.track], marginPercent: 3, limitMs: Math.floor(c.timeMs * 1.03), rewards: { proLevel: { xp: 1000, coins: 800 }, beat: { xp: 3000, coins: 2000 } }, ...c,
 });
 export const PRO_CHALLENGES: ProChallenge[] = [
   pro({ id: "nord-992-gt3rs", name: "Nordschleife", track: "Nurburgring", layout: "Nordschleife", car: "Porsche 911 (992) GT3 RS", class: null, timeMs: 409328, driver: "Jörg Bergmeister", date: "2022-10", realCar: "Porsche 911 GT3 RS (992.1)", session: "Record attempt, full 20.832 km lap", confidence: "A", source: "Notarised record attempt", about: "In October 2022 Porsche took a standard 992 GT3 RS, the road car, round the full Nordschleife in 6:49.328 with Jörg Bergmeister driving. The run was timed and certified by a notary. A flying lap on warm tyres, so treat it as a target to approach.", art: "nordschleife-992-gt3-rs.jpg", artOffset: null, cardOffset: "53% 50%" }),

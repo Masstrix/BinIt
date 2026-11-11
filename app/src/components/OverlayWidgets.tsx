@@ -247,7 +247,7 @@ export const MOCK_DATA: OverlayData = {
     proMs: 409328,
     limitMs: 421607,
     driver: "Jörg Bergmeister",
-    rewards: { proLevel: { xp: 300, coins: 300 }, beat: { xp: 2000, coins: 1500 } },
+    rewards: { proLevel: { xp: 1000, coins: 800 }, beat: { xp: 3000, coins: 2000 } },
     attempt: 6,
     bestMs: 420940,
     proLevelEarned: true,

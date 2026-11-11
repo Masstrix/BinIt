@@ -158,8 +158,8 @@ Search results for these mostly returned simulator leaderboards, which we must n
 - **Layout lock**: a lap counts only on the exact layout the real time was set on (stored in the challenge definition).
 - **Result**: beating the real time is the big reward. Landing within a tolerance of it counts as a pass ("pro level").
   The tolerance (a percentage, maybe per class) is still to be decided.
-- **Rewards (design numbers, not built)**: reaching pro level (within 3% of the pro time) pays +300 XP and +300 coins the
-  first time; beating the pro pays +2,000 XP, +1,500 coins and a "Pro slayer" sticker the first time. For scale, the
+- **Rewards (design numbers, not built)**: reaching pro level (within 3% of the pro time) pays +1,000 XP and +800 coins the
+  first time; beating the pro pays +3,000 XP, +2,000 coins and a "Pro slayer" sticker the first time. For scale, the
   existing economy pays 50 XP for a personal best and 150 XP for a track record (`crates/tt-core/rewards.json`, 100 XP per
   level), so these are much bigger and may need trimming before they ship.
 - **Only accepted attempts count**: a lap counts toward a challenge only if the driver had opened that challenge first
