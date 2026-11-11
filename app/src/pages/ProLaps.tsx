@@ -105,7 +105,31 @@ function ProList({ overview }: { overview: ProOverview | null }) {
   const active = overview?.challenges.find((c) => c.id === overview.active) ?? null;
   // The cards sit in a row you scroll sideways. The row fades out where there is more to see, and is solid at an edge.
   const rail = useRef<HTMLDivElement>(null);
-  const [edge, setEdge] = useState({ start: true, end: false, fit: false, thumb: 1, at: 0 });
+  const [edge, setEdge] = useState({ fit: false, thumb: 1 });
+  // Which ends of the row are in view. Changes only when an end is reached or left, so scrolling does not re-render the list.
+  const [ends, setEnds] = useState({ start: true, end: false });
+  const bar = useRef<HTMLSpanElement>(null);
+  // Where the scroll bar's thumb sits, and which ends are in view. Straight onto the bar while scrolling (no render of the cards),
+  // and a render only when an end changes.
+  const place = useCallback(() => {
+    const el = rail.current;
+    if (!el) return;
+    const thumb = Math.min(1, el.clientWidth / Math.max(1, el.scrollWidth));
+    const range = Math.max(1, el.scrollWidth - el.clientWidth);
+    if (bar.current) bar.current.style.left = `${Math.min(1, el.scrollLeft / range) * (1 - thumb) * 100}%`;
+    const start = el.scrollLeft < 4;
+    const end = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4;
+    setEnds((e) => (e.start === start && e.end === end ? e : { start, end }));
+  }, []);
+  const pending = useRef(0);
+  const onScroll = useCallback(() => {
+    if (pending.current) return;
+    pending.current = requestAnimationFrame(() => {
+      pending.current = 0;
+      place();
+    });
+  }, [place]);
+  useEffect(() => () => cancelAnimationFrame(pending.current), []);
   const measure = useCallback(() => {
     const el = rail.current;
     if (!el) return;
@@ -114,9 +138,8 @@ function ProList({ overview }: { overview: ProOverview | null }) {
     const first = el.firstElementChild as HTMLElement | null;
     const last = el.lastElementChild as HTMLElement | null;
     const cards = first && last ? last.offsetLeft + last.offsetWidth - first.offsetLeft : 0;
-    // The scroll bar under the row: its thumb is the share of the row you can see, and it sits where you have scrolled to.
+    // The scroll bar under the row: its thumb is the share of the row you can see.
     const thumb = Math.min(1, el.clientWidth / Math.max(1, el.scrollWidth));
-    const range = Math.max(1, el.scrollWidth - el.clientWidth);
     // Whole pixels, for the cards and where the row starts: the browser's picture of a card is a whole number of pixels, so a
     // card of 311.34 px would change by a fraction of a pixel (a visible edge) when the real card takes over at the end.
     const wrap = el.parentElement;
@@ -127,14 +150,14 @@ function ProList({ overview }: { overview: ProOverview | null }) {
       const free = wrap.clientWidth - cards;
       el.style.setProperty("--row-pad", `${cards > 0 && free > 0 ? Math.floor(free / 2) : 0}px`);
     }
-    setEdge({
-      start: el.scrollLeft < 4,
-      end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 4,
-      fit: cards > 0 && cards <= (el.parentElement?.clientWidth ?? 0),
-      thumb,
-      at: Math.min(1, el.scrollLeft / range) * (1 - thumb),
+    setEdge((e) => {
+      const fit = cards > 0 && cards <= (el.parentElement?.clientWidth ?? 0);
+      return e.fit === fit && e.thumb === thumb ? e : { fit, thumb };
     });
-  }, []);
+    place();
+  }, [place]);
+  // The bar is made (or made again) when the row stops fitting: put its thumb where the row is scrolled to.
+  useLayoutEffect(place, [place, edge]);
   // The cards are as tall as the window leaves room for, so their width changes with the window: measure again then.
   useLayoutEffect(() => {
     const el = rail.current;
@@ -179,7 +202,7 @@ function ProList({ overview }: { overview: ProOverview | null }) {
         <div className="empty">Loading…</div>
       ) : (
         <div className="pro-rail-wrap">
-          <div className="pro-rail" ref={rail} onScroll={measure} data-start={edge.start || undefined} data-end={edge.end || undefined} data-fit={edge.fit || undefined}>
+          <div className="pro-rail" ref={rail} onScroll={onScroll} data-start={ends.start || undefined} data-end={ends.end || undefined} data-fit={edge.fit || undefined}>
             {overview.challenges.map((c, i) => {
               const s = standing(c, who);
               return (
@@ -206,10 +229,10 @@ function ProList({ overview }: { overview: ProOverview | null }) {
           </div>
           {!edge.fit && (
             <div className="pro-rail-bar" aria-hidden="true">
-              <span style={{ width: `${edge.thumb * 100}%`, left: `${edge.at * 100}%` }} />
+              <span ref={bar} style={{ width: `${edge.thumb * 100}%` }} />
             </div>
           )}
-          {!edge.end && (
+          {!ends.end && (
             <button type="button" className="pro-rail-next" aria-label="Scroll right" onClick={more}>
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
             </button>

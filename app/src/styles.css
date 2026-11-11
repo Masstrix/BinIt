@@ -1999,7 +1999,7 @@ html[data-nav="open"]::view-transition-new(page), html[data-nav="close"]::view-t
 .pro-rail-next:hover { background: #f8c463; }
 /* The scroll bar under the row: a thin track with an amber thumb. */
 .pro-rail-bar { position: absolute; left: 0; right: 0; bottom: 4px; height: 4px; border-radius: 999px; background: var(--panel-2); }
-.pro-rail-bar > span { position: absolute; top: 0; bottom: 0; border-radius: 999px; background: #f5b544; transition: left 80ms linear; }
+.pro-rail-bar > span { position: absolute; top: 0; bottom: 0; border-radius: 999px; background: #f5b544; }
 .pro-card { position: relative; display: block; flex: none; height: round(down, 100%, 3px); aspect-ratio: 2 / 3; scroll-snap-align: start; border-radius: 32px; overflow: hidden; background: var(--panel); color: #fff; text-decoration: none; isolation: isolate; }
 .pro-card:hover { color: #fff; }
 .pro-art { position: absolute; inset: 0; display: block; overflow: hidden; z-index: -2; }
