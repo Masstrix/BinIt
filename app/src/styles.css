@@ -372,15 +372,29 @@ h2 { font-size: 22px; line-height: 1.2; }
 
 /* ---- challenges ------------------------------------------------------------------------ */
 
-.ch-picker { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
-.ch-tab {
-  flex: none; display: flex; flex-direction: column; gap: 2px; min-height: 56px; max-width: 280px; padding: 10px 18px; border-radius: 24px;
-  background: var(--panel); border: 1px solid transparent; color: var(--text-2); text-decoration: none;
+.ch-section-head { align-items: center; }
+/* The title and the Office / Pro laps switch are on every page of the section: give them a transition of their own so
+   they stay put while the page below slides (the browser pairs the old and new header and they are the same). */
+.ch-section-head { view-transition-name: ch-head; }
+.ch-strip { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.ch-card {
+  flex: none; width: 290px; display: flex; flex-direction: column; gap: 6px; padding: 16px 20px; border-radius: 26px;
+  background: var(--panel); color: var(--text-2); text-decoration: none; text-align: left; border: 0; font: inherit;
 }
-.ch-tab:hover { background: var(--panel-2); color: var(--text); }
-.ch-tab[aria-current="page"] { background: var(--tint); border-color: transparent; color: var(--peri-1); }
-.ch-tab-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ch-tab-meta { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-card:hover { background: var(--panel-2); color: var(--text); }
+.ch-card[aria-current="page"] { background: var(--tint); color: var(--peri-1); }
+.ch-card-name { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text); min-width: 0; }
+.ch-card[aria-current="page"] .ch-card-name { color: var(--peri-1); }
+.ch-card-name span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-card-meta { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 6px; font: 500 12px var(--font-mono); }
+.ch-card-state { padding: 3px 9px; border-radius: 999px; background: var(--panel-2); color: var(--muted); white-space: nowrap; }
+.ch-card[data-live] .ch-card-state { background: var(--mint-bg); color: var(--mint); }
+.ch-card[aria-current="page"] .ch-card-state { background: rgba(14, 17, 23, 0.4); }
+.ch-card-lead { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.ch-card-new { align-items: center; justify-content: center; flex-direction: row; gap: 10px; width: auto; min-width: 190px; background: var(--panel-2); color: var(--text); font-weight: 600; cursor: pointer; }
+.ch-card-new:hover { background: var(--panel-3); }
+@media (max-width: 640px) { .ch-card { width: 250px; } }
 
 .ch-stack { display: flex; flex-direction: column; gap: 28px; }
 .ch-head { align-items: flex-end; }
@@ -1028,7 +1042,10 @@ h2 { font-size: 22px; line-height: 1.2; }
 
 /* ---- driver progress ------------------------------------------------------------------------ */
 
-.back-link { align-self: flex-start; font-weight: 600; text-decoration: none; }
+/* A back button that reads as a button: a pill with an arrow, big enough to hit with a thumb. */
+.back-link, .back-btn { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 20px 0 14px; border-radius: 999px; background: var(--panel-2); color: var(--text); font-weight: 600; font-size: 15px; text-decoration: none; }
+.back-link:hover, .back-btn:hover { background: var(--panel-3); color: var(--text); }
+.back-btn svg { flex: none; color: var(--peri-1); }
 .driver-link { display: flex; flex-direction: column; color: var(--text); text-decoration: none; min-width: 0; }
 .driver-link:hover { color: var(--peri-1); }
 .stat-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
@@ -1771,7 +1788,69 @@ html[data-nav="back"]::view-transition-new(page) { animation-name: page-in-left;
 @keyframes page-in-right { from { opacity: 0; transform: translateX(36px); } }
 @keyframes page-out-right { to { opacity: 0; transform: translateX(28px); } }
 @keyframes page-in-left { from { opacity: 0; transform: translateX(-36px); } }
+/* The sliding page is clipped to the page area, so it never draws over the side menu or the title bar. */
+::view-transition-group(page) { overflow: clip; }
+
+/* A Pro lap's card grows into its page (and back): the card and the page's banner are one shared element. The page
+   itself only fades, a little behind, so the grow leads; the parts of the page then rise in one after another. */
+.pro-hero > .pro-art { view-transition-name: pro-hero; }
+.pro-hero > .pro-hero-top > .pro-flag-chip { view-transition-name: pro-chip; }
+.pro-hero-top > .pro-chip-dark { view-transition-name: pro-hero-game; }
+.pro-hero-title { view-transition-name: pro-title; }
+.pro-hero-sub { view-transition-name: pro-hero-sub; }
+.pro-hero-time { view-transition-name: pro-time; }
+::view-transition-group(pro-chip), ::view-transition-group(pro-title), ::view-transition-group(pro-time) { animation-duration: 560ms; animation-timing-function: cubic-bezier(0.22, 0.9, 0.25, 1); }
+::view-transition-group(pro-hero) { animation-duration: 560ms; animation-timing-function: cubic-bezier(0.22, 0.9, 0.25, 1); }
+::view-transition-old(pro-hero), ::view-transition-new(pro-hero) { width: 100%; height: 100%; object-fit: cover; mix-blend-mode: normal; }
+/* One picture, not two. The card's crop is a narrow slice, so it cannot stand in for the banner (and the other way
+   round); the page's own (wide) picture is the one that moves, and it slides from one crop to the other as it grows.
+   The other is hidden, so there is nothing to fade between and no ghost. */
+/* The banner's picture is the whole photo, so scaled into the card's shape with the card's offset it is the card's picture
+   exactly, and the other way round at the end. The window is cut to the card, and opens up to the banner as it grows
+   (the photo is taller than the banner: the banner's edge cuts the rest off at the end). Opening: the card's own
+   picture is there for the first moment and the photo settles over it. Closing: the card's picture settles over the
+   photo in the last moment, so the real card takes over without a jump. */
+html[data-nav="open"]::view-transition-new(pro-hero), html[data-nav="close"]::view-transition-old(pro-hero) { object-position: var(--vt-card-pos, 50% 50%); }
+html[data-nav="open"]::view-transition-old(pro-hero) { animation: none; opacity: 1; }
+html[data-nav="open"]::view-transition-new(pro-hero) { animation: none; opacity: 1; } /* opaque from the first frame: it is cropped to the card's picture, and a fade would overlay two different crops while the picture grows */
+html[data-nav="close"]::view-transition-old(pro-hero) { animation: none; opacity: 1; }
+html[data-nav="close"]::view-transition-new(pro-hero) { animation: vt-fade-in 160ms ease-in 400ms both; }
+html[data-nav="open"]::view-transition-image-pair(pro-hero) { animation: vt-cut-open 560ms cubic-bezier(0.22, 0.9, 0.25, 1) both; }
+html[data-nav="close"]::view-transition-image-pair(pro-hero) { animation: vt-cut-close 560ms cubic-bezier(0.22, 0.9, 0.25, 1) both; }
+@keyframes vt-cut-open { from { clip-path: inset(0 0 0 0 round 32px); } to { clip-path: inset(var(--vt-cut-top, 0px) 0 var(--vt-cut-bottom, 0px) 0 round 32px); } }
+@keyframes vt-cut-close { from { clip-path: inset(var(--vt-cut-top, 0px) 0 var(--vt-cut-bottom, 0px) 0 round 32px); } to { clip-path: inset(0 0 0 0 round 32px); } }
+/* The title, the time and the chip are on both pages. The version being left stays on screen and is replaced by the other
+   only in the first moment (opening) or the last (closing), when the two are nearly the same size, so mid-flight there is
+   one piece of text moving, not two overlapping. */
+html[data-nav="open"]::view-transition-old(pro-title), html[data-nav="open"]::view-transition-old(pro-time), html[data-nav="open"]::view-transition-old(pro-chip) { animation: vt-fade-out 140ms ease-out both; }
+html[data-nav="open"]::view-transition-new(pro-title), html[data-nav="open"]::view-transition-new(pro-time), html[data-nav="open"]::view-transition-new(pro-chip) { animation: vt-fade-in 140ms ease-out both; }
+html[data-nav="close"]::view-transition-old(pro-title), html[data-nav="close"]::view-transition-old(pro-time), html[data-nav="close"]::view-transition-old(pro-chip) { animation: vt-fade-out 160ms ease-in 400ms both; }
+html[data-nav="close"]::view-transition-new(pro-title), html[data-nav="close"]::view-transition-new(pro-time), html[data-nav="close"]::view-transition-new(pro-chip) { animation: vt-fade-in 160ms ease-in 400ms both; }
+/* Text that is not on both pages: the card's goes quickly, the banner's arrives once the picture has mostly grown. */
+::view-transition-old(pro-card-car), ::view-transition-old(pro-card-meta), ::view-transition-old(pro-card-status) { animation: vt-fade-out 140ms ease-in both; }
+::view-transition-new(pro-card-car), ::view-transition-new(pro-card-meta), ::view-transition-new(pro-card-status) { animation: vt-fade-in 220ms ease-out 340ms both; }
+::view-transition-old(pro-hero-sub), ::view-transition-old(pro-hero-game) { animation: vt-fade-out 140ms ease-in both; }
+::view-transition-new(pro-hero-sub), ::view-transition-new(pro-hero-game) { animation: vt-fade-in 240ms ease-out 300ms both; }
+@keyframes vt-fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes vt-fade-in { from { opacity: 0; } to { opacity: 1; } }
+html[data-nav="open"]::view-transition-old(page), html[data-nav="close"]::view-transition-old(page) { animation: page-fade-out 200ms ease-in both; }
+html[data-nav="open"]::view-transition-new(page), html[data-nav="close"]::view-transition-new(page) { animation: page-fade-in 360ms 140ms ease-out both; }
+@keyframes page-fade-out { to { opacity: 0; } }
+@keyframes page-fade-in { from { opacity: 0; } }
+@keyframes pro-rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+.pro-detail > .back-btn { animation: pro-rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.18s both; }
+.pro-detail > .pro-actions { animation: pro-rise 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 0.34s both; }
+.pro-detail > .pro-note { animation: pro-rise 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 0.42s both; }
+.pro-detail .pro-col > .card { animation: pro-rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.pro-detail .pro-col > .card:nth-child(1) { animation-delay: 0.5s; }
+.pro-detail .pro-col > .card:nth-child(2) { animation-delay: 0.6s; }
+.pro-detail .pro-col > .card:nth-child(3) { animation-delay: 0.7s; }
+.pro-detail:not(.pro-detail-grown) .pro-hero-top, .pro-detail:not(.pro-detail-grown) .pro-hero-bottom { animation: pro-rise 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) 0.3s both; }
+/* Coming back, the other cards rise in around the one the banner shrinks into (the class is set once, when the list appears). */
+.pro-card-in { animation: pro-rise 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: calc(0.2s + var(--i, 0) * 60ms); }
+
 @media (prefers-reduced-motion: reduce) {
+  .pro-detail > *, .pro-detail .pro-col > .card, .pro-detail .pro-hero-top, .pro-detail .pro-hero-bottom { animation: none !important; }
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
 
@@ -1877,4 +1956,144 @@ html[data-nav="back"]::view-transition-new(page) { animation-name: page-in-left;
   .dc-unrated { font-size: 12px; text-align: right; max-width: 64px; line-height: 1.25; }
   .dc-breakdown { left: auto; right: 8px; top: 50%; bottom: auto; transform: translateY(-50%); width: 44px; height: 44px; min-height: 0; padding: 0; justify-content: center; border-radius: 14px; }
   .dc-bd-label { display: none; }
+
+/* ---- pro laps (a real driver's lap to beat) -------------------------------------------------- */
+
+.pro-page { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.pro-tabs { display: inline-flex; gap: 2px; padding: 4px; border-radius: 999px; background: var(--panel-2); align-self: flex-start; }
+.pro-tabs a { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 20px; border-radius: 999px; color: var(--muted); font-weight: 500; text-decoration: none; }
+.pro-tabs a[aria-current="page"] { background: var(--panel); color: var(--text); font-weight: 700; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
+.pro-tabs a[aria-current="page"] svg { color: var(--gold); }
+
+.pro-live { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-radius: 22px; background: var(--tint); color: var(--peri-1); }
+
+.pro-problem { display: flex; flex-direction: column; gap: 4px; padding: 14px 20px; border-radius: 22px; background: #3a1a24; color: #ffd3db; font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.pro-problem b { color: var(--red); }
+.pro-folder { margin: 0; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.content:has(> .pro-page-list) { background: linear-gradient(180deg, rgba(245, 181, 68, 0.28) 0, rgba(227, 139, 44, 0.12) 180px, rgba(245, 181, 68, 0) 380px) no-repeat top / 100% 420px; background-attachment: local; }
+.pro-intro { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 4px 0 8px; text-align: center; }
+.pro-kicker { display: inline-flex; align-items: center; gap: 8px; font: 700 11px var(--font-mono); letter-spacing: 0.12em; color: #f5b544; text-transform: uppercase; }
+.pro-intro-title { margin: 0; font: 800 34px/1.1 var(--font-display); letter-spacing: -0.03em; color: #f8c463; }
+.pro-intro-sub { margin: 0; font-size: 15px; line-height: 1.5; color: var(--text-2); max-width: 560px; }
+/* The list fills the window with no vertical scroll: the row of cards takes the height that is left and each card is
+   as tall as the row (keeping its shape), so a big window gets big cards and a small one small cards. */
+.content:has(> .pro-page-list) { flex: 1 1 0; }
+.content > .pro-page-list { flex: 1 1 0; min-height: 0; }
+.pro-page-list { gap: 16px; }
+.pro-rail-wrap { position: relative; flex: 1 1 0; min-height: 200px; container-type: size; }
+.pro-rail {
+  --l: 56px; --r: 120px;
+  position: absolute; inset: 0 0 16px 0;
+  display: flex; gap: 18px; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none;
+  margin-right: -32px; padding-right: 80px;
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0) 0, #000 var(--l), #000 calc(100% - var(--r)), rgba(0, 0, 0, 0) 100%);
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0) 0, #000 var(--l), #000 calc(100% - var(--r)), rgba(0, 0, 0, 0) 100%);
+}
+.pro-rail::-webkit-scrollbar { display: none; }
+.pro-rail[data-start] { --l: 0px; }
+.pro-rail[data-end] { --r: 0px; }
+/* Everything fits: no fades, and the row sits in the middle. */
+.pro-rail[data-fit] { --l: 0px; --r: 0px; margin-right: 0; padding-right: 0; padding-left: var(--row-pad, 0px); }
+.pro-rail-next { position: absolute; right: 4px; top: calc(50% - 8px); transform: translateY(-50%); width: 52px; height: 52px; border-radius: 50%; border: 0; display: grid; place-items: center; background: #f5b544; color: #241a05; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5); cursor: pointer; }
+.pro-rail-next:hover { background: #f8c463; }
+/* The scroll bar under the row: a thin track with an amber thumb. */
+.pro-rail-bar { position: absolute; left: 0; right: 0; bottom: 4px; height: 4px; border-radius: 999px; background: var(--panel-2); }
+.pro-rail-bar > span { position: absolute; top: 0; bottom: 0; border-radius: 999px; background: #f5b544; transition: left 80ms linear; }
+.pro-card { position: relative; display: block; flex: none; height: round(down, 100%, 3px); aspect-ratio: 2 / 3; scroll-snap-align: start; border-radius: 32px; overflow: hidden; background: var(--panel); color: #fff; text-decoration: none; isolation: isolate; }
+.pro-card:hover { color: #fff; }
+.pro-art { position: absolute; inset: 0; display: block; overflow: hidden; z-index: -2; }
+.pro-art > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+/* The shading is on the picture itself, so it travels with the picture and is the same on a card and on a banner. */
+.pro-hero > .pro-art { inset: auto; left: 0; right: 0; top: calc(var(--py, 0.5) * 100%); transform: translateY(calc(var(--py, 0.5) * -100%)); }
+.pro-hero > .pro-art > img { position: static; width: 100%; height: auto; min-height: var(--hero-h); }
+.pro-art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(8, 10, 14, 0.9) 0%, rgba(8, 10, 14, 0.4) 40%, rgba(8, 10, 14, 0) 66%); }
+.pro-card-top { position: absolute; left: 18px; right: 18px; top: 18px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pro-flag-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: #f5b544; color: #241a05; font: 800 11px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; }
+.pro-chip-dark { display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 999px; background: rgba(10, 13, 18, 0.7); color: #e8ebf4; }
+.pro-status { display: inline-flex; padding: 6px 12px; border-radius: 999px; background: rgba(10, 13, 18, 0.7); color: #e8ebf4; font: 700 12px var(--font-mono); white-space: nowrap; }
+.pro-status[data-status="level"] { background: var(--mint); color: #062b1e; }
+.pro-status[data-status="beaten"] { background: var(--fast); color: #1b1038; }
+.pro-card-bottom { position: absolute; left: 22px; right: 22px; bottom: 20px; display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+.pro-card-text { display: flex; flex-direction: column; min-width: 0; }
+.pro-card-name { font: 800 clamp(18px, 4.2cqh, 26px)/1.1 var(--font-display); letter-spacing: -0.03em; text-shadow: 0 2px 14px rgba(0, 0, 0, 0.5); }
+.pro-card-car { font-size: 14px; margin-top: 4px; color: #e8ebf4; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
+.pro-card-meta { font: 500 11px var(--font-mono); letter-spacing: 0.04em; opacity: 0.7; margin-top: 4px; }
+.pro-card-time { display: flex; flex-direction: column; align-items: flex-start; }
+.pro-card-time-label { font: 500 10px var(--font-mono); letter-spacing: 0.1em; opacity: 0.75; }
+.pro-card-time .mono { font-size: clamp(24px, 6.4cqh, 38px); line-height: 1; letter-spacing: -0.04em; text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55); }
+
+.pro-hero { --hero-h: 400px; position: relative; height: var(--hero-h); border-radius: 32px; overflow: hidden; background: var(--panel); color: #fff; isolation: isolate; }
+.pro-hero-top { position: absolute; left: 24px; right: 24px; top: 20px; display: flex; gap: 8px; flex-wrap: wrap; }
+.pro-hero-bottom { position: absolute; left: 28px; right: 28px; bottom: 22px; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px; }
+.pro-hero-title { margin: 0; font: 800 36px/1.08 var(--font-display); letter-spacing: -0.03em; text-shadow: 0 2px 16px rgba(0, 0, 0, 0.5); }
+.pro-hero-sub { margin-top: 6px; color: #e8ebf4; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.6); }
+.pro-hero-time { display: flex; flex-direction: column; align-items: flex-end; }
+.pro-hero-time .mono { font-size: 56px; line-height: 1; letter-spacing: -0.04em; text-shadow: 0 2px 16px rgba(0, 0, 0, 0.55); }
+.pro-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.pro-actions .btn { background: #f5b544; color: #241a05; }
+.pro-actions .btn.ghost { background: var(--panel-2); color: var(--text); }
+.pro-conf { display: inline-flex; padding: 3px 10px; border-radius: 999px; font: 500 11px var(--font-mono); background: var(--panel-2); color: var(--text-2); }
+.pro-conf-A { background: var(--mint-bg); color: var(--mint); }
+.pro-note { margin: 0; font-size: 13px; max-width: 680px; line-height: 1.5; }
+.pro-cols { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+.pro-col { flex: 999 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.pro-side { flex: 1 1 340px; max-width: 420px; }
+.pro-about { margin: 0; line-height: 1.6; color: var(--text-2); max-width: 720px; }
+.pro-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin: 0; padding-top: 6px; }
+.pro-facts div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pro-facts dt { font: 500 11px var(--font-mono); letter-spacing: 0.08em; color: var(--muted); }
+.pro-facts dd { margin: 0; font-weight: 600; font-size: 14px; }
+.pro-rules { display: flex; flex-direction: column; gap: 8px; }
+.pro-rule { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 6px 16px; border-radius: 16px; background: var(--panel-2); }
+.pro-rule-label { width: 72px; flex: none; font: 500 11px var(--font-mono); letter-spacing: 0.08em; color: var(--muted); }
+.pro-rule-value { flex: 1; min-width: 0; font-weight: 600; display: flex; flex-direction: column; }
+.pro-rule-value s { color: var(--muted); font-weight: 500; text-decoration-color: rgba(255, 122, 146, 0.6); }
+.pro-rule-value span { margin-top: 2px; font-weight: 500; }
+.pro-check { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; }
+.pro-check.ok { background: var(--mint-bg); color: var(--mint); }
+.pro-check.bad { background: #3a1a24; color: var(--red); }
+.pro-dot { flex: none; width: 28px; height: 28px; border-radius: 50%; background: #3a2d12; box-shadow: inset 0 0 0 9px #3a2d12, inset 0 0 0 11px #f5b544; opacity: 0.8; }
+.pro-bar { position: relative; height: 10px; border-radius: 999px; background: var(--line); margin-top: 6px; }
+.pro-bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: linear-gradient(90deg, #3a4258, var(--mint)); }
+.pro-bar-mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--mint); }
+.pro-bar-mark.pro { right: 0; width: 3px; border-radius: 2px; background: var(--fast); }
+.pro-bar-labels { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font: 500 12px var(--font-mono); color: var(--muted); }
+.pro-bar-labels .lvl { color: var(--mint); }
+.pro-bar-labels .pro-c { color: var(--fast); }
+.pro-rewards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.pro-reward { padding: 16px 18px; border-radius: 20px; background: var(--panel-2); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; font-size: 14px; }
+.pro-reward[data-done] { box-shadow: inset 0 0 0 2px rgba(79, 211, 154, 0.35); }
+.pro-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pro-pill { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; background: var(--tint); color: var(--peri-1); font: 500 11px var(--font-mono); white-space: nowrap; }
+.pro-pill.level, .pro-pill[data-kind="level"] { background: var(--mint-bg); color: var(--mint); }
+.pro-pill.beat, .pro-pill[data-kind="beat"] { background: #2d2250; color: var(--fast); }
+.pro-pill[data-kind="none"] { background: var(--panel-2); color: var(--muted); }
+.pro-board { display: flex; flex-direction: column; gap: 8px; }
+.pro-board-row { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 6px 14px; border-radius: 18px; background: var(--panel-2); }
+.pro-board-row[data-me] { background: var(--tint); }
+.pro-pos { width: 18px; font: 500 14px var(--font-mono); color: var(--muted); }
+.pro-board-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pro-board-time { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.25; }
+.pro-laps { display: flex; flex-direction: column; gap: 8px; }
+.pro-lap { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 44px; padding: 4px 14px; border-radius: 14px; background: var(--panel-2); }
+@media (max-width: 640px) {
+  /* The title and the switch stack, and the switch spans the whole width. */
+  .ch-section-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .pro-tabs { display: flex; width: 100%; align-self: stretch; }
+  .pro-tabs a { flex: 1; justify-content: center; padding: 0 12px; }
+  .pro-actions .btn { width: 100%; }
+  .pro-actions .pro-conf { white-space: normal; }
+  .pro-live { flex-direction: column; align-items: stretch; }
+  .pro-live .btn { width: 100%; }
+  .content > .pro-page-list { flex: none; height: calc(100dvh - 210px - env(safe-area-inset-bottom)); min-height: 480px; }
+  .pro-folder, .pro-intro-sub { display: none; }
+  .pro-card { border-radius: 28px; }
+  .pro-card-name { font-size: 22px; }
+  .pro-rail { margin-right: -16px; padding-right: 40px; --r: 70px; }
+  .pro-rail-next { display: none; }
+  .pro-intro-title { font-size: 26px; }
+  .pro-hero { --hero-h: 300px; border-radius: 28px; }
+  .pro-hero-title { font-size: 26px; }
+  .pro-hero-time .mono { font-size: 38px; }
+  .pro-side { max-width: none; }
 }

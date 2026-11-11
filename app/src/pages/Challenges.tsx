@@ -4,6 +4,7 @@ import { useRankMotion } from "../rankMotion";
 import { api, challengeMatches, isActive, useAppState, useCatalogue, useDriverMap, useFetch, useTrackMaps, type Challenge, type Driver, type LeaderboardEntry, type Prize, type RewardSize } from "../api";
 import { carItems, findMap, splitTrackValue, TrackThumb, trackItems } from "../catalogueItems";
 import { ChallengeReplay } from "../components/ChallengeReplay";
+import { ChallengesHeader } from "./ProLaps";
 import { GameIcon, GameLabel } from "../components/GameIcon";
 import { Helmet } from "../components/Helmet";
 import { BASE, place, room } from "../components/GapLadder";
@@ -76,15 +77,6 @@ function prizeFor(c: Challenge, position: number, total: number): string | undef
   );
 }
 
-function NewButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button className="btn" onClick={onClick}>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-      New challenge
-    </button>
-  );
-}
-
 export function ChallengesPage({ path }: { path: string }) {
   const { challenges, status } = useAppState();
   const goNew = () => {
@@ -106,47 +98,47 @@ export function ChallengesPage({ path }: { path: string }) {
 
   return (
     <>
-      {!shown && (
-        <div className="page-head" style={{ alignItems: "center" }}>
-          <h1>Challenges</h1>
-          <NewButton onClick={() => goNew()} />
-        </div>
-      )}
+      <ChallengesHeader active="office" />
 
-      {running.length > 1 && (
-        <nav className="ch-picker" aria-label="Running challenges">
-          {running.map((c) => (
-            <a key={c.id} href={`#/challenges/${c.id}`} className="ch-tab" aria-current={shown?.id === c.id ? "page" : undefined}>
-              <span className="ch-tab-name"><TrophyBadge small /><GameIcon game={c.game} size={18} />{c.name}</span>
-              <span className="ch-tab-meta">
-                {trackName(c.track, c.layout)}
-                {c.endsAt ? ` · ${countdown(c.endsAt)}` : ""}
-              </span>
-            </a>
-          ))}
-        </nav>
-      )}
+      <nav className="ch-strip" aria-label="Challenges">
+        {[...running, ...finished].map((c) => (
+          <StripCard key={c.id} challenge={c} selected={shown?.id === c.id} />
+        ))}
+        <button type="button" className="ch-card ch-card-new" onClick={goNew}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          New challenge
+        </button>
+      </nav>
 
       {shown ? (
-        <ChallengeView key={shown.id} challenge={shown} onNew={() => goNew()} />
+        <ChallengeView key={shown.id} challenge={shown} />
       ) : (
         <section className="card" style={{ alignItems: "center", textAlign: "center", padding: "56px 24px" }}>
           <h2>No challenge running</h2>
           <p className="muted" style={{ margin: 0 }}>Pick a track and a deadline and let the office fight it out.</p>
-          <button className="btn big" onClick={() => goNew()}>Start a challenge</button>
+          <button className="btn big" onClick={goNew}>Start a challenge</button>
         </section>
       )}
-
-      {finished.length > 0 && (
-        <section className="card">
-          <h2>Past challenges</h2>
-          <div className="list">
-            {finished.map((c) => <PastChallenge key={c.id} challenge={c} selected={shown?.id === c.id} />)}
-          </div>
-        </section>
-      )}
-
     </>
+  );
+}
+
+/** One challenge in the row at the top: what it is, whether it is still on, and who is ahead. */
+function StripCard({ challenge: c, selected }: { challenge: Challenge; selected: boolean }) {
+  const drivers = useDriverMap();
+  const board = useFetch(() => api.challengeLeaderboard(c.id), [c.id]) ?? [];
+  const live = isActive(c);
+  const leader = board[0];
+  const who = leader ? (leader.driverId != null ? drivers.get(leader.driverId)?.name : "A guest") : null;
+  return (
+    <a className="ch-card" href={`#/challenges/${c.id}`} aria-current={selected ? "page" : undefined} data-live={live || undefined}>
+      <span className="ch-card-name"><TrophyBadge small /><GameIcon game={c.game} size={18} /><span>{c.name}</span></span>
+      <span className="ch-card-meta">{trackName(c.track, c.layout)}{c.car ? ` · ${carName(c.car)}` : ""}</span>
+      <span className="ch-card-foot">
+        <span className="ch-card-state">{live ? (c.endsAt ? `${countdown(c.endsAt)} left` : "Running") : "Ended"}</span>
+        <span className="ch-card-lead">{who ? `${who} · ${lapTime(leader.timeMs)}` : "No laps yet"}</span>
+      </span>
+    </a>
   );
 }
 
@@ -184,7 +176,7 @@ function GapsCard({ board, drivers, seat }: { board: LeaderboardEntry[]; drivers
   );
 }
 
-function ChallengeView({ challenge: c, onNew }: { challenge: Challenge; onNew: () => void }) {
+function ChallengeView({ challenge: c }: { challenge: Challenge }) {
   const { status } = useAppState();
   const drivers = useDriverMap();
   const board = useFetch(() => api.challengeLeaderboard(c.id), [c.id]) ?? [];
@@ -209,7 +201,7 @@ function ChallengeView({ challenge: c, onNew }: { challenge: Challenge; onNew: (
     <div className="ch-stack" ref={motion}>
       <div className="page-head ch-head">
         <div style={{ minWidth: 0 }}>
-          <h1 className="ch-name">{c.name}</h1>
+          <h2 className="ch-name">{c.name}</h2>
           <span className="muted ch-sub"><GameLabel game={c.game} size={18} /> · {rules.join(" · ")}</span>
         </div>
         <div className="ch-clock">
@@ -223,7 +215,6 @@ function ChallengeView({ challenge: c, onNew }: { challenge: Challenge; onNew: (
               Delete
             </button>
           )}
-          <NewButton onClick={onNew} />
         </div>
       </div>
 
@@ -321,23 +312,6 @@ function ChallengeView({ challenge: c, onNew }: { challenge: Challenge; onNew: (
       )}
     </section>
     </div>
-  );
-}
-
-function PastChallenge({ challenge: c, selected }: { challenge: Challenge; selected: boolean }) {
-  const drivers = useDriverMap();
-  const board = useFetch(() => api.challengeLeaderboard(c.id), [c.id]) ?? [];
-  const winner = board[0];
-  return (
-    <a className="list-row link-row" href={`#/challenges/${c.id}`} aria-current={selected ? "page" : undefined} style={{ justifyContent: "space-between" }}>
-      <span>
-        <TrophyBadge small />
-        <GameIcon game={c.game} size={18} /> {c.name} <span className="muted" style={{ fontSize: 13 }}>· {gameName(c.game)} · {trackName(c.track, c.layout)}</span>
-      </span>
-      <span className="muted">
-        {winner ? `Won by ${winner.driverId != null ? drivers.get(winner.driverId)?.name : "a guest"} · ${lapTime(winner.timeMs)}` : `No ${words(c.game).laps}`}
-      </span>
-    </a>
   );
 }
 
