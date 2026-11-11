@@ -89,6 +89,9 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
         .route("/challenges/{id}/leaderboard", get(challenge_leaderboard))
         .route("/challenges/{id}/end", post(end_challenge))
         .route("/challenges/{id}/replay", get(challenge_replay))
+        .route("/pro", get(pro_overview))
+        .route("/pro/active", put(set_pro_active))
+        .route("/pro/{id}/attempts", get(pro_attempts))
         .route("/settings/lan", put(set_lan))
         .route("/overlay/visible", put(set_overlay_visible))
         .route("/overlay/enabled", put(set_overlay_enabled))
@@ -105,6 +108,8 @@ pub async fn serve(tt: Arc<BinIt>, app: AppHandle, lan: bool) -> anyhow::Result<
 
     let router = Router::new()
         .nest("/api", api)
+        // Pictures for pro-lap challenges: the owner's own (in the data folder) first, then the ones that ship with the app.
+        .route("/challenge-art/{file}", get(challenge_art))
         .fallback(static_asset)
         .layer(CorsLayer::permissive())
         .with_state(ctx);
@@ -787,6 +792,31 @@ async fn challenge_replay(State(c): State<Ctx>, Path(id): Path<ChallengeId>) -> 
     Ok(Json(c.tt.challenge_replay(id)?))
 }
 
+/// The pro-lap challenges with everyone's best counted lap, and which one is switched on.
+async fn pro_overview(State(c): State<Ctx>) -> ApiResult<tt_core::pro::ProOverview> {
+    Ok(Json(c.tt.pro_overview()?))
+}
+
+#[derive(Deserialize)]
+struct SetProActive {
+    id: Option<String>,
+}
+
+/// Switches a pro-lap challenge on, or (with no id) leaves challenge mode.
+async fn set_pro_active(State(c): State<Ctx>, Json(body): Json<SetProActive>) -> ApiResult<Option<String>> {
+    c.tt.set_pro_active(body.id.as_deref())?;
+    Ok(Json(body.id))
+}
+
+#[derive(Deserialize)]
+struct ProDriver {
+    driver: DriverId,
+}
+
+async fn pro_attempts(State(c): State<Ctx>, Path(id): Path<String>, Query(q): Query<ProDriver>) -> ApiResult<Vec<tt_core::pro::ProAttempt>> {
+    Ok(Json(c.tt.pro_attempts(&id, q.driver)?))
+}
+
 async fn events(State(c): State<Ctx>, ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(move |socket| forward_events(socket, c.tt))
 }
@@ -813,6 +843,25 @@ async fn forward_events(mut socket: WebSocket, tt: Arc<BinIt>) {
             }
         }
     }
+}
+
+/// A pro-lap challenge's picture: from the data folder's `challenge-art` when the owner put one there, else the bundled one.
+async fn challenge_art(State(c): State<Ctx>, Path(file): Path<String>, uri: Uri) -> Response {
+    if let Some(path) = c.tt.pro_art(&file)
+        && let Ok(bytes) = std::fs::read(&path)
+    {
+        let mime = match path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).as_deref() {
+            Some("jpg" | "jpeg") => "image/jpeg",
+            Some("png") => "image/png",
+            Some("webp") => "image/webp",
+            Some("avif") => "image/avif",
+            Some("gif") => "image/gif",
+            _ => "application/octet-stream",
+        };
+        // Short cache: a picture swapped in the folder shows up on the next visit.
+        return ([(header::CONTENT_TYPE, mime), (header::CACHE_CONTROL, "max-age=30")], bytes).into_response();
+    }
+    static_asset(State(c), uri).await
 }
 
 /// Serves the bundled UI to browsers on the network (release builds embed it).

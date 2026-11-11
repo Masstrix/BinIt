@@ -93,6 +93,8 @@ Data folder: {}", data_dir.display()));
             tt.set_catalogue_paths(tt_core::CataloguePaths {
                 documents: app.path().document_dir().ok(),
                 custom: Some(data_dir.join("catalogue")),
+                // Your own pro-lap challenges and their pictures (see tt_core::pro::load).
+                pro: Some(data_dir.join("pro-laps")),
             });
             // Laps from before a name was in the catalogue get filed under the catalogue's name.
             for game in GameId::ALL {
