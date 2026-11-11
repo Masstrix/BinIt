@@ -5,6 +5,7 @@ pub mod catalogue;
 pub mod live;
 pub mod model;
 pub mod pairing;
+pub mod pro;
 pub mod progress;
 pub mod shop;
 pub mod stats;
@@ -51,6 +52,9 @@ pub enum AppEvent {
     LapRecorded { result: LapResult },
     LapsChanged,
     ChallengesChanged,
+    /// The pro-lap challenge that is switched on changed (or someone's counted laps did).
+    #[serde(rename_all = "camelCase")]
+    ProChanged { active: Option<String> },
     /// A track map was learned: pickers and the live map should refetch.
     MapsChanged,
     Live { live: LiveView },
@@ -269,6 +273,8 @@ pub struct CataloguePaths {
     pub documents: Option<PathBuf>,
     /// Folder of user-supplied `<game>.json` lists.
     pub custom: Option<PathBuf>,
+    /// Folder for your own pro-lap challenges: `pro_challenges.toml` and a `challenge-art` folder (see `pro::load`).
+    pub pro: Option<PathBuf>,
 }
 
 pub struct BinIt {
@@ -1042,19 +1048,86 @@ impl BinIt {
                 gap_to_leader_ms: now_standing.map(|s| s.1),
             });
         }
-        let awards = match driver_id {
+        let mut awards = match driver_id {
             Some(id) if lap.valid => award_lap(&store, id, &lap, &combo, personal_best, combo_record, !challenges.is_empty(), purple_sector, now)?,
             // A cut lap earns no XP, but a few stickers are about cut laps.
             Some(id) if lap.untimed_reason.as_deref() == Some("cut") => award_cut_lap(&store, id, &lap, now)?,
             _ => Awards::default(),
         };
+        // A pro-lap challenge that is switched on counts this lap when it is on its track and car (see pro.rs).
+        let pro = match (driver_id, store.setting(pro::ACTIVE_SETTING)?) {
+            (Some(id), Some(active)) if lap.valid => match self.pro_loaded().find(&active) {
+                Some(c) => pro::record_attempt(&store, &self.seeds(&combo.game), c, id, &lap, &mut awards, now)?,
+                None => None,
+            },
+            _ => None,
+        };
         drop(store);
         // New bests / PB change what live timing compares against.
         self.refresh_timing()?;
 
-        let result = LapResult { lap, personal_best, combo_record, sector_status, challenges: standings, awards };
+        let counted_pro = pro.is_some();
+        let result = LapResult { lap, personal_best, combo_record, sector_status, challenges: standings, awards, pro };
         self.emit(AppEvent::LapRecorded { result: result.clone() });
+        if counted_pro {
+            self.emit(AppEvent::ProChanged { active: self.pro_active()? });
+        }
         Ok(result)
+    }
+
+    // ---- pro-lap challenges ------------------------------------------------------
+
+    /// The challenges in force: the bundled ones and the ones in the data folder, read fresh each time so a change to
+    /// that file shows up without restarting the app.
+    fn pro_loaded(&self) -> pro::Loaded {
+        let folder = self.catalogue_paths.lock().expect("catalogue paths mutex poisoned").pro.clone();
+        pro::load(folder.as_deref())
+    }
+
+    /// The pro-lap challenge that is switched on for the seat (laps count for whoever is sitting there).
+    pub fn pro_active(&self) -> Result<Option<String>> {
+        let active = self.store().setting(pro::ACTIVE_SETTING)?;
+        Ok(active.filter(|id| self.pro_loaded().find(id).is_some()))
+    }
+
+    /// Switches a pro-lap challenge on (`Some(id)`) or leaves challenge mode (`None`). It stays on until someone
+    /// leaves it, so another driver can take the seat and carry on.
+    pub fn set_pro_active(&self, id: Option<&str>) -> Result<()> {
+        if let Some(id) = id
+            && self.pro_loaded().find(id).is_none()
+        {
+            bail!("no such pro challenge");
+        }
+        self.store().set_setting(pro::ACTIVE_SETTING, id)?;
+        self.emit(AppEvent::ProChanged { active: id.map(str::to_string) });
+        Ok(())
+    }
+
+    /// Every pro-lap challenge with everyone's best counted lap.
+    pub fn pro_overview(&self) -> Result<pro::ProOverview> {
+        let loaded = self.pro_loaded();
+        // The folder is made on first look, so there is somewhere to put a file and pictures.
+        if let Some(dir) = &loaded.folder {
+            let _ = std::fs::create_dir_all(dir.join(pro::ART_DIR));
+        }
+        let store = self.store();
+        let active = store.setting(pro::ACTIVE_SETTING)?.filter(|id| loaded.find(id).is_some());
+        let challenges = loaded
+            .enabled()
+            .map(|c| Ok(pro::ProEntry { challenge: c.clone(), board: store.pro_board(&c.id)? }))
+            .collect::<Result<Vec<_>>>()?;
+        Ok(pro::ProOverview { problems: loaded.problems.clone(), folder: loaded.folder.as_ref().map(|d| d.display().to_string()), active, challenges })
+    }
+
+    /// A picture the owner put in the data folder's `challenge-art`, if there is one by that name.
+    pub fn pro_art(&self, file: &str) -> Option<PathBuf> {
+        let folder = self.catalogue_paths.lock().expect("catalogue paths mutex poisoned").pro.clone()?;
+        pro::art_path(&folder, file)
+    }
+
+    /// One driver's counted laps on a challenge, newest first.
+    pub fn pro_attempts(&self, challenge: &str, driver_id: DriverId) -> Result<Vec<pro::ProAttempt>> {
+        self.store().pro_attempts(challenge, driver_id, 20)
     }
 
     // ---- challenges ------------------------------------------------------------

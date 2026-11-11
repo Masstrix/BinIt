@@ -223,6 +223,9 @@ pub struct LapResult {
     /// XP and coins this lap earned (nothing for guest laps and laps that did not count).
     #[serde(default)]
     pub awards: Awards,
+    /// Set when the lap counted towards the pro-lap challenge that is switched on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pro: Option<crate::pro::ProLapResult>,
 }
 
 /// What a lap earned the driver, and why, for the pop-up.

@@ -9,7 +9,7 @@ use crate::model::*;
 use crate::trackmap::TrackMap;
 use tt_games::timing::{LapTrace, TimingProfile};
 
-const SCHEMA_VERSION: i32 = 18;
+const SCHEMA_VERSION: i32 = 19;
 /// Settings that record which app version made, and last opened, this database.
 pub const CREATED_WITH_KEY: &str = "created_with";
 pub const OPENED_WITH_KEY: &str = "last_opened_with";
@@ -331,6 +331,21 @@ impl Store {
                 }
             }
         }
+        if version < 19 {
+            // Laps that counted towards a pro-lap challenge (see pro.rs). The lap stays an ordinary lap; this only links it.
+            conn.execute_batch(
+                "
+                CREATE TABLE IF NOT EXISTS pro_attempts (
+                    lap_id     INTEGER PRIMARY KEY REFERENCES laps(id) ON DELETE CASCADE,
+                    challenge  TEXT NOT NULL,
+                    driver_id  INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+                    time_ms    INTEGER NOT NULL,
+                    at         INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS pro_attempts_challenge ON pro_attempts (challenge, time_ms);
+                ",
+            )?;
+        }
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         let store = Self { conn };
         store.backfill_points()?;
@@ -568,6 +583,54 @@ impl Store {
         Ok(())
     }
 
+    /// Whether a driver already has a ledger row of exactly this kind (once-only rewards).
+    pub fn point_event_exists(&self, driver_id: DriverId, kind: &str) -> Result<bool> {
+        Ok(self.conn.query_row("SELECT EXISTS(SELECT 1 FROM point_events WHERE driver_id = ?1 AND kind = ?2)", params![driver_id, kind], |r| r.get(0))?)
+    }
+
+    // ---- pro-lap challenges ----------------------------------------------------
+
+    pub fn insert_pro_attempt(&self, lap_id: LapId, challenge: &str, driver_id: DriverId, time_ms: u32, at: Timestamp) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO pro_attempts (lap_id, challenge, driver_id, time_ms, at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![lap_id, challenge, driver_id, time_ms, at],
+        )?;
+        Ok(())
+    }
+
+    /// A driver's quickest counted lap on a challenge.
+    pub fn pro_best(&self, challenge: &str, driver_id: DriverId) -> Result<Option<u32>> {
+        Ok(self.conn.query_row("SELECT MIN(time_ms) FROM pro_attempts WHERE challenge = ?1 AND driver_id = ?2", params![challenge, driver_id], |r| r.get(0))?)
+    }
+
+    pub fn pro_attempt_count(&self, challenge: &str, driver_id: DriverId) -> Result<u32> {
+        Ok(self.conn.query_row("SELECT COUNT(*) FROM pro_attempts WHERE challenge = ?1 AND driver_id = ?2", params![challenge, driver_id], |r| r.get(0))?)
+    }
+
+    /// Everyone's best counted lap on a challenge, quickest first.
+    pub fn pro_board(&self, challenge: &str) -> Result<Vec<crate::pro::ProBest>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT a.driver_id, a.time_ms, a.lap_id, a.at,
+                    (SELECT COUNT(*) FROM pro_attempts n WHERE n.challenge = a.challenge AND n.driver_id = a.driver_id)
+             FROM pro_attempts a
+             WHERE a.challenge = ?1
+               AND a.lap_id = (SELECT b.lap_id FROM pro_attempts b WHERE b.challenge = a.challenge AND b.driver_id = a.driver_id
+                               ORDER BY b.time_ms, b.lap_id LIMIT 1)
+             ORDER BY a.time_ms, a.lap_id",
+        )?;
+        let rows = stmt.query_map([challenge], |r| {
+            Ok(crate::pro::ProBest { driver_id: r.get(0)?, time_ms: r.get(1)?, lap_id: r.get(2)?, at: r.get(3)?, attempts: r.get(4)? })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// One driver's counted laps on a challenge, newest first.
+    pub fn pro_attempts(&self, challenge: &str, driver_id: DriverId, limit: u32) -> Result<Vec<crate::pro::ProAttempt>> {
+        let mut stmt = self.conn.prepare("SELECT lap_id, time_ms, at FROM pro_attempts WHERE challenge = ?1 AND driver_id = ?2 ORDER BY at DESC, lap_id DESC LIMIT ?3")?;
+        let rows = stmt.query_map(params![challenge, driver_id, limit], |r| Ok(crate::pro::ProAttempt { lap_id: r.get(0)?, time_ms: r.get(1)?, at: r.get(2)? }))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     /// (total XP, total coins) for a driver.
     pub fn point_totals(&self, driver_id: DriverId) -> Result<(i64, i64)> {
         Ok(self.conn.query_row(
@@ -803,7 +866,8 @@ impl Store {
     /// nothing. Learned track maps, sector boundaries and settings are only added where this
     /// database has none of its own; who is in the seat is never taken over.
     ///
-    /// When a table or column is added to the format, add it here too.
+    /// When a table or column is added to the format, add it here too. (`pro_attempts` is not merged: it links laps
+    /// by id, and it only exists in databases newer than any this merge is meant for.)
     pub fn merge_from(&self, other: &Path) -> Result<MergeReport> {
         drop(Store::open(other).with_context(|| format!("upgrading {}", other.display()))?);
         self.conn.execute("ATTACH DATABASE ?1 AS other", [other.to_string_lossy()])?;
