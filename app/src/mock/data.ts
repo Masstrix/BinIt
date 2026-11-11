@@ -1,6 +1,6 @@
 // Deterministic fixtures for the dev-only mock server (see ./server.ts). Nothing here ships in a release build.
 
-import type { Catalogue, Challenge, Combo, Driver, Lap, TrackMapData } from "../api";
+import type { Catalogue, Challenge, Combo, Driver, Lap, ProBest, ProChallenge, TrackMapData } from "../api";
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -124,6 +124,30 @@ export const CHALLENGES: Challenge[] = [
     prizes: [{ place: "1st", prize: "Lunch" }], rewardSize: "low", createdAt: NOW - 21 * DAY,
   },
 ];
+
+
+/** The pro-lap challenges, copied from crates/tt-core/pro_challenges.toml so the mock server can serve them. */
+const pro = (c: Omit<ProChallenge, "games" | "marginPercent" | "limitMs" | "rewards" | "layouts" | "trackPatterns"> & { games?: string[] }): ProChallenge => ({
+  games: ["acevo"], layouts: c.layout ? [c.layout] : [], trackPatterns: [c.track], marginPercent: 3, limitMs: Math.floor(c.timeMs * 1.03), rewards: { proLevel: { xp: 1000, coins: 800 }, beat: { xp: 3000, coins: 2000 } }, ...c,
+});
+export const PRO_CHALLENGES: ProChallenge[] = [
+  pro({ id: "nord-992-gt3rs", name: "Nordschleife", track: "Nurburgring", layout: "Nordschleife", car: "Porsche 911 (992) GT3 RS", class: null, timeMs: 409328, driver: "Jörg Bergmeister", date: "2022-10", realCar: "Porsche 911 GT3 RS (992.1)", session: "Record attempt, full 20.832 km lap", confidence: "A", source: "Notarised record attempt", about: "In October 2022 Porsche took a standard 992 GT3 RS, the road car, round the full Nordschleife in 6:49.328 with Jörg Bergmeister driving. The run was timed and certified by a notary. A flying lap on warm tyres, so treat it as a target to approach.", art: "nordschleife-992-gt3-rs.jpg", artOffset: null, cardOffset: "53% 50%" }),
+  pro({ id: "bathurst-gt3", name: "Mount Panorama", track: "Mount Panorama", layout: "GP", car: null, class: "GT3", timeMs: 121567, driver: "Shane van Gisbergen", date: "2016-02", realCar: "McLaren 650S GT3", session: "12 Hour race lap", confidence: "A", source: "Official timing", about: "The quickest restricted GT3 lap we have: Shane van Gisbergen's 2:01.567 in the 2016 Bathurst 12 Hour. The sim has no 650S, so any GT3 car can take it on.", art: "mount-panorama-650s-gt3.jpg", artOffset: null, cardOffset: "64% 50%" }),
+  pro({ id: "monza-f2004", name: "Monza", track: "Monza", layout: "", car: "Ferrari F2004", class: null, timeMs: 80089, driver: "Rubens Barrichello", date: "2004-09", realCar: "Ferrari F2004", session: "2004 Italian Grand Prix, pole", confidence: "A", source: "Official qualifying result", about: "Rubens Barrichello's pole lap for the 2004 Italian Grand Prix in the same car: 1:20.089. One qualifying lap, so a low fuel load and fresh tyres.", art: "monza-ferrari-f2004.jpg", artOffset: null, cardOffset: "43% 50%" }),
+  pro({ id: "laguna-gt3r", name: "Laguna Seca", track: "Laguna Seca", layout: "", games: ["acevo", "ac"], car: null, class: "GT3", timeMs: 83528, driver: "Matt Campbell", date: "2019-03", realCar: "Porsche 911 GT3 R (991)", session: "2019 California 8 Hours, pole shootout", confidence: "B", source: "Wikipedia qualifying table; the pole was about 0.37 s quicker", about: "Matt Campbell's lap in the Wright Motorsports Porsche 911 GT3 R, in the pole shootout for the 2019 California 8 Hours. Any GT3 car can take it on.", art: "laguna-seca-911-gt3-r.jpg", artOffset: null, cardOffset: "52% 50%" }),
+  pro({ id: "brands-gt3", name: "Brands Hatch", track: "Brands Hatch", layout: "GP", games: ["acevo", "ac"], car: null, class: "GT3", timeMs: 82557, driver: "Raffaele Marciello", date: "", realCar: "Mercedes-AMG GT3 Evo", session: "GT3 lap listed for the Grand Prix circuit", confidence: "C", source: "Wikipedia circuit page", about: "Raffaele Marciello's 1:22.557 in a Mercedes-AMG GT3 Evo is the GT3 lap listed for Brands Hatch's Grand Prix circuit. Any GT3 car can take it on.", art: "brands-hatch-amg-gt3.jpg", artOffset: null, cardOffset: "56% 50%" }),
+  pro({ id: "rbr-f1-2025-pole", name: "Red Bull Ring", track: "Red Bull Ring", layout: "", car: "Ferrari SF-25", class: null, timeMs: 63971, driver: "Lando Norris", date: "2025-06", realCar: "McLaren MCL39", session: "2025 Austrian Grand Prix, pole", confidence: "B", source: "RacingNews365 qualifying results", about: "Lando Norris's pole lap for the 2025 Austrian Grand Prix: 1:03.971. The sim has the Ferrari SF-25 from the same season, the closest car.", art: "red-bull-ring-mclaren-mcl39.jpg", artOffset: null, cardOffset: "58% 50%" }),
+];
+
+/** Some counted laps to start with: driver, time in ms past the pro, laps driven. */
+export const PRO_BOARDS: Record<string, [number, number, number][]> = {
+  "nord-992-gt3rs": [[2, 10542, 7], [1, 11612, 5], [4, 20154, 3], [3, 31672, 2]],
+  "bathurst-gt3": [[4, 2330, 4]],
+};
+
+export function proBoard(c: ProChallenge, NOW_MS: number): ProBest[] {
+  return (PRO_BOARDS[c.id] ?? []).map(([driverId, over, attempts], i) => ({ driverId, timeMs: c.timeMs + over, lapId: 9000 + i, at: NOW_MS - (i + 1) * 3 * HOUR, attempts }));
+}
 
 /** An outline from a wobbly closed curve: different per track, enough to look like circuits. */
 function outline(shape: TrackDef["shape"], closed: boolean): [number, number][] {

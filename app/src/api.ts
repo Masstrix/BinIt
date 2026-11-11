@@ -508,6 +508,90 @@ export interface LapResult {
   comboRecord: boolean;
   challenges: ChallengeStanding[];
   awards?: Awards;
+  /** Set when the lap counted for the pro-lap challenge that is switched on. */
+  pro?: ProLapResult;
+}
+
+/** A real driver's lap to beat (crates/tt-core/pro_challenges.toml). */
+export interface ProChallenge {
+  id: string;
+  name: string;
+  /** The games it can be driven in; empty means any game. */
+  games: string[];
+  track: string;
+  layout: string;
+  /** Every layout name a lap may be on (one game's "GP" is another's "day"); may use `*`. Empty = any layout does. */
+  layouts: string[];
+  /** What the file wrote for the track, and every alias for it: the spellings (with `*` for "anything") a lap's track is matched on. */
+  trackPatterns: string[];
+  /** One specific car, or null when `class` is set. */
+  car: string | null;
+  /** Any car of this catalogue class (`GT3`). */
+  class: string | null;
+  timeMs: number;
+  /** A lap this far (in percent) behind the pro time is pro level. */
+  marginPercent: number;
+  /** The slowest lap that is still pro level. */
+  limitMs: number;
+  rewards: { proLevel: Pay; beat: Pay };
+  driver: string;
+  date: string;
+  realCar: string;
+  session: string;
+  /** A: notarised or official timing, B: maker test, C: single secondary source. */
+  confidence: "A" | "B" | "C";
+  source: string;
+  about: string;
+  /** Picture file in public/challenge-art, with its extension. */
+  art: string | null;
+  /** CSS object-position for the picture on the detail banner (`"60% 40%"`); null: centred. */
+  artOffset: string | null;
+  /** The same for the tall card in the list (follows artOffset when the file sets only that). */
+  cardOffset: string | null;
+}
+
+export interface ProBest {
+  driverId: DriverId;
+  timeMs: number;
+  lapId: number;
+  at: number;
+  attempts: number;
+}
+
+export interface ProEntry extends ProChallenge {
+  board: ProBest[];
+}
+
+export interface ProOverview {
+  /** What is wrong with the pro_challenges.toml in the data folder (it is left out until fixed); empty when all is well. */
+  problems: string[];
+  /** Where to put pro_challenges.toml and a challenge-art folder to add challenges of your own. */
+  folder: string | null;
+  /** The challenge that is switched on (it belongs to the seat). */
+  active: string | null;
+  challenges: ProEntry[];
+}
+
+export interface ProAttempt {
+  lapId: number;
+  timeMs: number;
+  at: number;
+}
+
+export interface ProLapResult {
+  challengeId: string;
+  challengeName: string;
+  timeMs: number;
+  /** This lap minus the pro time: negative is faster. */
+  gapMs: number;
+  proLevel: boolean;
+  beat: boolean;
+  attempt: number;
+  newBest: boolean;
+  paidProLevel: boolean;
+  paidBeat: boolean;
+  position: number | null;
+  drivers: number;
 }
 
 export interface PointEvent {
@@ -594,6 +678,7 @@ export type AppEvent =
   | { type: "lapRecorded"; result: LapResult }
   | { type: "lapsChanged" }
   | { type: "challengesChanged" }
+  | { type: "proChanged"; active: string | null }
   | { type: "mapsChanged" }
   | { type: "live"; live: LiveView }
   | { type: "overlayLayoutChanged"; game: string }
@@ -675,6 +760,11 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T;
 }
 
+/** A file the app serves (a challenge's picture): from the PC's server in development, where the page itself is on Vite. */
+export function assetUrl(path: string): string {
+  return import.meta.env.DEV && mockEnabled ? path : `${BASE}${path}`;
+}
+
 export const api = {
   status: () => request<Status>("GET", "/status"),
   server: () => request<ServerInfo>("GET", "/server"),
@@ -736,6 +826,11 @@ export const api = {
   endChallenge: (id: number) => request<null>("POST", `/challenges/${id}/end`),
   challengeLeaderboard: (id: number) => request<LeaderboardEntry[]>("GET", `/challenges/${id}/leaderboard`),
   challengeReplay: (id: number) => request<ReplayEntry[]>("GET", `/challenges/${id}/replay`),
+  /** The pro-lap challenges with everyone's best counted lap, and which one is switched on. */
+  pro: () => request<ProOverview>("GET", "/pro"),
+  /** Switches a pro-lap challenge on for the seat, or (null) leaves challenge mode. */
+  setProActive: (id: string | null) => request<string | null>("PUT", "/pro/active", { id }),
+  proAttempts: (id: string, driver: DriverId) => request<ProAttempt[]>("GET", `/pro/${id}/attempts?driver=${driver}`),
   overlayLayout: (game: string) => request<unknown | null>("GET", `/overlay/layout/${game}`),
   setOverlayLayout: (game: string, layout: unknown) => request<null>("PUT", `/overlay/layout/${game}`, layout),
   setOverlayEnabled: (enabled: boolean) => request<boolean>("PUT", "/overlay/enabled", { enabled }),
@@ -874,6 +969,7 @@ class Store {
       case "challengesChanged":
         api.challenges().then((challenges) => this.set({ challenges, lapsVersion: this.state.lapsVersion + 1 }));
         break;
+      case "proChanged":
       case "mapsChanged":
         this.set({ lapsVersion: this.state.lapsVersion + 1 });
         break;
@@ -923,6 +1019,17 @@ export function useFetch<T>(fetcher: (() => Promise<T>) | null, deps: unknown[])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, lapsVersion]);
   return data;
+}
+
+export function useProOverview(): ProOverview | null {
+  return useFetch(() => api.pro(), []);
+}
+
+/** Who this screen is: the signed-in driver on a phone or browser, the person in the seat on the PC. */
+export function useViewerId(): DriverId | null {
+  const { drivers, status } = useAppState();
+  const info = useFetch(() => (isTauri ? Promise.resolve(null) : api.me()), [drivers]);
+  return info?.driver?.id ?? status?.seat ?? null;
 }
 
 export function useCatalogue(game: string | null): Catalogue | null {

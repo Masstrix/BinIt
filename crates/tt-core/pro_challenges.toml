@@ -1,0 +1,164 @@
+# Pro-lap challenges: a real driver's lap to beat, locked to a track, layout and car (or car class).
+# Edit, rebuild, ship. Research and sources: docs/real-world-benchmarks.md.
+#
+# You can add your own in pro_challenges.toml in the app's data folder, under pro-laps (same format; an id that is
+# already here replaces it). It is read again every time the Pro laps page opens.
+#
+# Each challenge is a [[challenges]] table:
+#   time      "6:49.328" (also "1:02:03.456", "49.3"), or { min = 6, sec = 49, ms = 328 }, or whole milliseconds.
+#   game      "acevo", a list ["acevo", "ac"], or "any" (leaving it out also means any game).
+#   track     a track name, or a list of them. * means anything ("Bathurst*"). The spellings the games use for a
+#             track are listed in track_aliases.toml (also in the data folder), so a mod's folder name can count.
+#   layout    "GP", or a list of the names the games use for it: ["GP", "day"]. * works here too. Leave it out (or "")
+#             and any layout counts: only the track has to match.
+#   car       one car by its catalogue name, OR class: any car of that catalogue class ("GT3"). Set one, not both.
+#   about     a paragraph. Long text can be wrapped with a backslash at the end of each line (see below).
+#   art       the picture's file name in app/public/challenge-art, with its extension ("monza.jpg").
+#   artOffset / cardOffset: where to centre the picture when it is cropped, across then down: "60% 40%", [60, 40]
+#             or { x = 60, y = 40 }. The tall card in the list shows a narrow slice of a wide picture, so cardOffset
+#             matters most (it follows artOffset if not set).
+#   enabled   false keeps a challenge in the file but switched off: not shown, can't be started, counts no laps.
+#   margin    marginPercent and rewards below are the defaults. Give a challenge its own to change just that one;
+#             rewards can set only proLevel or only beat.
+
+marginPercent = 3.0
+
+[rewards.proLevel]
+xp = 1000
+coins = 800
+
+[rewards.beat]
+xp = 3000
+coins = 2000
+
+[[challenges]]
+id = "nord-992-gt3rs"
+name = "Nordschleife"
+game = ["acevo", "ac"]
+track = "Nurburgring"
+layout = "Nordschleife"
+car = "Porsche 911 (992) GT3 RS"
+time = "6:49.328"
+driver = "Jörg Bergmeister"
+date = "2022-10"
+realCar = "Porsche 911 GT3 RS (992.1)"
+session = "Record attempt, full 20.832 km lap"
+confidence = "A"
+source = "Notarised record attempt"
+about = """\
+In October 2022 Porsche took a standard 992 GT3 RS, the road car, round the full Nordschleife in 6:49.328 \
+with Jörg Bergmeister driving. The run was timed and certified by a notary. \
+A flying lap on warm tyres, so treat it as a target to approach.\
+"""
+art = "nordschleife-992-gt3-rs.jpg"
+cardOffset = "53% 50%"
+
+[[challenges]]
+id = "bathurst-gt3"
+name = "Mount Panorama"
+game = ["acevo", "ac"]
+track = "Mount Panorama"
+class = "GT3"
+time = "2:01.567"
+driver = "Shane van Gisbergen"
+date = "2016-02"
+realCar = "McLaren 650S GT3"
+session = "12 Hour race lap"
+confidence = "A"
+source = "Official timing"
+about = """\
+The quickest restricted GT3 lap we have: Shane van Gisbergen's 2:01.567 in the 2016 Bathurst 12 Hour. \
+The sim has no 650S, so any GT3 car can take it on.\
+"""
+art = "mount-panorama-650s-gt3.jpg"
+cardOffset = "64% 50%"
+
+[[challenges]]
+id = "monza-f2004"
+name = "Monza"
+game = ["acevo", "ac"]
+track = "Monza"
+car = "Ferrari F2004"
+time = "1:20.089"
+driver = "Rubens Barrichello"
+date = "2004-09"
+realCar = "Ferrari F2004"
+session = "2004 Italian Grand Prix, pole"
+confidence = "A"
+source = "Official qualifying result"
+about = """\
+Rubens Barrichello's pole lap for the 2004 Italian Grand Prix in the same car: 1:20.089. \
+One qualifying lap, so a low fuel load and fresh tyres.\
+"""
+art = "monza-ferrari-f2004.jpg"
+cardOffset = "43% 50%"
+
+[[challenges]]
+id = "laguna-gt3r"
+name = "Laguna Seca"
+game = ["acevo", "ac"]
+track = "Laguna Seca"
+class = "GT3"
+time = "1:23.528"
+driver = "Matt Campbell"
+date = "2019-03"
+realCar = "Porsche 911 GT3 R (991)"
+session = "2019 California 8 Hours, pole shootout"
+confidence = "B"
+source = "Wikipedia qualifying table; the pole was about 0.37 s quicker"
+about = """\
+Matt Campbell's lap in the Wright Motorsports Porsche 911 GT3 R, in the pole shootout for the 2019 California 8 Hours. \
+Set before the 2024 repave, so today's track is a little quicker. Any GT3 car can take it on.\
+"""
+art = "laguna-seca-911-gt3-r.jpg"
+cardOffset = "52% 50%"
+
+[[challenges]]
+id = "brands-gt3"
+name = "Brands Hatch"
+game = ["acevo", "ac"]
+track = "Brands Hatch"
+layout = "GP"
+class = "GT3"
+time = "1:22.557"
+driver = "Raffaele Marciello"
+realCar = "Mercedes-AMG GT3 Evo"
+session = "GT3 lap listed for the Grand Prix circuit"
+confidence = "C"
+source = "Wikipedia circuit page; a faster 1:21.37 from qualifying is not an official record"
+about = """Raffaele Marciello's 1:22.557 in a Mercedes-AMG GT3 Evo is the GT3 lap listed for Brands Hatch's Grand Prix circuit. Any GT3 car can take it on."""
+art = "brands-hatch-amg-gt3.jpg"
+cardOffset = "56% 50%"
+
+[[challenges]]
+id = "ratl-m4gt3"
+enabled = false
+name = "Road Atlanta"
+game = "acevo"
+track = "Road Atlanta"
+car = "BMW M4 GT3 EVO"
+time = "1:18.523"
+driver = "Dan Harper"
+date = "2025-10"
+realCar = "BMW M4 GT3 EVO"
+session = "Petit Le Mans, IMSA GTD Pro pole"
+confidence = "A"
+source = "IMSA qualifying report"
+about = """Dan Harper's pole lap for the 2025 Petit Le Mans in Paul Miller Racing's BMW M4 GT3 EVO: 1:18.523, the same car as in the sim. One qualifying lap on fresh tyres, so treat it as a target to approach."""
+
+[[challenges]]
+id = "rbr-f1-2025-pole"
+name = "Red Bull Ring"
+game = "acevo"
+track = "Red Bull Ring"
+car = "Ferrari SF-25"
+time = "1:03.971"
+driver = "Lando Norris"
+date = "2025-06"
+realCar = "McLaren MCL39"
+session = "2025 Austrian Grand Prix, pole"
+confidence = "B"
+source = "RacingNews365 qualifying results"
+about = """Lando Norris's pole lap for the 2025 Austrian Grand Prix: 1:03.971 round the short, fast Red Bull Ring. He drove a McLaren, and the sim has the Ferrari SF-25 from the same season, so it is the closest car, not the same one."""
+art = "red-bull-ring-mclaren-mcl39.jpg"
+cardOffset = "58% 50%"

@@ -2145,3 +2145,378 @@ fn a_lap_with_no_track_length_is_measured_from_its_trace_and_old_laps_are_filled
     let st = tt.driver_stats(sam).unwrap();
     assert_eq!((st.distance_m, st.laps_with_distance, st.laps_counted), (99, 1, 2));
 }
+
+fn pro_session(track: &str, layout: Option<&str>, car: &str) -> SessionInfo {
+    SessionInfo { track: track.into(), layout: layout.map(Into::into), car: car.into(), length_m: Some(20_832), ..session("x") }
+}
+
+fn nord_lap(time_ms: u32, car: &str) -> CompletedLap {
+    CompletedLap { session: pro_session("Nurburgring", Some("Nordschleife"), car), ..lap(time_ms, true) }
+}
+
+const GT3_RS: &str = "Porsche 911 (992) GT3 RS";
+
+#[test]
+fn pro_laps_count_only_while_the_challenge_is_on_and_pay_once() {
+    let tt = BinIt::in_memory().unwrap();
+    let sam = tt.add_and_seat("Sam", None).unwrap();
+
+    // Nothing is switched on: the lap is an ordinary lap.
+    assert!(tt.record_lap(&nord_lap(421_000, GT3_RS)).unwrap().pro.is_none());
+    assert_eq!(tt.pro_active().unwrap(), None);
+
+    tt.set_pro_active(Some("nord-992-gt3rs")).unwrap();
+    // 6:49.328 + 3% is 7:01.607, so 7:01.000 is pro level.
+    let first = tt.record_lap(&nord_lap(421_000, GT3_RS)).unwrap();
+    let p = first.pro.expect("counted");
+    assert_eq!((p.pro_level, p.beat, p.paid_pro_level, p.paid_beat), (true, false, true, false));
+    assert_eq!((p.gap_ms, p.attempt, p.new_best, p.position, p.drivers), (11_672, 1, true, Some(1), 1));
+    assert!(first.awards.reasons.iter().any(|r| r.starts_with("Pro level")));
+    assert!(first.awards.xp >= 300 && first.awards.coins >= 300);
+
+    // Pro level pays once.
+    let again = tt.record_lap(&nord_lap(420_500, GT3_RS)).unwrap().pro.unwrap();
+    assert_eq!((again.pro_level, again.paid_pro_level, again.attempt, again.new_best), (true, false, 2, true));
+
+    // A slow lap still counts as an attempt, but not as pro level.
+    let slow = tt.record_lap(&nord_lap(430_000, GT3_RS)).unwrap().pro.unwrap();
+    assert_eq!((slow.pro_level, slow.attempt, slow.new_best), (false, 3, false));
+
+    // Beating the pro pays its own reward, once.
+    let beat = tt.record_lap(&nord_lap(409_000, GT3_RS)).unwrap();
+    let b = beat.pro.unwrap();
+    assert_eq!((b.beat, b.paid_beat, b.paid_pro_level), (true, true, false));
+    assert!(beat.awards.xp >= 2_000);
+    let beat_again = tt.record_lap(&nord_lap(408_000, GT3_RS)).unwrap().pro.unwrap();
+    assert_eq!((beat_again.beat, beat_again.paid_beat), (true, false));
+
+    // The wrong car, a cut lap and a guest lap do not count.
+    assert!(tt.record_lap(&nord_lap(409_000, "Audi RS 3 Sportback")).unwrap().pro.is_none());
+    assert!(tt.record_lap(&CompletedLap { valid: false, untimed: Some(UntimedReason::Cut), ..nord_lap(400_000, GT3_RS) }).unwrap().pro.is_none());
+    tt.set_seat(None).unwrap();
+    assert!(tt.record_lap(&nord_lap(400_000, GT3_RS)).unwrap().pro.is_none());
+
+    // The board has one row per driver, on their best counted lap; the challenge stays on for the next driver.
+    let jess = tt.add_and_seat("Jess", None).unwrap();
+    tt.record_lap(&nord_lap(415_000, GT3_RS)).unwrap();
+    let overview = tt.pro_overview().unwrap();
+    assert_eq!(overview.active.as_deref(), Some("nord-992-gt3rs"));
+    let entry = overview.challenges.iter().find(|c| c.challenge.id == "nord-992-gt3rs").unwrap();
+    assert_eq!(entry.challenge.limit_ms, 421_607);
+    assert_eq!(entry.board.iter().map(|b| (b.driver_id, b.time_ms, b.attempts)).collect::<Vec<_>>(), vec![(sam.id, 408_000, 5), (jess.id, 415_000, 1)]);
+    assert_eq!(tt.pro_attempts("nord-992-gt3rs", sam.id).unwrap().len(), 5);
+
+    // Leaving challenge mode stops laps counting.
+    tt.set_pro_active(None).unwrap();
+    assert!(tt.record_lap(&nord_lap(409_000, GT3_RS)).unwrap().pro.is_none());
+    assert!(tt.set_pro_active(Some("no-such-challenge")).is_err());
+}
+
+#[test]
+fn a_class_challenge_takes_any_car_of_that_class() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    tt.set_pro_active(Some("bathurst-gt3")).unwrap();
+    let at_bathurst = |car: &str, ms: u32| CompletedLap { session: pro_session("Mount Panorama", Some("GP"), car), ..lap(ms, true) };
+    // 2:01.567 + 3% is 2:05.214.
+    let gt3 = tt.record_lap(&at_bathurst("Audi R8 LMS GT3 Evo II", 125_000)).unwrap().pro.expect("a GT3 counts");
+    assert!(gt3.pro_level && !gt3.beat);
+    assert!(tt.record_lap(&at_bathurst("Porsche 911 (992) GT3 RS", 125_000)).unwrap().pro.is_none(), "a road car is not a GT3");
+    // Bathurst names no layout, so any layout counts; the track still has to be the right one.
+    assert!(tt.record_lap(&CompletedLap { session: pro_session("Mount Panorama", Some("Endurance"), "Audi R8 LMS GT3 Evo II"), ..lap(125_000, true) }).unwrap().pro.is_some(), "any layout");
+    assert!(tt.record_lap(&CompletedLap { session: pro_session("Monza", None, "Audi R8 LMS GT3 Evo II"), ..lap(125_000, true) }).unwrap().pro.is_none(), "wrong track");
+}
+
+#[test]
+fn one_challenge_serves_both_assetto_corsa_games_by_track_alias() {
+    let tt = BinIt::in_memory().unwrap();
+    tt.add_and_seat("Sam", None).unwrap();
+    tt.set_pro_active(Some("laguna-gt3r")).unwrap();
+    // EVO calls the track "Laguna Seca", Assetto Corsa "ks_laguna_seca"; both are the one track, and any GT3 car counts.
+    // 1:23.528 + 3% is 1:26.034.
+    let evo = CompletedLap { session: pro_session("Laguna Seca", None, "Ferrari 296 GT3"), ..lap(85_000, true) };
+    assert!(tt.record_lap(&evo).unwrap().pro.is_some(), "EVO");
+    let mut ac_session = pro_session("ks_laguna_seca", None, "ks_porsche_911_gt3_r_2016");
+    ac_session.game = GameId::AssettoCorsa;
+    let ac = CompletedLap { session: ac_session, ..lap(85_000, true) };
+    assert!(tt.record_lap(&ac).unwrap().pro.is_some(), "AC");
+}
+
+#[test]
+fn star_patterns_fit_tracks_layouts_and_mods() {
+    use pro::glob_match as g;
+    assert!(g("Bathurst*", "bathurst_fm7") && g("*Panorama*", "Mount Panorama") && g("*", "anything") && g("*", ""));
+    assert!(g("GP", "gp") && g("", "") && !g("", "day") && !g("GP", "gp2"));
+    assert!(g("*Laguna*Seca*", "ks_laguna_seca") && !g("*Laguna*Seca*", "seca laguna"));
+    assert!(g("a*c", "abc") && !g("a*c", "acx") && g("a*b*c", "a-x-b-y-c") && !g("ab*bc", "abc"));
+}
+
+#[test]
+fn a_mod_track_counts_through_the_aliases_and_the_owner_can_add_more() {
+    let bathurst = pro::rules().challenges.iter().find(|c| c.id == "bathurst-gt3").unwrap().clone();
+    let combo = |track: &str, layout: &str| Combo { game: "ac".into(), track: track.into(), layout: layout.into(), car: "ks_mclaren_650_gt3".into() };
+    let seeds = vec![catalogue::bundled("ac")];
+    // The bundled track_aliases.toml covers any Bathurst mod, whatever layout it runs.
+    assert!(bathurst.matches(&combo("bathurst_fm7", "day"), &seeds) && bathurst.matches(&combo("Bathurst2018", "Night"), &seeds));
+    assert!(bathurst.matches(&combo("bathurst_fm7", "wet"), &seeds), "no layout named: any layout counts");
+    assert!(!bathurst.matches(&combo("ks_laguna_seca", "day"), &seeds));
+    // A mod with a name nobody foresaw: the owner's own track_aliases.toml in the data folder adds it.
+    let odd = combo("mt_pano_v2", "day");
+    assert!(!bathurst.matches(&odd, &seeds));
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join(pro::ALIASES_FILE), r#"{ "Mount Panorama": ["mt_pano*"] }"#).unwrap();
+    let loaded = pro::load(Some(dir.path()));
+    assert!(loaded.problems.is_empty());
+    assert!(loaded.find("bathurst-gt3").unwrap().matches(&odd, &seeds));
+    // A broken file is named, and the bundled aliases still work.
+    std::fs::write(dir.path().join(pro::ALIASES_FILE), "{ nope").unwrap();
+    let broken = pro::load(Some(dir.path()));
+    assert!(broken.problems.iter().any(|p| p.starts_with("track_aliases.")));
+    assert!(broken.find("bathurst-gt3").unwrap().matches(&combo("bathurst_fm7", "day"), &seeds));
+}
+
+#[test]
+fn config_files_can_be_toml_and_an_older_json_file_still_loads() {
+    let toml = r#"
+        # a comment, which JSON could not have
+        marginPercent = 5.0
+        [rewards.proLevel]
+        xp = 10
+        coins = 1
+        [rewards.beat]
+        xp = 100
+        coins = 10
+        [[challenges]]
+        id = "mine"
+        name = "Mine"
+        track = ["Imola", "imola_*"]
+        layout = ["GP", "*"]
+        car = "Z"
+        time = "1:30.500"
+        driver = "D"
+        date = "2020-01"
+        realCar = "R"
+        session = "S"
+        confidence = "A"
+        source = "src"
+        about = """\
+            one \
+            two\
+            """
+    "#;
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join(pro::FILE_NAME), toml).unwrap();
+    let loaded = pro::load(Some(dir.path()));
+    assert!(loaded.problems.is_empty(), "{:?}", loaded.problems);
+    let c = loaded.find("mine").expect("the TOML challenge is read");
+    assert_eq!((c.time_ms, c.margin_percent, c.about.as_str()), (90_500, 5.0, "one two"));
+    assert_eq!(c.tracks, vec!["Imola", "imola_*"]);
+    // The same challenges written as the older JSON file (no .toml beside it) still load.
+    std::fs::remove_file(dir.path().join(pro::FILE_NAME)).unwrap();
+    std::fs::write(dir.path().join("pro_challenges.json"), r#"{ "rewards": { "proLevel": { "xp": 1, "coins": 1 }, "beat": { "xp": 2, "coins": 2 } },
+        "challenges": [ { "id": "old", "name": "Old", "track": "Imola", "car": "Z", "time": "1:31.000", "driver": "D", "date": "2020-01", "realCar": "R",
+                          "session": "S", "confidence": "A", "source": "s", "about": "a" } ] }"#).unwrap();
+    let old = pro::load(Some(dir.path()));
+    assert!(old.problems.is_empty() && old.find("old").is_some(), "{:?}", old.problems);
+}
+
+#[test]
+fn a_challenge_with_no_layout_takes_any_layout_on_its_track() {
+    let make = |layout: &str| pro::ProRules::from_json(&pro_file("", &format!(r#""car": "Z", "time": "1:30.000", "about": "a" {layout}"#))).unwrap().challenges.remove(0);
+    let combo = |track: &str, layout: &str| Combo { game: "acevo".into(), track: track.into(), layout: layout.into(), car: "Z".into() };
+    let seeds: Vec<catalogue::Seed> = vec![];
+    // Left out, empty, or an empty list: the layout is not looked at, the track still is.
+    for c in [make(""), make(r#", "layout": """#), make(r#", "layout": []"#), make(r#", "layout": ["", " "]"#)] {
+        assert!(c.layouts.is_empty() && c.layout.is_empty());
+        assert!(c.matches(&combo("Imola", ""), &seeds) && c.matches(&combo("Imola", "GP"), &seeds) && c.matches(&combo("Imola", "anything"), &seeds));
+        assert!(!c.matches(&combo("Monza", "GP"), &seeds), "the track must still match");
+    }
+    // Naming one still limits it.
+    let gp = make(r#", "layout": "GP""#);
+    assert!(gp.matches(&combo("Imola", "GP"), &seeds) && !gp.matches(&combo("Imola", "Short"), &seeds) && !gp.matches(&combo("Imola", ""), &seeds));
+}
+
+#[test]
+fn every_pro_challenge_names_a_real_track_and_car() {
+    for c in &pro::rules().challenges {
+        let games: Vec<&str> = if c.games.is_empty() { vec!["acevo"] } else { c.games.iter().map(String::as_str).collect() };
+        for game in games {
+            // Assetto Corsa's list is only part of what is installed (the user's mods add tracks and cars), so only EVO's is
+            // held to what it lists; the other games' challenges are checked by the catalogue where it has them.
+            if game != "acevo" {
+                continue;
+            }
+            let seed = catalogue::bundled(game);
+            let track = seed.tracks.iter().find(|t| t.name == c.track).unwrap_or_else(|| panic!("{}: no track {} in {game}", c.id, c.track));
+            assert!(c.layout.is_empty() || track.layouts.iter().any(|l| *l == c.layout), "{}: no layout {}", c.id, c.layout);
+            match (&c.car, &c.class) {
+                (Some(car), None) => assert!(seed.cars.iter().any(|s| s.name == *car), "{}: no car {car} in {game}", c.id),
+                (None, Some(class)) => assert!(seed.cars.iter().any(|s| s.class.as_deref() == Some(class.as_str())), "{}: no class {class} in {game}", c.id),
+                _ => panic!("{}: set a car or a class, not both", c.id),
+            }
+        }
+        assert!(c.time_ms > 0 && c.limit_ms >= c.time_ms);
+        if let Some(art) = &c.art {
+            let file = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../app/public/challenge-art").join(art);
+            assert!(file.is_file(), "{}: no picture {art} in app/public/challenge-art (write the file name with its extension)", c.id);
+        }
+    }
+    let ids: std::collections::HashSet<_> = pro::rules().challenges.iter().map(|c| &c.id).collect();
+    assert_eq!(ids.len(), pro::rules().challenges.len(), "challenge ids must be unique");
+}
+
+#[test]
+fn lap_times_can_be_typed_the_way_people_write_them() {
+    use pro::parse_time;
+    assert_eq!(parse_time("6:49.328"), Ok(409_328));
+    assert_eq!(parse_time(" 1:20.089 "), Ok(80_089));
+    assert_eq!(parse_time("1:02:03.456"), Ok(3_723_456));
+    assert_eq!(parse_time("49.3"), Ok(49_300), "a short fraction is tenths, not milliseconds");
+    assert_eq!(parse_time("7:40.75"), Ok(460_750));
+    assert_eq!(parse_time("6:49"), Ok(409_000));
+    for bad in ["", "abc", "6:49.3281", "6::49", "6:4x.1", ":49", "1:2:3:4", "-1:00.000"] {
+        assert!(parse_time(bad).is_err(), "{bad:?} should be refused");
+    }
+}
+
+fn pro_file(extra: &str, challenge: &str) -> String {
+    format!(
+        r#"{{ {extra} "rewards": {{ "proLevel": {{ "xp": 10, "coins": 1 }}, "beat": {{ "xp": 100, "coins": 10 }} }},
+            "challenges": [{{ "id": "x", "name": "X", "track": "Imola", "driver": "D", "date": "2020-01", "realCar": "R", "session": "S",
+                              "confidence": "A", "source": "src", {challenge} }}] }}"#
+    )
+}
+
+#[test]
+fn a_challenge_can_use_the_short_forms_and_its_own_margin_and_rewards() {
+    let rules = pro::ProRules::from_json(&pro_file("", r#""car": "Z", "time": "1:30.000", "about": ["one", "two"]"#)).unwrap();
+    let c = &rules.challenges[0];
+    assert_eq!((c.time_ms, c.margin_percent, c.limit_ms), (90_000, 3.0, 92_700), "the file's default margin is 3%");
+    assert_eq!((c.about.as_str(), c.games.len()), ("one two", 0), "lines are joined, no game means any");
+    assert_eq!((c.rewards.pro_level.xp, c.rewards.beat.xp), (10, 100));
+
+    // The time as parts, several games, and a margin and one reward of its own.
+    let own = r#""car": "Z", "time": { "min": 1, "sec": 30 }, "about": "a", "game": ["acevo", "ac"],
+                 "marginPercent": 1.0, "rewards": { "beat": { "xp": 5, "coins": 5 } }"#;
+    let c = pro::ProRules::from_json(&pro_file(r#""marginPercent": 5.0,"#, own)).unwrap().challenges.remove(0);
+    assert_eq!((c.time_ms, c.margin_percent, c.limit_ms), (90_000, 1.0, 90_900));
+    assert_eq!(c.games, ["acevo", "ac"]);
+    assert_eq!((c.rewards.pro_level.xp, c.rewards.beat.xp), (10, 5), "only the beat reward was overridden");
+    assert!(c.in_game("ac") && !c.in_game("dr2"));
+
+    // "any" anywhere means any game, and the old whole-milliseconds time still works.
+    let any = pro::ProRules::from_json(&pro_file("", r#""car": "Z", "timeMs": 90000, "about": "a", "game": ["acevo", "Any"]"#)).unwrap().challenges.remove(0);
+    assert!(any.games.is_empty() && any.in_game("dr2") && any.time_ms == 90_000);
+}
+
+#[test]
+fn a_mistake_in_a_challenge_is_named_with_the_challenge() {
+    let err = |challenge: &str| pro::ProRules::from_json(&pro_file("", challenge)).unwrap_err();
+    assert!(err(r#""car": "Z", "time": "fast", "about": "a""#).contains("challenge \"x\": \"fast\" is not a lap time"));
+    assert!(err(r#""time": "1:30.000", "about": "a""#).contains("either \"car\" or \"class\""));
+    assert!(err(r#""car": "Z", "class": "GT3", "time": "1:30.000", "about": "a""#).contains("either \"car\" or \"class\""));
+    assert!(err(r#""car": "Z", "time": "0:00.000", "about": "a""#).contains("more than zero"));
+}
+
+#[test]
+fn a_switched_off_challenge_is_kept_but_not_shown_or_counted() {
+    let c = |extra: &str| pro::ProRules::from_json(&pro_file("", &format!(r#""car": "Z", "time": "1:30.000", "about": "a" {extra}"#))).unwrap().challenges.remove(0);
+    assert!(c("").enabled, "on unless the file says otherwise");
+    assert!(!c(r#", "enabled": false"#).enabled);
+
+    // The real file: any draft switched off is loaded and checked, but only enabled ones are offered or can be started.
+    let disabled: Vec<_> = pro::rules().challenges.iter().filter(|c| !c.enabled).collect();
+    let tt = BinIt::in_memory().unwrap();
+    let shown: Vec<_> = tt.pro_overview().unwrap().challenges.into_iter().map(|e| e.challenge.id).collect();
+    assert_eq!(shown.len(), pro::rules().challenges.len() - disabled.len());
+    for d in disabled {
+        assert!(!shown.contains(&d.id) && pro::load(None).find(&d.id).is_none());
+        assert!(tt.set_pro_active(Some(&d.id)).is_err(), "{} is switched off", d.id);
+    }
+}
+
+fn scratch_folder(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("binit-test-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join(pro::ART_DIR)).unwrap();
+    dir
+}
+
+#[test]
+fn challenges_in_the_data_folder_are_read_each_time_and_can_replace_bundled_ones() {
+    let dir = scratch_folder("pro-folder");
+    let tt = BinIt::in_memory().unwrap();
+    tt.set_catalogue_paths(CataloguePaths { pro: Some(dir.clone()), ..Default::default() });
+    let bundled = pro::rules().challenges.iter().filter(|c| c.enabled).count();
+    assert_eq!(tt.pro_overview().unwrap().challenges.len(), bundled, "no file of your own yet");
+
+    // A file with no rewards or margin of its own: the bundled ones are used. One new challenge, one that replaces a
+    // bundled one (and starts with the byte order mark Notepad adds).
+    let file = dir.join(pro::FILE_NAME);
+    let mine = r#"{ "challenges": [
+        { "id": "mine", "name": "Mine", "track": "Imola", "car": "Z", "time": "1:40.000", "driver": "D", "date": "2026-01", "realCar": "Z",
+          "session": "S", "confidence": "C", "source": "me", "about": "mine" },
+        { "id": "monza-f2004", "name": "Monza", "track": "Monza", "car": "Ferrari F2004", "time": "1:21.000", "driver": "D", "date": "2026-01",
+          "realCar": "R", "session": "S", "confidence": "C", "source": "me", "about": "x", "marginPercent": 10 }
+    ] }"#;
+    std::fs::write(&file, format!("\u{feff}{mine}")).unwrap();
+    let overview = tt.pro_overview().unwrap();
+    assert!(overview.problems.is_empty(), "{:?}", overview.problems);
+    assert_eq!(overview.challenges.len(), bundled + 1);
+    let new = &overview.challenges.iter().find(|e| e.challenge.id == "mine").unwrap().challenge;
+    assert_eq!((new.time_ms, new.margin_percent, new.rewards.beat.xp), (100_000, 3.0, pro::rules().rewards.beat.xp));
+    let monza = &overview.challenges.iter().find(|e| e.challenge.id == "monza-f2004").unwrap().challenge;
+    assert_eq!((monza.time_ms, monza.limit_ms), (81_000, 89_100), "the file's own entry replaced the bundled one");
+    assert_eq!(overview.folder.as_deref(), dir.to_str());
+
+    // A challenge of your own can be switched on straight away.
+    tt.set_pro_active(Some("mine")).unwrap();
+    assert_eq!(tt.pro_active().unwrap().as_deref(), Some("mine"));
+
+    // It is read again every time: a mistake is reported while the bundled challenges carry on (and what was
+    // switched on from the file is not offered while the file is broken).
+    std::fs::write(&file, r#"{ "challenges": [ { "id": "oops" } ] }"#).unwrap();
+    let overview = tt.pro_overview().unwrap();
+    assert_eq!((overview.challenges.len(), overview.problems.len(), overview.active), (bundled, 1, None));
+    assert!(overview.problems[0].starts_with("pro_challenges."));
+
+    // A file that went away is simply not there.
+    std::fs::remove_file(&file).unwrap();
+    let overview = tt.pro_overview().unwrap();
+    assert_eq!((overview.challenges.len(), overview.problems.len()), (bundled, 0));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn pictures_come_from_the_data_folder_by_plain_file_name_only() {
+    let dir = scratch_folder("pro-art");
+    let tt = BinIt::in_memory().unwrap();
+    assert!(tt.pro_art("a.jpg").is_none(), "no folder set");
+    tt.set_catalogue_paths(CataloguePaths { pro: Some(dir.clone()), ..Default::default() });
+    std::fs::write(dir.join(pro::ART_DIR).join("a.jpg"), b"x").unwrap();
+    std::fs::write(dir.join("secret.txt"), b"x").unwrap();
+    assert!(tt.pro_art("a.jpg").is_some());
+    assert!(tt.pro_art("missing.jpg").is_none());
+    for sneaky in ["../secret.txt", "..\\secret.txt", "sub/a.jpg", "C:\\a.jpg", ".hidden", ""] {
+        assert!(tt.pro_art(sneaky).is_none(), "{sneaky:?} must not be served");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_picture_offset_can_be_written_several_ways_and_the_card_can_have_its_own() {
+    let c = |extra: &str| pro::ProRules::from_json(&pro_file("", &format!(r#""car": "Z", "time": "1:30.000", "about": "a", {extra}"#))).unwrap().challenges.remove(0);
+    let none = c(r#""art": "a.jpg""#);
+    assert_eq!((none.art_offset, none.card_offset), (None, None));
+    let one = c(r#""artOffset": "60% 40%""#);
+    assert_eq!((one.art_offset.as_deref(), one.card_offset.as_deref()), (Some("60% 40%"), Some("60% 40%")), "the card follows the banner unless it has its own");
+    let own = c(r#""artOffset": [60, 40], "cardOffset": { "x": 25.5, "y": 0 }"#);
+    assert_eq!((own.art_offset.as_deref(), own.card_offset.as_deref()), (Some("60% 40%"), Some("25.5% 0%")));
+    assert_eq!(c(r#""cardOffset": "right top""#).card_offset.as_deref(), Some("100% 0%"));
+    assert_eq!(c(r#""cardOffset": "left""#).card_offset.as_deref(), Some("0% 50%"), "one value is across only");
+    assert_eq!(c(r#""cardOffset": [150, -20]"#).card_offset.as_deref(), Some("100% 0%"), "kept inside the picture");
+    for bad in [r#""cardOffset": "up here""#, r#""cardOffset": [1, 2, 3]"#, r#""cardOffset": "1 2 3""#] {
+        let err = pro::ProRules::from_json(&pro_file("", &format!(r#""car": "Z", "time": "1:30.000", "about": "a", {bad}"#))).unwrap_err();
+        assert!(err.contains("challenge \"x\"") && err.contains("offset"), "{err}");
+    }
+}

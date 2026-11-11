@@ -1,0 +1,18 @@
+# Names a track goes by. The key is the name a challenge uses (track = ... in pro_challenges.toml); the list is every
+# spelling the games report for it. * matches anything; capitals, spaces and punctuation never matter, so
+# "mount_panorama" and "Mount Panorama" are the same. "Bathurst*" covers any Bathurst mod (bathurst_fm7, bathurst2018...).
+# A challenge can also give track as a list, or use * itself.
+#
+# Add your own in track_aliases.toml in the pro-laps data folder: it adds to this file.
+
+"Mount Panorama" = ["Bathurst*", "*Panorama*"]
+"Nurburgring" = ["ks_nordschleife", "*Nordschleife*"]
+"Laguna Seca" = ["ks_laguna_seca", "*Laguna*Seca*"]
+"Spa-Francorchamps" = ["spa", "*Francorchamps*"]
+"Brands Hatch" = ["ks_brands_hatch"]
+"Red Bull Ring" = ["ks_red_bull_ring", "*Spielberg*"]
+"Suzuka" = ["rt_suzuka", "*Suzuka*"]
+"Zandvoort" = ["ks_zandvoort"]
+"Silverstone" = ["ks_silverstone"]
+"Vallelunga" = ["ks_vallelunga"]
+"Circuit Paul Ricard" = ["*Paul*Ricard*"]

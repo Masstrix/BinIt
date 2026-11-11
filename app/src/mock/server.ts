@@ -7,12 +7,13 @@ import type {
   About, AppEvent, Awards, Challenge, Combo, Device, Driver, Lap, LapResult, LeaderboardEntry, LeaderboardQuery, LiveView, OverlayShow, Profile, ProfileBest,
   ReplayEntry, ServerInfo, SessionView, Status, UpdateStatus,
 } from "../api";
-import { CHALLENGES, DRIVERS, LAPS, MAPS, NOW, SHOP_ITEMS, TRACKS, catalogue, key } from "./data";
+import { CHALLENGES, DRIVERS, LAPS, MAPS, NOW, PRO_CHALLENGES, SHOP_ITEMS, TRACKS, catalogue, key, proBoard } from "./data";
 
 const drivers: Driver[] = DRIVERS.map((d) => ({ ...d }));
 const laps: Lap[] = LAPS.map((l) => ({ ...l }));
 const challenges: Challenge[] = CHALLENGES.map((c) => ({ ...c }));
 let nextId = Math.max(...laps.map((l) => l.id)) + 1;
+let proActive: string | null = null;
 
 const imola = TRACKS[0];
 const session: SessionView = {
@@ -506,6 +507,19 @@ export async function mockRequest<T>(method: string, path: string, body?: any, t
   if (p === "/sectors") return ok([0, 0.31, 0.7, 1]);
   if (p === "/learning") return ok([]);
   if (p === "/leaderboard") return ok(board(body));
+  if (p === "/pro" && method === "GET") {
+    return ok({ problems: [], folder: "C:\Users\you\AppData\Roaming\app.binit.desktop\pro-laps", active: proActive, challenges: PRO_CHALLENGES.map((c) => ({ ...c, board: proBoard(c, Date.now()) })) });
+  }
+  if (p === "/pro/active" && method === "PUT") {
+    proActive = body.id ?? null;
+    emit({ type: "proChanged", active: proActive });
+    return ok(proActive);
+  }
+  if ((r = m(/^\/pro\/([\w-]+)\/attempts$/))) {
+    const c = PRO_CHALLENGES.find((x) => x.id === r![1]);
+    const mine = c ? proBoard(c, Date.now()).filter((b) => b.driverId === +(q.get("driver") ?? 0)) : [];
+    return ok(mine.map((b) => ({ lapId: b.lapId, timeMs: b.timeMs, at: b.at })));
+  }
   if (p === "/challenges" && method === "GET") return ok(challenges);
   if (p === "/challenges" && method === "POST") {
     const c: Challenge = { rewardSize: "medium", ...body, id: Math.max(0, ...challenges.map((x) => x.id)) + 1, createdAt: Date.now(), startsAt: body.startsAt ?? Date.now() };

@@ -12,6 +12,7 @@ import { Home } from "./pages/Home";
 import { ConnectionGate } from "./components/ConnectionGate";
 import { LeaderboardPage } from "./pages/Leaderboard";
 import { ChallengesPage, NewChallengePage } from "./pages/Challenges";
+import { ProLapsPage } from "./pages/ProLaps";
 import { DriversPage } from "./pages/Drivers";
 import { GamesPage } from "./pages/Games";
 import { AdvancedPage } from "./pages/Advanced";
@@ -75,42 +76,122 @@ function PhoneSwitch({ path }: { path: string }) {
   );
 }
 
+/** The office challenges page, with or without a challenge picked in its row of cards. */
+const isChallengeList = (path: string) => /^\/challenges(\/\d+)?$/.test(path);
+
+/** The id of the Pro lap whose page this is (`/challenges/pro/monza-f2004`), if it is one. */
+const proLapId = (path: string) => /^\/challenges\/pro\/([\w-]+)$/.exec(path)?.[1] ?? null;
+
 /** How deep a page sits: the Shop and Customize open from the profile, so they are one step further in than it. */
 function pageDepth(path: string): number {
+  // The office list, the challenge picked in it and the Pro laps list are one level: they are switched between, not opened.
+  if (isChallengeList(path) || path === "/challenges/pro") return 1;
   const base = path.split("/").filter(Boolean).length;
   return base + (path.startsWith("/shop") || path.startsWith("/customize") ? 1 : 0);
 }
 
-type ViewTransitionDocument = Document & { startViewTransition?: (update: () => void) => { ready: Promise<unknown>; finished: Promise<unknown> } };
+type ViewTransitionDocument = Document & { startViewTransition?: (update: () => void | Promise<void>) => { ready: Promise<unknown>; finished: Promise<unknown> } };
+
+/**
+ * What to do when the address changes: show the new page, with a view transition when the browser has them. This is a
+ * function of its own (not written inside the hook) so that editing it while the app runs replaces the listener too.
+ */
+function makeNavHandler(read: () => string, current: { current: string }, setPath: (path: string) => void) {
+  return () => {
+    const next = read();
+    const from = current.current;
+    current.current = next;
+    const doc = document as ViewTransitionDocument;
+    const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Picking another challenge in the row changes what is shown, not the page: nothing slides.
+    if (!doc.startViewTransition || calm || next === from || (isChallengeList(from) && isChallengeList(next))) {
+      setPath(next);
+      return;
+    }
+    // A Pro lap's card grows into its page, and the page shrinks back into its card: the card and the page's banner
+    // are one shared element (see `pro-hero` in styles.css) while everything else fades and the page's parts rise in.
+    const entering = from === "/challenges/pro" ? proLapId(next) : null;
+    const leaving = next === "/challenges/pro" ? proLapId(from) : null;
+    if (entering || leaving) {
+      const root = document.documentElement;
+      const card = (id: string) => document.querySelector<HTMLElement>(`[data-pro-card="${CSS.escape(id)}"]`);
+      // The picture, the shading and each piece of text on it are shared with their twin on the other page, one by one,
+      // so the time and the title move to where they are on the other page (a whole block would be stretched into
+      // the other's shape). A shared element is drawn above the rest of the page, so each piece has to be shared or
+      // it would be hidden behind the growing picture until the end.
+      // Pieces that are the same on both pages move across (the title, the time, the chip). Pieces that are not (the car
+      // line, the game, the status) are named too, so they stay above the picture, but each on its own: the card's
+      // fade out and the banner's fade in, rather than one smearing into the other.
+      const shared: [string, string][] = [
+        [".pro-art", "pro-hero"], [".pro-flag-chip", "pro-chip"], [".pro-card-name", "pro-title"], [".pro-card-time", "pro-time"],
+        [".pro-card-car", "pro-card-car"], [".pro-card-meta", "pro-card-meta"], [".pro-status", "pro-card-status"],
+      ];
+      const mark = (el: HTMLElement | null) => {
+        if (!el) return;
+        for (const [selector, name] of shared) el.querySelector<HTMLElement>(selector)?.style.setProperty("view-transition-name", name);
+        el.dataset.hero = "1";
+      };
+      root.dataset.nav = entering ? "open" : "close";
+      if (entering) mark(card(entering)); // the page being left: the card that was tapped
+      // Where each picture is centred, so the one picture that moves can slide from the card's crop to the banner's
+      // (or back) as it grows. Read from the pictures themselves: the data sets them.
+      // (the offset is on the picture inside the `.pro-art` wrapper)
+      const where = (el: Element | null | undefined) => el?.querySelector<HTMLElement>("img")?.style.objectPosition || "50% 50%";
+      let cardPos = entering ? where(card(entering)?.querySelector(".pro-art")) : "50% 50%";
+      // The banner's picture is the whole photo, taller than the banner (the rest is cut off by the banner's edge), so it
+      // can show the card's framing exactly. These are how much of it is cut off, so the grow can end on the banner.
+      const cut = (hero: Element | null): [number, number] => {
+        const art = hero?.querySelector(".pro-art")?.getBoundingClientRect();
+        const box = hero?.getBoundingClientRect();
+        return art && box ? [Math.max(0, box.top - art.top), Math.max(0, art.bottom - box.bottom)] : [0, 0];
+      };
+      let cuts = leaving ? cut(document.querySelector(".pro-hero")) : ([0, 0] as [number, number]);
+      const t = doc.startViewTransition(async () => {
+        flushSync(() => setPath(next));
+        if (leaving) mark(card(leaving)); // the page being entered: the card the banner shrinks into
+        if (leaving) cardPos = where(card(leaving)?.querySelector(".pro-art"));
+        if (entering) cuts = cut(document.querySelector(".pro-hero"));
+        root.style.setProperty("--vt-card-pos", cardPos);
+        root.style.setProperty("--vt-cut-top", `${cuts[0]}px`);
+        root.style.setProperty("--vt-cut-bottom", `${cuts[1]}px`);
+        // The new page is captured as soon as this returns. Its picture is the one already on screen (same file), so it
+        // is loaded; it is decoded while the page is made (`decoding="sync"` on it), so it is in the capture. Only a
+        // picture that is not loaded yet is waited for, briefly.
+        const picture = document.querySelector<HTMLImageElement>(entering ? ".pro-hero .pro-art img" : `[data-pro-card="${CSS.escape(leaving!)}"] .pro-art img`);
+        if (picture && !picture.complete) await new Promise((done) => { picture.addEventListener("load", done, { once: true }); setTimeout(done, 400); });
+      });
+      t.ready.catch(() => {});
+      t.finished.catch(() => {}).finally(() => {
+        delete root.dataset.nav;
+        for (const name of ["--vt-card-pos", "--vt-cut-top", "--vt-cut-bottom"]) root.style.removeProperty(name);
+        document.querySelectorAll<HTMLElement>("[data-hero]").forEach((el) => {
+          el.querySelectorAll<HTMLElement>("*").forEach((child) => child.style.removeProperty("view-transition-name"));
+          delete el.dataset.hero;
+        });
+      });
+      return;
+    }
+    // The page area slides in from the right going deeper, from the left coming back, and rises in between sections
+    // (see `::view-transition-*(page)` in styles.css). Browsers without view transitions just change page.
+    const [a, b] = [pageDepth(from), pageDepth(next)];
+    const root = document.documentElement;
+    root.dataset.nav = b > a ? "forward" : b < a ? "back" : "across";
+    const t = doc.startViewTransition(() => flushSync(() => setPath(next)));
+    // A newer navigation skips this one mid-flight; that rejection is expected.
+    t.ready.catch(() => {});
+    t.finished.catch(() => {}).finally(() => delete root.dataset.nav);
+  };
+}
 
 function useHashPath() {
   const read = () => location.hash.replace(/^#/, "") || "/";
   const [path, setPath] = useState(read);
   const current = useRef(path);
   useEffect(() => {
-    const onChange = () => {
-      const next = read();
-      const from = current.current;
-      current.current = next;
-      const doc = document as ViewTransitionDocument;
-      const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (!doc.startViewTransition || calm || next === from) {
-        setPath(next);
-        return;
-      }
-      // The page area slides in from the right going deeper, from the left coming back, and rises in between sections
-      // (see `::view-transition-*(page)` in styles.css). Browsers without view transitions just change page.
-      const [a, b] = [pageDepth(from), pageDepth(next)];
-      const root = document.documentElement;
-      root.dataset.nav = b > a ? "forward" : b < a ? "back" : "across";
-      const t = doc.startViewTransition(() => flushSync(() => setPath(next)));
-      // A newer navigation skips this one mid-flight; that rejection is expected.
-      t.ready.catch(() => {});
-      t.finished.catch(() => {}).finally(() => delete root.dataset.nav);
-    };
+    const onChange = makeNavHandler(read, current, setPath);
     window.addEventListener("hashchange", onChange);
     return () => window.removeEventListener("hashchange", onChange);
-  }, []);
+  }, [makeNavHandler]);
   return path;
 }
 
@@ -171,6 +252,7 @@ export function App() {
   let page;
   if (path.startsWith("/leaderboard")) page = <LeaderboardPage />;
   else if (path.startsWith("/challenges/new")) page = <NewChallengePage />;
+  else if (path.startsWith("/challenges/pro")) page = <ProLapsPage path={path} />;
   else if (path.startsWith("/challenges")) page = <ChallengesPage path={path} />;
   else if (path.startsWith("/drivers/compare")) page = <ComparePage />;
   else if (/^\/drivers\/\d+/.test(path)) page = <BreakdownPage id={Number(path.split("/")[2])} />;
